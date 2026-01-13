@@ -1104,6 +1104,12 @@ body.nav-collapsed .menu-toggle {
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 16px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.template-card:hover {
+  border-color: var(--accent-blue);
 }
 
 .template-card .card-header {
@@ -1128,14 +1134,6 @@ body.nav-collapsed .menu-toggle {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-bottom: 12px;
-}
-
-.template-card .card-actions {
-  display: flex;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
 }
 
 /* Duties section in template modal */
@@ -1160,183 +1158,113 @@ body.nav-collapsed .menu-toggle {
   letter-spacing: 0.5px;
 }
 
-.duties-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.duty-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 12px;
+.duties-table {
   background: var(--bg-tertiary);
   border-radius: 6px;
+  overflow: hidden;
 }
 
-.duty-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.duty-type {
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.duty-time {
+.duties-table-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px 40px;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.duty-actions {
-  display: flex;
-  gap: 4px;
+#dutiesList {
+  padding: 8px;
+}
+
+#dutiesList .empty-message {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.duty-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px 40px;
+  gap: 8px;
+  padding: 8px 4px;
+  align-items: center;
+}
+
+.duty-row + .duty-row {
+  border-top: 1px solid var(--border);
+}
+
+.duty-type-select {
+  padding-left: 12px;
+}
+
+.duty-row .form-input {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.duty-row .btn-sm {
+  padding: 4px 8px;
 }
 
 /* ============================================
-   ROSTER
+   ROSTER (Gantt-style)
    ============================================ */
 
-.roster-nav {
+.roster-date-nav {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.week-range {
+.roster-current-date {
   font-weight: 600;
   min-width: 180px;
   text-align: center;
 }
 
-.roster-actions {
-  margin-left: auto;
-}
-
-.roster-week {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 1px;
-  background: var(--border);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  margin: 20px;
-}
-
-.roster-day {
-  background: var(--bg-secondary);
-  min-height: 400px;
+/* Timeline header */
+.timeline-header {
   display: flex;
-  flex-direction: column;
-}
-
-.roster-day.is-today {
-  background: var(--bg-tertiary);
-}
-
-.roster-day.is-today .day-header {
-  background: var(--accent-blue);
-  color: white;
-}
-
-.day-header {
-  padding: 12px;
-  background: var(--bg-tertiary);
+  padding: 8px 0;
   border-bottom: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
+  margin-bottom: 4px;
 }
 
-.day-name {
-  font-weight: 600;
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+.resource-info-placeholder {
+  width: 180px;
+  flex-shrink: 0;
 }
 
-.day-date {
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.day-count {
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.roster-day.is-today .day-count {
-  color: rgba(255,255,255,0.7);
-}
-
-.day-entries {
+.timeline-hours {
   flex: 1;
-  padding: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow-y: auto;
-}
-
-.empty-day {
-  color: var(--text-muted);
-  font-size: 12px;
-  text-align: center;
-  padding: 20px 8px;
-}
-
-.roster-entry {
-  padding: 10px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: border-color 0.15s;
-}
-
-.roster-entry:hover {
-  border-color: var(--accent-blue);
-}
-
-.roster-entry.unassigned {
-  border-left: 3px solid var(--accent-amber);
-}
-
-.roster-entry.assigned {
-  border-left: 3px solid var(--accent-green);
-}
-
-.entry-name {
-  font-weight: 500;
-  font-size: 13px;
-  margin-bottom: 4px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.entry-time {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-}
-
-.entry-assignment {
+  justify-content: space-between;
+  padding: 0 10px;
   font-size: 11px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: var(--text-muted);
 }
 
-.add-shift-btn {
-  margin: 8px;
-  width: calc(100% - 16px);
+.hour-mark {
+  width: 20px;
+  text-align: center;
+}
+
+/* Unassigned shift block */
+.shift-block.unassigned {
+  background: var(--bg-tertiary);
+  border: 2px dashed var(--accent-amber);
+  cursor: pointer;
+}
+
+.shift-block.unassigned:hover {
+  border-color: var(--accent-blue);
+  background: var(--bg-hover);
 }
 
 /* ============================================
