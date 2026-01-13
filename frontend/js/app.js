@@ -21,8 +21,16 @@ const state = {
   dutyTypes: [],
   payTypes: [],
   
+  // Filters
+  employeeFilters: {
+    search: '',
+    role: '',
+    status: '',
+  },
+  
   // Selection state
   selectedItem: null,
+  editingEmployee: null,
   
   // Loading states
   loading: {
@@ -55,11 +63,6 @@ function formatTime(decimalHours) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
-function parseTime(timeStr) {
-  const [hours, minutes] = timeStr.split(':').map(Number);
-  return hours + minutes / 60;
-}
-
 function showToast(message, type = 'success') {
   const toast = document.getElementById('toast');
   const toastMessage = document.getElementById('toastMessage');
@@ -78,6 +81,32 @@ function $(selector) {
 
 function $$(selector) {
   return document.querySelectorAll(selector);
+}
+
+// ============================================
+// MODAL MANAGEMENT
+// ============================================
+
+function showModal(title, bodyHtml, footerHtml) {
+  $('#modalTitle').textContent = title;
+  $('#modalBody').innerHTML = bodyHtml;
+  $('#modalFooter').innerHTML = footerHtml;
+  $('#modalOverlay').classList.add('active');
+}
+
+function closeModal() {
+  $('#modalOverlay').classList.remove('active');
+  state.editingEmployee = null;
+}
+
+function showDeleteModal(message, onConfirm) {
+  $('#deleteModalBody').innerHTML = `<p>${message}</p>`;
+  $('#confirmDeleteBtn').onclick = onConfirm;
+  $('#deleteModalOverlay').classList.add('active');
+}
+
+function closeDeleteModal() {
+  $('#deleteModalOverlay').classList.remove('active');
 }
 
 // ============================================
@@ -153,6 +182,7 @@ function toggleSidebar() {
   state.sidebarCollapsed = !state.sidebarCollapsed;
   document.body.classList.toggle('nav-collapsed', state.sidebarCollapsed);
   $('#navSidebar').classList.toggle('collapsed', state.sidebarCollapsed);
+  $('#hideSidebar').textContent = state.sidebarCollapsed ? '▶ Show' : '◀ Hide';
 }
 
 // ============================================
@@ -203,6 +233,10 @@ async function loadDispatch() {
   }
 }
 
+// ============================================
+// EMPLOYEES / HRM
+// ============================================
+
 async function loadEmployees() {
   const container = $('#screen-hrm');
   state.loading.employees = true;
@@ -215,7 +249,12 @@ async function loadEmployees() {
   `;
   
   try {
-    const result = await api.getEmployees();
+    const params = {};
+    if (state.employeeFilters.search) params.search = state.employeeFilters.search;
+    if (state.employeeFilters.role) params.role = state.employeeFilters.role;
+    if (state.employeeFilters.status) params.status = state.employeeFilters.status;
+    
+    const result = await api.getEmployees(params);
     state.employees = result.data || [];
     renderEmployees();
   } catch (err) {
@@ -232,85 +271,331 @@ async function loadEmployees() {
   }
 }
 
-async function loadVehicles() {
-  const container = $('#screen-vehicles');
-  state.loading.vehicles = true;
+function renderEmployees() {
+  const container = $('#screen-hrm');
+  const employees = state.employees;
+  const filters = state.employeeFilters;
   
   container.innerHTML = `
-    <div class="loading-screen">
-      <div class="loading-spinner"></div>
-      <div class="loading-text">Loading vehicles...</div>
+    <div class="screen-header">
+      <h2>Employees</h2>
+      <button class="btn btn-primary" onclick="window.app.showAddEmployee()">+ Add Employee</button>
+    </div>
+    
+    <div class="filter-bar">
+      <input 
+        type="text" 
+        class="form-input filter-search" 
+        placeholder="Search by name, ID, email..." 
+        value="${filters.search}"
+        onkeyup="window.app.handleEmployeeSearch(event)"
+      />
+      <select class="form-select filter-select" onchange="window.app.handleEmployeeRoleFilter(event)">
+        <option value="">All Roles</option>
+        <option value="driver" ${filters.role === 'driver' ? 'selected' : ''}>Drivers</option>
+        <option value="dispatcher" ${filters.role === 'dispatcher' ? 'selected' : ''}>Dispatchers</option>
+        <option value="admin" ${filters.role === 'admin' ? 'selected' : ''}>Admins</option>
+      </select>
+      <select class="form-select filter-select" onchange="window.app.handleEmployeeStatusFilter(event)">
+        <option value="">All Statuses</option>
+        <option value="active" ${filters.status === 'active' ? 'selected' : ''}>Active</option>
+        <option value="inactive" ${filters.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+        <option value="terminated" ${filters.status === 'terminated' ? 'selected' : ''}>Terminated</option>
+      </select>
+    </div>
+    
+    <div class="screen-content">
+      ${employees.length === 0 ? `
+        <div class="empty-state">
+          <h3>No employees found</h3>
+          <p class="text-muted">
+            ${filters.search || filters.role || filters.status 
+              ? 'Try adjusting your filters.' 
+              : 'Add your first employee to get started.'}
+          </p>
+        </div>
+      ` : `
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Licence</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th class="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${employees.map(e => `
+                <tr>
+                  <td class="font-mono">${e.employee_number}</td>
+                  <td>
+                    <div class="employee-name">${e.first_name} ${e.last_name}</div>
+                    ${e.email ? `<div class="employee-email text-muted">${e.email}</div>` : ''}
+                  </td>
+                  <td>${e.phone || '—'}</td>
+                  <td>
+                    ${e.licence_number ? `
+                      <span class="font-mono">${e.licence_number}</span>
+                      ${e.licence_expiry ? `<div class="text-muted" style="font-size:11px">Exp: ${e.licence_expiry}</div>` : ''}
+                    ` : '—'}
+                  </td>
+                  <td><span class="badge badge-info">${e.role}</span></td>
+                  <td><span class="badge ${getStatusBadgeClass(e.status)}">${e.status}</span></td>
+                  <td class="text-right">
+                    <button class="btn btn-secondary btn-sm" onclick="window.app.editEmployee('${e.id}')">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="window.app.confirmDeleteEmployee('${e.id}', '${e.first_name} ${e.last_name}')">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
     </div>
   `;
-  
-  try {
-    const result = await api.getVehicles();
-    state.vehicles = result.data || [];
-    renderVehicles();
-  } catch (err) {
-    console.error('Failed to load vehicles:', err);
-    container.innerHTML = `
-      <div class="screen-placeholder">
-        <h2>Failed to load vehicles</h2>
-        <p>${err.message}</p>
-      </div>
-    `;
-  } finally {
-    state.loading.vehicles = false;
+}
+
+function getStatusBadgeClass(status) {
+  switch (status) {
+    case 'active': return 'badge-success';
+    case 'inactive': return 'badge-warning';
+    case 'terminated': return 'badge-error';
+    default: return 'badge-info';
   }
 }
 
-async function loadShiftTemplates() {
-  const container = $('#screen-shifts');
+// Employee search with debounce
+let searchTimeout;
+function handleEmployeeSearch(event) {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    state.employeeFilters.search = event.target.value;
+    loadEmployees();
+  }, 300);
+}
+
+function handleEmployeeRoleFilter(event) {
+  state.employeeFilters.role = event.target.value;
+  loadEmployees();
+}
+
+function handleEmployeeStatusFilter(event) {
+  state.employeeFilters.status = event.target.value;
+  loadEmployees();
+}
+
+// Add/Edit Employee Modal
+function showAddEmployee() {
+  state.editingEmployee = null;
+  showEmployeeForm();
+}
+
+function editEmployee(id) {
+  const employee = state.employees.find(e => e.id === id);
+  if (!employee) {
+    showToast('Employee not found', 'error');
+    return;
+  }
+  state.editingEmployee = employee;
+  showEmployeeForm();
+}
+
+function showEmployeeForm() {
+  const emp = state.editingEmployee;
+  const isEdit = !!emp;
   
-  container.innerHTML = `
-    <div class="loading-screen">
-      <div class="loading-spinner"></div>
-      <div class="loading-text">Loading shift templates...</div>
-    </div>
+  const bodyHtml = `
+    <form id="employeeForm" class="form">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Employee Number *</label>
+          <input type="text" name="employee_number" class="form-input" 
+                 value="${emp?.employee_number || ''}" 
+                 placeholder="e.g. D001" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Role *</label>
+          <select name="role" class="form-select" required>
+            <option value="driver" ${emp?.role === 'driver' ? 'selected' : ''}>Driver</option>
+            <option value="dispatcher" ${emp?.role === 'dispatcher' ? 'selected' : ''}>Dispatcher</option>
+            <option value="admin" ${emp?.role === 'admin' ? 'selected' : ''}>Admin</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">First Name *</label>
+          <input type="text" name="first_name" class="form-input" 
+                 value="${emp?.first_name || ''}" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Last Name *</label>
+          <input type="text" name="last_name" class="form-input" 
+                 value="${emp?.last_name || ''}" required />
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" name="email" class="form-input" 
+                 value="${emp?.email || ''}" placeholder="email@example.com" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone</label>
+          <input type="tel" name="phone" class="form-input" 
+                 value="${emp?.phone || ''}" placeholder="04XX XXX XXX" />
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Licence Number</label>
+          <input type="text" name="licence_number" class="form-input" 
+                 value="${emp?.licence_number || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Licence Expiry</label>
+          <input type="date" name="licence_expiry" class="form-input" 
+                 value="${emp?.licence_expiry || ''}" />
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Hire Date</label>
+          <input type="date" name="hire_date" class="form-input" 
+                 value="${emp?.hire_date || ''}" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            <option value="active" ${!emp || emp?.status === 'active' ? 'selected' : ''}>Active</option>
+            <option value="inactive" ${emp?.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+            <option value="terminated" ${emp?.status === 'terminated' ? 'selected' : ''}>Terminated</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea name="notes" class="form-input form-textarea" rows="3">${emp?.notes || ''}</textarea>
+      </div>
+    </form>
   `;
   
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="window.app.closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="window.app.saveEmployee()">${isEdit ? 'Save Changes' : 'Add Employee'}</button>
+  `;
+  
+  showModal(isEdit ? 'Edit Employee' : 'Add Employee', bodyHtml, footerHtml);
+}
+
+async function saveEmployee() {
+  const form = document.getElementById('employeeForm');
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+  
+  const formData = new FormData(form);
+  const data = {
+    employee_number: formData.get('employee_number'),
+    first_name: formData.get('first_name'),
+    last_name: formData.get('last_name'),
+    email: formData.get('email') || null,
+    phone: formData.get('phone') || null,
+    licence_number: formData.get('licence_number') || null,
+    licence_expiry: formData.get('licence_expiry') || null,
+    role: formData.get('role'),
+    status: formData.get('status'),
+    hire_date: formData.get('hire_date') || null,
+    notes: formData.get('notes') || null,
+  };
+  
   try {
-    const result = await api.getShiftTemplates();
-    state.shiftTemplates = result.data || [];
-    renderShiftTemplates();
+    if (state.editingEmployee) {
+      await api.updateEmployee(state.editingEmployee.id, data);
+      showToast('Employee updated successfully');
+    } else {
+      await api.createEmployee(data);
+      showToast('Employee added successfully');
+    }
+    closeModal();
+    loadEmployees();
   } catch (err) {
-    console.error('Failed to load shift templates:', err);
-    container.innerHTML = `
-      <div class="screen-placeholder">
-        <h2>Failed to load shift templates</h2>
-        <p>${err.message}</p>
-      </div>
-    `;
+    showToast(err.message || 'Failed to save employee', 'error');
   }
 }
 
-async function loadRosterWeek() {
-  const container = $('#screen-roster');
-  
-  container.innerHTML = `
-    <div class="loading-screen">
-      <div class="loading-spinner"></div>
-      <div class="loading-text">Loading roster...</div>
-    </div>
-  `;
-  
+function confirmDeleteEmployee(id, name) {
+  showDeleteModal(
+    `Are you sure you want to delete <strong>${name}</strong>?<br><br>This action cannot be undone.`,
+    () => deleteEmployee(id)
+  );
+}
+
+async function deleteEmployee(id) {
   try {
-    const result = await api.getRosterWeek(formatDate(state.currentDate));
-    renderRoster(result.data);
+    await api.deleteEmployee(id);
+    showToast('Employee deleted');
+    closeDeleteModal();
+    loadEmployees();
   } catch (err) {
-    console.error('Failed to load roster:', err);
-    container.innerHTML = `
-      <div class="screen-placeholder">
-        <h2>Failed to load roster</h2>
-        <p>${err.message}</p>
-      </div>
-    `;
+    showToast(err.message || 'Failed to delete employee', 'error');
   }
 }
 
 // ============================================
-// RENDER FUNCTIONS
+// VEHICLES (placeholder)
+// ============================================
+
+async function loadVehicles() {
+  const container = $('#screen-vehicles');
+  container.innerHTML = `
+    <div class="screen-placeholder">
+      <h2>Vehicles</h2>
+      <p>Fleet management coming soon.</p>
+    </div>
+  `;
+}
+
+// ============================================
+// SHIFT TEMPLATES (placeholder)
+// ============================================
+
+async function loadShiftTemplates() {
+  const container = $('#screen-shifts');
+  container.innerHTML = `
+    <div class="screen-placeholder">
+      <h2>Shift Templates</h2>
+      <p>Template builder coming soon.</p>
+    </div>
+  `;
+}
+
+// ============================================
+// ROSTER (placeholder)
+// ============================================
+
+async function loadRosterWeek() {
+  const container = $('#screen-roster');
+  container.innerHTML = `
+    <div class="screen-placeholder">
+      <h2>Roster</h2>
+      <p>Schedule management coming soon.</p>
+    </div>
+  `;
+}
+
+// ============================================
+// DISPATCH
 // ============================================
 
 function renderDispatch() {
@@ -368,11 +653,12 @@ function renderDispatch() {
     <div class="dispatch-content">
       <div class="dispatch-section">
         <div class="section-header">
-          <h3>Drivers (${drivers.filter(d => d.shifts.length > 0).length})</h3>
+          <h3>Drivers (${drivers.filter(d => d.shifts.length > 0).length} working)</h3>
         </div>
         <div class="section-body">
-          ${drivers.filter(d => d.shifts.length > 0 || d.daily_status !== 'available').map(d => renderDriverRow(d)).join('')}
-          ${drivers.filter(d => d.shifts.length > 0).length === 0 ? '<div class="empty-message">No drivers assigned</div>' : ''}
+          ${drivers.filter(d => d.shifts.length > 0 || d.daily_status !== 'available').length === 0 
+            ? '<div class="empty-message">No drivers assigned for today</div>' 
+            : drivers.filter(d => d.shifts.length > 0 || d.daily_status !== 'available').map(d => renderDriverRow(d)).join('')}
         </div>
       </div>
       
@@ -381,8 +667,9 @@ function renderDispatch() {
           <h3>Unassigned Jobs (${unassigned.length})</h3>
         </div>
         <div class="section-body">
-          ${unassigned.map(j => renderUnassignedRow(j)).join('')}
-          ${unassigned.length === 0 ? '<div class="empty-message">All jobs assigned ✓</div>' : ''}
+          ${unassigned.length === 0 
+            ? '<div class="empty-message">All jobs assigned ✓</div>' 
+            : unassigned.map(j => renderUnassignedRow(j)).join('')}
         </div>
       </div>
     </div>
@@ -408,7 +695,7 @@ function renderDriverRow(driver) {
 }
 
 function renderShiftBlock(shift) {
-  const startPct = ((shift.start_time - 5) / 19) * 100; // 5am to midnight
+  const startPct = ((shift.start_time - 5) / 19) * 100;
   const widthPct = ((shift.end_time - shift.start_time) / 19) * 100;
   
   return `
@@ -427,242 +714,9 @@ function renderUnassignedRow(job) {
         <span class="job-time font-mono">${formatTime(job.start_time)} - ${formatTime(job.end_time)}</span>
         ${job.customer_name ? `<span class="job-customer">${job.customer_name}</span>` : ''}
       </div>
-      <button class="btn btn-secondary btn-sm" onclick="window.app.assignJob('${job.id}')">Assign</button>
+      <button class="btn btn-secondary btn-sm">Assign</button>
     </div>
   `;
-}
-
-function renderEmployees() {
-  const container = $('#screen-hrm');
-  const employees = state.employees;
-  
-  container.innerHTML = `
-    <div class="screen-header">
-      <h2>Employees</h2>
-      <button class="btn btn-primary" onclick="window.app.showAddEmployee()">+ Add Employee</button>
-    </div>
-    
-    <div class="screen-content">
-      <div class="table-container">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Phone</th>
-              <th>Licence</th>
-              <th>Role</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${employees.map(e => `
-              <tr>
-                <td class="font-mono">${e.employee_number}</td>
-                <td>${e.first_name} ${e.last_name}</td>
-                <td>${e.phone || '-'}</td>
-                <td class="font-mono">${e.licence_number || '-'}</td>
-                <td><span class="badge badge-info">${e.role}</span></td>
-                <td><span class="badge ${e.status === 'active' ? 'badge-success' : 'badge-warning'}">${e.status}</span></td>
-                <td>
-                  <button class="btn btn-secondary btn-sm" onclick="window.app.editEmployee('${e.id}')">Edit</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderVehicles() {
-  const container = $('#screen-vehicles');
-  const vehicles = state.vehicles;
-  
-  container.innerHTML = `
-    <div class="screen-header">
-      <h2>Vehicles</h2>
-      <button class="btn btn-primary" onclick="window.app.showAddVehicle()">+ Add Vehicle</button>
-    </div>
-    
-    <div class="screen-content">
-      <div class="table-container">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Fleet #</th>
-              <th>Rego</th>
-              <th>Capacity</th>
-              <th>Make/Model</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            ${vehicles.map(v => `
-              <tr>
-                <td class="font-mono">${v.fleet_number}</td>
-                <td class="font-mono">${v.rego}</td>
-                <td>${v.capacity}</td>
-                <td>${v.make || ''} ${v.model || ''}</td>
-                <td><span class="badge ${v.status === 'active' ? 'badge-success' : 'badge-warning'}">${v.status}</span></td>
-                <td>
-                  <button class="btn btn-secondary btn-sm" onclick="window.app.editVehicle('${v.id}')">Edit</button>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderShiftTemplates() {
-  const container = $('#screen-shifts');
-  const templates = state.shiftTemplates;
-  
-  container.innerHTML = `
-    <div class="screen-header">
-      <h2>Shift Templates</h2>
-      <button class="btn btn-primary" onclick="window.app.showAddShiftTemplate()">+ Add Template</button>
-    </div>
-    
-    <div class="screen-content">
-      ${templates.length === 0 ? `
-        <div class="empty-state">
-          <p>No shift templates yet.</p>
-          <p class="text-muted">Create templates to define reusable shift patterns.</p>
-        </div>
-      ` : `
-        <div class="template-grid">
-          ${templates.map(t => `
-            <div class="card template-card">
-              <div class="card-header">
-                <span class="card-title">${t.name}</span>
-                <span class="badge badge-info">${t.code}</span>
-              </div>
-              <div class="template-times font-mono">
-                ${formatTime(t.default_start)} - ${formatTime(t.default_end)}
-              </div>
-              <div class="template-type">${t.shift_type}</div>
-              <div class="card-actions">
-                <button class="btn btn-secondary btn-sm" onclick="window.app.editShiftTemplate('${t.id}')">Edit</button>
-                <button class="btn btn-secondary btn-sm" onclick="window.app.duplicateShiftTemplate('${t.id}')">Duplicate</button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `}
-    </div>
-  `;
-}
-
-function renderRoster(data) {
-  const container = $('#screen-roster');
-  
-  if (!data) {
-    container.innerHTML = `
-      <div class="screen-placeholder">
-        <h2>No roster data</h2>
-      </div>
-    `;
-    return;
-  }
-  
-  const { week_start, week_end, days } = data;
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  
-  container.innerHTML = `
-    <div class="screen-header">
-      <h2>Roster</h2>
-      <div class="roster-nav">
-        <button class="btn btn-secondary" onclick="window.app.prevRosterWeek()">◀ Prev Week</button>
-        <span class="week-range">${week_start} to ${week_end}</span>
-        <button class="btn btn-secondary" onclick="window.app.nextRosterWeek()">Next Week ▶</button>
-      </div>
-      <button class="btn btn-primary" onclick="window.app.showCopyWeek()">Copy Week</button>
-    </div>
-    
-    <div class="roster-week">
-      ${Object.entries(days).map(([date, entries], i) => `
-        <div class="roster-day">
-          <div class="day-header">
-            <span class="day-name">${dayNames[i]}</span>
-            <span class="day-date">${date.split('-')[2]}</span>
-            <span class="day-count">${entries.length} shifts</span>
-          </div>
-          <div class="day-entries">
-            ${entries.map(e => `
-              <div class="roster-entry ${e.driver_id ? 'assigned' : 'unassigned'}">
-                <div class="entry-name">${e.name}</div>
-                <div class="entry-time font-mono">${formatTime(e.start_time)}-${formatTime(e.end_time)}</div>
-                <div class="entry-driver">${e.driver_name || 'Unassigned'}</div>
-              </div>
-            `).join('')}
-            ${entries.length === 0 ? '<div class="empty-day">No shifts</div>' : ''}
-          </div>
-          <button class="btn btn-secondary btn-sm add-shift-btn" onclick="window.app.addShiftToDay('${date}')">+ Add</button>
-        </div>
-      `).join('')}
-    </div>
-  `;
-}
-
-// ============================================
-// MODAL PLACEHOLDERS
-// ============================================
-
-function showAddEmployee() {
-  showToast('Employee form coming soon', 'info');
-}
-
-function showAddVehicle() {
-  showToast('Vehicle form coming soon', 'info');
-}
-
-function showAddShiftTemplate() {
-  showToast('Shift template form coming soon', 'info');
-}
-
-function editEmployee(id) {
-  showToast(`Edit employee ${id}`, 'info');
-}
-
-function editVehicle(id) {
-  showToast(`Edit vehicle ${id}`, 'info');
-}
-
-function editShiftTemplate(id) {
-  showToast(`Edit template ${id}`, 'info');
-}
-
-function duplicateShiftTemplate(id) {
-  showToast(`Duplicate template ${id}`, 'info');
-}
-
-function assignJob(id) {
-  showToast(`Assign job ${id}`, 'info');
-}
-
-function addShiftToDay(date) {
-  showToast(`Add shift to ${date}`, 'info');
-}
-
-function showCopyWeek() {
-  showToast('Copy week dialog coming soon', 'info');
-}
-
-function prevRosterWeek() {
-  state.currentDate.setDate(state.currentDate.getDate() - 7);
-  loadRosterWeek();
-}
-
-function nextRosterWeek() {
-  state.currentDate.setDate(state.currentDate.getDate() + 7);
-  loadRosterWeek();
 }
 
 // ============================================
@@ -675,6 +729,13 @@ async function init() {
   $('#hideSidebar').addEventListener('click', toggleSidebar);
   $('#prevDate').addEventListener('click', prevDate);
   $('#nextDate').addEventListener('click', nextDate);
+  $('#modalClose').addEventListener('click', closeModal);
+  $('#modalOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+  $('#deleteModalOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeDeleteModal();
+  });
   
   // Navigation
   $$('.nav-item').forEach(item => {
@@ -694,10 +755,12 @@ async function init() {
     const health = await api.health();
     console.log('API connected:', health);
     $('#connectionStatus').classList.remove('offline');
+    $('#connectionStatus').title = 'Connected';
   } catch (err) {
     console.error('API connection failed:', err);
     $('#connectionStatus').classList.add('offline');
-    showToast('API connection failed - running in offline mode', 'error');
+    $('#connectionStatus').title = 'Disconnected';
+    showToast('API connection failed', 'error');
   }
   
   // Load initial screen
@@ -709,20 +772,22 @@ async function init() {
 // ============================================
 
 window.app = {
+  // Data loading
   loadDispatch,
   loadEmployees,
+  
+  // Modal
+  closeModal,
+  closeDeleteModal,
+  
+  // Employees
   showAddEmployee,
-  showAddVehicle,
-  showAddShiftTemplate,
   editEmployee,
-  editVehicle,
-  editShiftTemplate,
-  duplicateShiftTemplate,
-  assignJob,
-  addShiftToDay,
-  showCopyWeek,
-  prevRosterWeek,
-  nextRosterWeek,
+  saveEmployee,
+  confirmDeleteEmployee,
+  handleEmployeeSearch,
+  handleEmployeeRoleFilter,
+  handleEmployeeStatusFilter,
 };
 
 // Start app
