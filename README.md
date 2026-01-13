@@ -10,7 +10,7 @@ Bus and coach dispatch operations system. Manage drivers, vehicles, shifts, rost
 
 ## Live App
 
-- **App:** https://dispatch-app.pages.dev
+- **App:** https://despatch-app.pages.dev/
 - **API:** https://dispatch-api.oliveri-john001.workers.dev
 
 ## Quick Start
