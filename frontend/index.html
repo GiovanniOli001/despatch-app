@@ -2915,6 +2915,44 @@
     .btn-secondary:hover {
       background: var(--bg-hover);
     }
+    
+    /* Roster table styles */
+    .roster-cell {
+      padding: 8px !important;
+      vertical-align: top;
+      min-width: 100px;
+    }
+    
+    .roster-cell.filled {
+      background: var(--bg-tertiary);
+    }
+    
+    .roster-cell.empty {
+      color: var(--text-muted);
+      text-align: center;
+    }
+    
+    .roster-cell-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: var(--accent-blue);
+      margin-bottom: 4px;
+    }
+    
+    .roster-cell-driver {
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+    
+    .roster-cell-vehicle {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    textarea.form-input {
+      resize: vertical;
+      min-height: 60px;
+    }
   </style>
 </head>
 <body class="style-b">
@@ -3016,6 +3054,12 @@
         </a>
         <a class="nav-item" onclick="navigateTo('vehicles')" data-screen="vehicles">
           <span class="nav-label">Vehicles</span>
+        </a>
+        <a class="nav-item" onclick="navigateTo('shifts')" data-screen="shifts">
+          <span class="nav-label">Shift Templates</span>
+        </a>
+        <a class="nav-item" onclick="navigateTo('roster')" data-screen="roster">
+          <span class="nav-label">Roster</span>
         </a>
         <a class="nav-item" onclick="navigateTo('maintenance')" data-screen="maintenance">
           <span class="nav-label">Maintenance</span>
@@ -3251,6 +3295,74 @@
             </thead>
             <tbody id="vehiclesTableBody">
               <tr><td colspan="7" class="loading-cell">Loading vehicles...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- Shift Templates Screen -->
+      <div class="screen" id="screen-shifts" style="display: none;">
+        <div class="screen-header-bar">
+          <h2>Shift Templates</h2>
+          <button class="btn-primary" onclick="showAddShiftModal()">+ Add Template</button>
+        </div>
+        <div class="screen-filters">
+          <input type="text" class="filter-input" placeholder="Search templates..." oninput="filterShifts(this.value)">
+          <select class="filter-select" onchange="filterShiftType(this.value)">
+            <option value="">All Types</option>
+            <option value="regular">Regular</option>
+            <option value="charter">Charter</option>
+            <option value="school">School</option>
+          </select>
+        </div>
+        <div class="screen-table-container">
+          <table class="screen-table">
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Duration</th>
+                <th>Duties</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="shiftsTableBody">
+              <tr><td colspan="8" class="loading-cell">Loading shift templates...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- Roster Screen -->
+      <div class="screen" id="screen-roster" style="display: none;">
+        <div class="screen-header-bar">
+          <h2>Roster</h2>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-secondary" onclick="changeRosterWeek(-1)">← Prev Week</button>
+            <span id="rosterWeekLabel" style="padding: 8px 16px; color: var(--text-primary);">Week of Jan 13, 2025</span>
+            <button class="btn-secondary" onclick="changeRosterWeek(1)">Next Week →</button>
+            <button class="btn-primary" onclick="showAddRosterEntryModal()">+ Add Entry</button>
+          </div>
+        </div>
+        <div class="screen-table-container">
+          <table class="screen-table">
+            <thead>
+              <tr>
+                <th>Shift</th>
+                <th>Mon</th>
+                <th>Tue</th>
+                <th>Wed</th>
+                <th>Thu</th>
+                <th>Fri</th>
+                <th>Sat</th>
+                <th>Sun</th>
+              </tr>
+            </thead>
+            <tbody id="rosterTableBody">
+              <tr><td colspan="8" class="loading-cell">Loading roster...</td></tr>
             </tbody>
           </table>
         </div>
@@ -9690,6 +9802,238 @@ Guidelines:
     }
     
     // ============================================
+    // SHIFTS CRUD
+    // ============================================
+    let shiftsData = [];
+    let shiftFiltersState = { search: '', type: '' };
+    let editingShiftId = null;
+    
+    async function loadShifts() {
+      const tbody = document.getElementById('shiftsTableBody');
+      tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading shift templates...</td></tr>';
+      
+      try {
+        const params = new URLSearchParams();
+        if (shiftFiltersState.search) params.set('search', shiftFiltersState.search);
+        if (shiftFiltersState.type) params.set('type', shiftFiltersState.type);
+        
+        const result = await apiRequest(`/shifts?${params}`);
+        shiftsData = result.data || [];
+        renderShiftsTable();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${err.message}</td></tr>`;
+      }
+    }
+    
+    function formatDecimalTime(decimal) {
+      const h = Math.floor(decimal);
+      const m = Math.round((decimal - h) * 60);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+    
+    function renderShiftsTable() {
+      const tbody = document.getElementById('shiftsTableBody');
+      if (shiftsData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">No shift templates found. Click "+ Add Template" to create one.</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = shiftsData.map(s => {
+        const duration = s.default_end - s.default_start;
+        const durationStr = `${Math.floor(duration)}h ${Math.round((duration % 1) * 60)}m`;
+        return `
+          <tr>
+            <td style="font-family: 'JetBrains Mono', monospace;">${s.code}</td>
+            <td>${s.name}</td>
+            <td><span class="badge badge-info">${s.shift_type}</span></td>
+            <td>${formatDecimalTime(s.default_start)}</td>
+            <td>${formatDecimalTime(s.default_end)}</td>
+            <td>${durationStr}</td>
+            <td>${s.duty_count || 0}</td>
+            <td>
+              <button class="action-btn" onclick="editShift('${s.id}')">Edit</button>
+              <button class="action-btn" onclick="duplicateShift('${s.id}')">Copy</button>
+              <button class="action-btn danger" onclick="deleteShift('${s.id}', '${s.name}')">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+    
+    let shiftSearchTimeout;
+    function filterShifts(search) {
+      clearTimeout(shiftSearchTimeout);
+      shiftSearchTimeout = setTimeout(() => {
+        shiftFiltersState.search = search;
+        loadShifts();
+      }, 300);
+    }
+    
+    function filterShiftType(type) {
+      shiftFiltersState.type = type;
+      loadShifts();
+    }
+    
+    function showAddShiftModal() {
+      editingShiftId = null;
+      document.getElementById('shiftModalTitle').textContent = 'Add Shift Template';
+      document.getElementById('shiftForm').reset();
+      document.getElementById('shiftModalOverlay').classList.add('show');
+    }
+    
+    function editShift(id) {
+      const shift = shiftsData.find(s => s.id === id);
+      if (!shift) return;
+      
+      editingShiftId = id;
+      document.getElementById('shiftModalTitle').textContent = 'Edit Shift Template';
+      document.getElementById('shiftCode').value = shift.code || '';
+      document.getElementById('shiftName').value = shift.name || '';
+      document.getElementById('shiftType').value = shift.shift_type || 'regular';
+      document.getElementById('shiftStart').value = formatDecimalTime(shift.default_start);
+      document.getElementById('shiftEnd').value = formatDecimalTime(shift.default_end);
+      document.getElementById('shiftNotes').value = shift.notes || '';
+      document.getElementById('shiftModalOverlay').classList.add('show');
+    }
+    
+    function closeShiftModal() {
+      document.getElementById('shiftModalOverlay').classList.remove('show');
+      editingShiftId = null;
+    }
+    
+    function parseTimeToDecimal(timeStr) {
+      const [h, m] = timeStr.split(':').map(Number);
+      return h + (m / 60);
+    }
+    
+    async function saveShift() {
+      const data = {
+        code: document.getElementById('shiftCode').value,
+        name: document.getElementById('shiftName').value,
+        shift_type: document.getElementById('shiftType').value,
+        default_start: parseTimeToDecimal(document.getElementById('shiftStart').value),
+        default_end: parseTimeToDecimal(document.getElementById('shiftEnd').value),
+        notes: document.getElementById('shiftNotes').value || null,
+      };
+      
+      try {
+        if (editingShiftId) {
+          await apiRequest(`/shifts/${editingShiftId}`, { method: 'PUT', body: data });
+          showToast('Shift template updated');
+        } else {
+          await apiRequest('/shifts', { method: 'POST', body: data });
+          showToast('Shift template added');
+        }
+        closeShiftModal();
+        loadShifts();
+      } catch (err) {
+        showToast(err.message || 'Failed to save', 'error');
+      }
+    }
+    
+    async function duplicateShift(id) {
+      try {
+        await apiRequest(`/shifts/${id}/duplicate`, { method: 'POST' });
+        showToast('Shift template duplicated');
+        loadShifts();
+      } catch (err) {
+        showToast(err.message || 'Failed to duplicate', 'error');
+      }
+    }
+    
+    async function deleteShift(id, name) {
+      if (!confirm(`Delete shift template "${name}"?`)) return;
+      try {
+        await apiRequest(`/shifts/${id}`, { method: 'DELETE' });
+        showToast('Shift template deleted');
+        loadShifts();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    }
+    
+    // ============================================
+    // ROSTER CRUD
+    // ============================================
+    let rosterData = [];
+    let rosterWeekStart = new Date();
+    rosterWeekStart.setDate(rosterWeekStart.getDate() - rosterWeekStart.getDay() + 1); // Monday
+    
+    function formatDateShort(date) {
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    }
+    
+    function formatDateISO(date) {
+      return date.toISOString().split('T')[0];
+    }
+    
+    async function loadRoster() {
+      const tbody = document.getElementById('rosterTableBody');
+      const weekLabel = document.getElementById('rosterWeekLabel');
+      
+      weekLabel.textContent = `Week of ${formatDateShort(rosterWeekStart)}`;
+      tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading roster...</td></tr>';
+      
+      try {
+        const result = await apiRequest(`/roster/week/${formatDateISO(rosterWeekStart)}`);
+        rosterData = result.data || [];
+        renderRosterTable();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${err.message}</td></tr>`;
+      }
+    }
+    
+    function renderRosterTable() {
+      const tbody = document.getElementById('rosterTableBody');
+      
+      if (!rosterData || rosterData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">No roster entries for this week. Click "+ Add Entry" to create one.</td></tr>';
+        return;
+      }
+      
+      // Group entries by shift template
+      const byShift = new Map();
+      rosterData.forEach(entry => {
+        const key = entry.shift_template_id || entry.name || 'Ad-hoc';
+        if (!byShift.has(key)) {
+          byShift.set(key, { name: entry.name, entries: {} });
+        }
+        const dayOfWeek = new Date(entry.date).getDay();
+        const dayIdx = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Mon=0, Sun=6
+        byShift.get(key).entries[dayIdx] = entry;
+      });
+      
+      tbody.innerHTML = Array.from(byShift.values()).map(shift => {
+        let cells = `<td>${shift.name}</td>`;
+        for (let i = 0; i < 7; i++) {
+          const entry = shift.entries[i];
+          if (entry) {
+            const driver = entry.driver_name || '—';
+            const vehicle = entry.vehicle_number || '—';
+            cells += `<td class="roster-cell filled">
+              <div class="roster-cell-time">${formatDecimalTime(entry.start_time)}-${formatDecimalTime(entry.end_time)}</div>
+              <div class="roster-cell-driver">${driver}</div>
+              <div class="roster-cell-vehicle">${vehicle}</div>
+            </td>`;
+          } else {
+            cells += `<td class="roster-cell empty">—</td>`;
+          }
+        }
+        return `<tr>${cells}</tr>`;
+      }).join('');
+    }
+    
+    function changeRosterWeek(delta) {
+      rosterWeekStart.setDate(rosterWeekStart.getDate() + (delta * 7));
+      loadRoster();
+    }
+    
+    function showAddRosterEntryModal() {
+      showToast('Roster entry creation coming soon');
+    }
+    
+    // ============================================
     // NAVIGATION HOOKS
     // ============================================
     const originalNavigateTo = navigateTo;
@@ -9701,6 +10045,10 @@ Guidelines:
         loadEmployees();
       } else if (screen === 'vehicles') {
         loadVehiclesData();
+      } else if (screen === 'shifts') {
+        loadShifts();
+      } else if (screen === 'roster') {
+        loadRoster();
       }
     };
 
@@ -9824,6 +10172,56 @@ Guidelines:
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeVehicleModal()">Cancel</button>
         <button class="btn-primary" onclick="saveVehicle()">Save</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Shift Template Modal -->
+  <div class="crud-modal-overlay" id="shiftModalOverlay" onclick="if(event.target===this)closeShiftModal()">
+    <div class="crud-modal">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="shiftModalTitle">Add Shift Template</span>
+        <button class="crud-modal-close" onclick="closeShiftModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="shiftForm" onsubmit="event.preventDefault(); saveShift();">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Code *</label>
+              <input type="text" id="shiftCode" class="form-input" placeholder="e.g. AM-01" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Type</label>
+              <select id="shiftType" class="form-input">
+                <option value="regular">Regular</option>
+                <option value="charter">Charter</option>
+                <option value="school">School</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Name *</label>
+            <input type="text" id="shiftName" class="form-input" placeholder="e.g. Morning Route 1" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Default Start *</label>
+              <input type="time" id="shiftStart" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Default End *</label>
+              <input type="time" id="shiftEnd" class="form-input" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea id="shiftNotes" class="form-input" rows="2"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closeShiftModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveShift()">Save</button>
       </div>
     </div>
   </div>
