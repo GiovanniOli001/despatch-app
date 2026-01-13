@@ -1087,3 +1087,290 @@ body.nav-collapsed .menu-toggle {
 .table .btn-sm:first-child {
   margin-left: 0;
 }
+
+/* ============================================
+   SHIFT TEMPLATES
+   ============================================ */
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.template-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.template-card .card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.template-card .card-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.template-times {
+  font-size: 18px;
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+.template-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.template-card .card-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Duties section in template modal */
+.duties-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.duties-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.duties-header h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.duties-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.duty-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.duty-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.duty-type {
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.duty-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.duty-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* ============================================
+   ROSTER
+   ============================================ */
+
+.roster-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.week-range {
+  font-weight: 600;
+  min-width: 180px;
+  text-align: center;
+}
+
+.roster-actions {
+  margin-left: auto;
+}
+
+.roster-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 20px;
+}
+
+.roster-day {
+  background: var(--bg-secondary);
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.roster-day.is-today {
+  background: var(--bg-tertiary);
+}
+
+.roster-day.is-today .day-header {
+  background: var(--accent-blue);
+  color: white;
+}
+
+.day-header {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.day-name {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.day-date {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.day-count {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.roster-day.is-today .day-count {
+  color: rgba(255,255,255,0.7);
+}
+
+.day-entries {
+  flex: 1;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.empty-day {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 20px 8px;
+}
+
+.roster-entry {
+  padding: 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.roster-entry:hover {
+  border-color: var(--accent-blue);
+}
+
+.roster-entry.unassigned {
+  border-left: 3px solid var(--accent-amber);
+}
+
+.roster-entry.assigned {
+  border-left: 3px solid var(--accent-green);
+}
+
+.entry-name {
+  font-weight: 500;
+  font-size: 13px;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entry-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.entry-assignment {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.add-shift-btn {
+  margin: 8px;
+  width: calc(100% - 16px);
+}
+
+/* ============================================
+   MODAL SIZES
+   ============================================ */
+
+.modal.modal-large {
+  max-width: 700px;
+}
+
+.modal.modal-small {
+  max-width: 400px;
+}
+
+/* ============================================
+   MISC UTILITIES
+   ============================================ */
+
+.mb-4 {
+  margin-bottom: 16px;
+}
+
+.mt-4 {
+  margin-top: 16px;
+}
+
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.form-checkbox input {
+  width: 16px;
+  height: 16px;
+}
