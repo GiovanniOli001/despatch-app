@@ -27,10 +27,15 @@ const state = {
     role: '',
     status: '',
   },
+  vehicleFilters: {
+    search: '',
+    status: '',
+  },
   
   // Selection state
   selectedItem: null,
   editingEmployee: null,
+  editingVehicle: null,
   
   // Loading states
   loading: {
@@ -97,6 +102,7 @@ function showModal(title, bodyHtml, footerHtml) {
 function closeModal() {
   $('#modalOverlay').classList.remove('active');
   state.editingEmployee = null;
+  state.editingVehicle = null;
 }
 
 function showDeleteModal(message, onConfirm) {
@@ -364,15 +370,16 @@ function getStatusBadgeClass(status) {
     case 'active': return 'badge-success';
     case 'inactive': return 'badge-warning';
     case 'terminated': return 'badge-error';
+    case 'sold': return 'badge-error';
     default: return 'badge-info';
   }
 }
 
 // Employee search with debounce
-let searchTimeout;
+let employeeSearchTimeout;
 function handleEmployeeSearch(event) {
-  clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
+  clearTimeout(employeeSearchTimeout);
+  employeeSearchTimeout = setTimeout(() => {
     state.employeeFilters.search = event.target.value;
     loadEmployees();
   }, 300);
@@ -553,17 +560,285 @@ async function deleteEmployee(id) {
 }
 
 // ============================================
-// VEHICLES (placeholder)
+// VEHICLES
 // ============================================
 
 async function loadVehicles() {
   const container = $('#screen-vehicles');
+  state.loading.vehicles = true;
+  
   container.innerHTML = `
-    <div class="screen-placeholder">
-      <h2>Vehicles</h2>
-      <p>Fleet management coming soon.</p>
+    <div class="loading-screen">
+      <div class="loading-spinner"></div>
+      <div class="loading-text">Loading vehicles...</div>
     </div>
   `;
+  
+  try {
+    const params = {};
+    if (state.vehicleFilters.search) params.search = state.vehicleFilters.search;
+    if (state.vehicleFilters.status) params.status = state.vehicleFilters.status;
+    
+    const result = await api.getVehicles(params);
+    state.vehicles = result.data || [];
+    renderVehicles();
+  } catch (err) {
+    console.error('Failed to load vehicles:', err);
+    container.innerHTML = `
+      <div class="screen-placeholder">
+        <h2>Failed to load vehicles</h2>
+        <p>${err.message}</p>
+        <button class="btn btn-primary mt-4" onclick="window.app.loadVehicles()">Retry</button>
+      </div>
+    `;
+  } finally {
+    state.loading.vehicles = false;
+  }
+}
+
+function renderVehicles() {
+  const container = $('#screen-vehicles');
+  const vehicles = state.vehicles;
+  const filters = state.vehicleFilters;
+  
+  container.innerHTML = `
+    <div class="screen-header">
+      <h2>Vehicles</h2>
+      <button class="btn btn-primary" onclick="window.app.showAddVehicle()">+ Add Vehicle</button>
+    </div>
+    
+    <div class="filter-bar">
+      <input 
+        type="text" 
+        class="form-input filter-search" 
+        placeholder="Search by fleet #, rego, make..." 
+        value="${filters.search}"
+        onkeyup="window.app.handleVehicleSearch(event)"
+      />
+      <select class="form-select filter-select" onchange="window.app.handleVehicleStatusFilter(event)">
+        <option value="">All Statuses</option>
+        <option value="active" ${filters.status === 'active' ? 'selected' : ''}>Active</option>
+        <option value="inactive" ${filters.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+        <option value="sold" ${filters.status === 'sold' ? 'selected' : ''}>Sold</option>
+      </select>
+    </div>
+    
+    <div class="screen-content">
+      ${vehicles.length === 0 ? `
+        <div class="empty-state">
+          <h3>No vehicles found</h3>
+          <p class="text-muted">
+            ${filters.search || filters.status 
+              ? 'Try adjusting your filters.' 
+              : 'Add your first vehicle to get started.'}
+          </p>
+        </div>
+      ` : `
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Fleet #</th>
+                <th>Rego</th>
+                <th>Capacity</th>
+                <th>Make / Model</th>
+                <th>Year</th>
+                <th>Status</th>
+                <th class="text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${vehicles.map(v => `
+                <tr>
+                  <td class="font-mono">${v.fleet_number}</td>
+                  <td class="font-mono">${v.rego}</td>
+                  <td>${v.capacity} seats</td>
+                  <td>
+                    ${v.make || v.model ? `
+                      <div>${v.make || ''} ${v.model || ''}</div>
+                    ` : '—'}
+                  </td>
+                  <td>${v.year || '—'}</td>
+                  <td><span class="badge ${getStatusBadgeClass(v.status)}">${v.status}</span></td>
+                  <td class="text-right">
+                    <button class="btn btn-secondary btn-sm" onclick="window.app.editVehicle('${v.id}')">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="window.app.confirmDeleteVehicle('${v.id}', '${v.fleet_number}')">Delete</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `}
+    </div>
+  `;
+}
+
+// Vehicle search with debounce
+let vehicleSearchTimeout;
+function handleVehicleSearch(event) {
+  clearTimeout(vehicleSearchTimeout);
+  vehicleSearchTimeout = setTimeout(() => {
+    state.vehicleFilters.search = event.target.value;
+    loadVehicles();
+  }, 300);
+}
+
+function handleVehicleStatusFilter(event) {
+  state.vehicleFilters.status = event.target.value;
+  loadVehicles();
+}
+
+// Add/Edit Vehicle Modal
+function showAddVehicle() {
+  state.editingVehicle = null;
+  showVehicleForm();
+}
+
+function editVehicle(id) {
+  const vehicle = state.vehicles.find(v => v.id === id);
+  if (!vehicle) {
+    showToast('Vehicle not found', 'error');
+    return;
+  }
+  state.editingVehicle = vehicle;
+  showVehicleForm();
+}
+
+function showVehicleForm() {
+  const veh = state.editingVehicle;
+  const isEdit = !!veh;
+  
+  const bodyHtml = `
+    <form id="vehicleForm" class="form">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Fleet Number *</label>
+          <input type="text" name="fleet_number" class="form-input" 
+                 value="${veh?.fleet_number || ''}" 
+                 placeholder="e.g. BUS-101" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Registration *</label>
+          <input type="text" name="rego" class="form-input" 
+                 value="${veh?.rego || ''}" 
+                 placeholder="e.g. ABC123" required />
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Capacity (seats) *</label>
+          <input type="number" name="capacity" class="form-input" 
+                 value="${veh?.capacity || ''}" 
+                 placeholder="e.g. 50" min="1" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            <option value="active" ${!veh || veh?.status === 'active' ? 'selected' : ''}>Active</option>
+            <option value="inactive" ${veh?.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+            <option value="sold" ${veh?.status === 'sold' ? 'selected' : ''}>Sold</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Make</label>
+          <input type="text" name="make" class="form-input" 
+                 value="${veh?.make || ''}" 
+                 placeholder="e.g. Mercedes" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Model</label>
+          <input type="text" name="model" class="form-input" 
+                 value="${veh?.model || ''}" 
+                 placeholder="e.g. Sprinter" />
+        </div>
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Year</label>
+          <input type="number" name="year" class="form-input" 
+                 value="${veh?.year || ''}" 
+                 placeholder="e.g. 2020" min="1900" max="2099" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">VIN</label>
+          <input type="text" name="vin" class="form-input" 
+                 value="${veh?.vin || ''}" 
+                 placeholder="Vehicle identification number" />
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label class="form-label">Notes</label>
+        <textarea name="notes" class="form-input form-textarea" rows="3">${veh?.notes || ''}</textarea>
+      </div>
+    </form>
+  `;
+  
+  const footerHtml = `
+    <button class="btn btn-secondary" onclick="window.app.closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="window.app.saveVehicle()">${isEdit ? 'Save Changes' : 'Add Vehicle'}</button>
+  `;
+  
+  showModal(isEdit ? 'Edit Vehicle' : 'Add Vehicle', bodyHtml, footerHtml);
+}
+
+async function saveVehicle() {
+  const form = document.getElementById('vehicleForm');
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+  
+  const formData = new FormData(form);
+  const data = {
+    fleet_number: formData.get('fleet_number'),
+    rego: formData.get('rego'),
+    capacity: parseInt(formData.get('capacity')),
+    make: formData.get('make') || null,
+    model: formData.get('model') || null,
+    year: formData.get('year') ? parseInt(formData.get('year')) : null,
+    vin: formData.get('vin') || null,
+    status: formData.get('status'),
+    notes: formData.get('notes') || null,
+  };
+  
+  try {
+    if (state.editingVehicle) {
+      await api.updateVehicle(state.editingVehicle.id, data);
+      showToast('Vehicle updated successfully');
+    } else {
+      await api.createVehicle(data);
+      showToast('Vehicle added successfully');
+    }
+    closeModal();
+    loadVehicles();
+  } catch (err) {
+    showToast(err.message || 'Failed to save vehicle', 'error');
+  }
+}
+
+function confirmDeleteVehicle(id, fleetNumber) {
+  showDeleteModal(
+    `Are you sure you want to delete vehicle <strong>${fleetNumber}</strong>?<br><br>This action cannot be undone.`,
+    () => deleteVehicle(id)
+  );
+}
+
+async function deleteVehicle(id) {
+  try {
+    await api.deleteVehicle(id);
+    showToast('Vehicle deleted');
+    closeDeleteModal();
+    loadVehicles();
+  } catch (err) {
+    showToast(err.message || 'Failed to delete vehicle', 'error');
+  }
 }
 
 // ============================================
@@ -775,6 +1050,7 @@ window.app = {
   // Data loading
   loadDispatch,
   loadEmployees,
+  loadVehicles,
   
   // Modal
   closeModal,
@@ -788,6 +1064,14 @@ window.app = {
   handleEmployeeSearch,
   handleEmployeeRoleFilter,
   handleEmployeeStatusFilter,
+  
+  // Vehicles
+  showAddVehicle,
+  editVehicle,
+  saveVehicle,
+  confirmDeleteVehicle,
+  handleVehicleSearch,
+  handleVehicleStatusFilter,
 };
 
 // Start app
