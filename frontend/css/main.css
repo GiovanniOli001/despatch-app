@@ -1009,3 +1009,81 @@ body.nav-collapsed .menu-toggle {
   padding: 60px 20px;
   color: var(--text-secondary);
 }
+
+.empty-state h3 {
+  margin-bottom: 8px;
+  color: var(--text-primary);
+}
+
+/* ============================================
+   FILTER BAR
+   ============================================ */
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  padding: 12px 20px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-search {
+  flex: 1;
+  max-width: 300px;
+}
+
+.filter-select {
+  width: 150px;
+}
+
+/* ============================================
+   FORM ENHANCEMENTS
+   ============================================ */
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.modal-small {
+  max-width: 400px;
+}
+
+.modal-small .modal-body {
+  text-align: center;
+}
+
+.modal-small .modal-body p {
+  color: var(--text-secondary);
+}
+
+/* ============================================
+   TABLE ENHANCEMENTS
+   ============================================ */
+
+.employee-name {
+  font-weight: 500;
+}
+
+.employee-email {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.table td {
+  vertical-align: middle;
+}
+
+.table .btn-sm {
+  margin-left: 4px;
+}
+
+.table .btn-sm:first-child {
+  margin-left: 0;
+}
