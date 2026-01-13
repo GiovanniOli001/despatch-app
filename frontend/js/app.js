@@ -20,7 +20,7 @@ const state = {
   shiftTemplates: [],
   dutyTypes: [],
   payTypes: [],
-  rosterWeek: null,
+  rosterData: null,
   
   // Filters
   employeeFilters: { search: '', role: '', status: '' },
@@ -34,17 +34,11 @@ const state = {
   editingDuty: null,
   editingRosterEntry: null,
   
-  // Roster week navigation
-  rosterWeekStart: null,
+  // Roster date
+  rosterDate: new Date(),
   
   // Loading states
-  loading: {
-    dispatch: false,
-    employees: false,
-    vehicles: false,
-    templates: false,
-    roster: false,
-  },
+  loading: {},
 };
 
 // ============================================
@@ -62,11 +56,6 @@ function formatDisplayDate(date) {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function formatShortDate(dateStr) {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
 }
 
 function formatTime(decimalHours) {
@@ -89,13 +78,6 @@ function formatDuration(hours) {
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
-}
-
-function getMonday(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.setDate(diff));
 }
 
 function showToast(message, type = 'success') {
@@ -166,7 +148,7 @@ async function loadScreenData(screen) {
     case 'hrm': await loadEmployees(); break;
     case 'vehicles': await loadVehicles(); break;
     case 'shifts': await loadShiftTemplates(); break;
-    case 'roster': await loadRosterWeek(); break;
+    case 'roster': await loadRoster(); break;
   }
 }
 
@@ -224,29 +206,14 @@ async function loadConfig() {
 
 async function loadDispatch() {
   const container = $('#screen-dispatch');
-  state.loading.dispatch = true;
-  
-  container.innerHTML = `
-    <div class="loading-screen">
-      <div class="loading-spinner"></div>
-      <div class="loading-text">Loading dispatch...</div>
-    </div>
-  `;
+  container.innerHTML = `<div class="loading-screen"><div class="loading-spinner"></div><div class="loading-text">Loading dispatch...</div></div>`;
   
   try {
     const result = await api.getDispatchDay(formatDate(state.currentDate));
     state.dispatch = result.data;
     renderDispatch();
   } catch (err) {
-    container.innerHTML = `
-      <div class="screen-placeholder">
-        <h2>Failed to load dispatch</h2>
-        <p>${err.message}</p>
-        <button class="btn btn-primary mt-4" onclick="window.app.loadDispatch()">Retry</button>
-      </div>
-    `;
-  } finally {
-    state.loading.dispatch = false;
+    container.innerHTML = `<div class="screen-placeholder"><h2>Failed to load dispatch</h2><p>${err.message}</p></div>`;
   }
 }
 
@@ -278,23 +245,10 @@ function renderDispatch() {
       <div class="dispatch-section">
         <div class="section-header"><h3>Drivers (${drivers.filter(d => d.shifts.length > 0).length} working)</h3></div>
         <div class="section-body">
+          ${renderTimelineHeader()}
           ${drivers.filter(d => d.shifts.length > 0).length === 0 
             ? '<div class="empty-message">No drivers assigned for today</div>' 
-            : drivers.filter(d => d.shifts.length > 0).map(d => `
-              <div class="resource-row">
-                <div class="resource-info">
-                  <span class="resource-id font-mono">${d.employee_number}</span>
-                  <span class="resource-name">${d.last_name}, ${d.first_name}</span>
-                </div>
-                <div class="resource-timeline">
-                  ${d.shifts.map(s => {
-                    const startPct = ((s.start_time - 5) / 19) * 100;
-                    const widthPct = ((s.end_time - s.start_time) / 19) * 100;
-                    return `<div class="shift-block" style="left:${startPct}%;width:${widthPct}%" title="${s.name}: ${formatTime(s.start_time)}-${formatTime(s.end_time)}"><span class="shift-name">${s.name}</span></div>`;
-                  }).join('')}
-                </div>
-              </div>
-            `).join('')}
+            : drivers.filter(d => d.shifts.length > 0).map(d => renderDriverRow(d)).join('')}
         </div>
       </div>
       <div class="dispatch-section">
@@ -302,16 +256,51 @@ function renderDispatch() {
         <div class="section-body">
           ${unassigned.length === 0 
             ? '<div class="empty-message">All jobs assigned ✓</div>' 
-            : unassigned.map(j => `
-              <div class="job-row">
-                <div class="job-info">
-                  <span class="job-name">${j.name}</span>
-                  <span class="job-time font-mono">${formatTime(j.start_time)}-${formatTime(j.end_time)}</span>
-                </div>
-                <button class="btn btn-secondary btn-sm" onclick="window.app.showAssignModal('${j.id}')">Assign</button>
-              </div>
-            `).join('')}
+            : unassigned.map(j => renderUnassignedRow(j)).join('')}
         </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderTimelineHeader() {
+  const hours = [];
+  for (let h = 5; h <= 24; h++) {
+    hours.push(`<span class="hour-mark">${String(h).padStart(2, '0')}</span>`);
+  }
+  return `<div class="timeline-header"><div class="resource-info-placeholder"></div><div class="timeline-hours">${hours.join('')}</div></div>`;
+}
+
+function renderDriverRow(driver) {
+  return `
+    <div class="resource-row">
+      <div class="resource-info">
+        <span class="resource-id font-mono">${driver.employee_number}</span>
+        <span class="resource-name">${driver.last_name}, ${driver.first_name}</span>
+      </div>
+      <div class="resource-timeline">
+        ${driver.shifts.map(s => {
+          const startPct = ((s.start_time - 5) / 19) * 100;
+          const widthPct = ((s.end_time - s.start_time) / 19) * 100;
+          return `<div class="shift-block" style="left:${startPct}%;width:${widthPct}%" title="${s.name}: ${formatTime(s.start_time)}-${formatTime(s.end_time)}"><span class="shift-name">${s.name}</span></div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderUnassignedRow(job) {
+  return `
+    <div class="resource-row">
+      <div class="resource-info">
+        <span class="resource-name">${job.name}</span>
+      </div>
+      <div class="resource-timeline">
+        ${(() => {
+          const startPct = ((job.start_time - 5) / 19) * 100;
+          const widthPct = ((job.end_time - job.start_time) / 19) * 100;
+          return `<div class="shift-block unassigned" style="left:${startPct}%;width:${widthPct}%" onclick="window.app.showAssignModal('${job.id}')"><span class="shift-name">${formatTime(job.start_time)}-${formatTime(job.end_time)}</span></div>`;
+        })()}
       </div>
     </div>
   `;
@@ -684,7 +673,7 @@ function renderShiftTemplates() {
       ${templates.length === 0 ? '<div class="empty-state"><h3>No templates found</h3><p class="text-muted">Create templates to define reusable shift patterns.</p></div>' : `
         <div class="template-grid">
           ${templates.map(t => `
-            <div class="card template-card">
+            <div class="card template-card" onclick="window.app.editTemplate('${t.id}')">
               <div class="card-header">
                 <span class="card-title">${t.name}</span>
                 <span class="badge badge-info">${t.code}</span>
@@ -693,11 +682,6 @@ function renderShiftTemplates() {
               <div class="template-meta">
                 <span class="badge">${t.shift_type}</span>
                 <span class="text-muted">${formatDuration(t.default_end - t.default_start)}</span>
-              </div>
-              <div class="card-actions">
-                <button class="btn btn-secondary btn-sm" onclick="window.app.editTemplate('${t.id}')">Edit</button>
-                <button class="btn btn-secondary btn-sm" onclick="window.app.duplicateTemplate('${t.id}')">Duplicate</button>
-                <button class="btn btn-danger btn-sm" onclick="window.app.confirmDeleteTemplate('${t.id}', '${t.name}')">Delete</button>
               </div>
             </div>
           `).join('')}
@@ -733,48 +717,119 @@ function showTemplateForm() {
   const defaultStartTime = tpl ? formatTime(tpl.default_start) : '06:00';
   const defaultEndTime = tpl ? formatTime(tpl.default_end) : '14:00';
   
+  // Build duties list - using actual times (shift start + offset)
+  let dutiesHtml = '';
+  if (isEdit && tpl.duties && tpl.duties.length > 0) {
+    dutiesHtml = tpl.duties.map((d, i) => {
+      const dutyStart = tpl.default_start + d.start_offset;
+      const dutyEnd = dutyStart + d.duration;
+      const dutyType = state.dutyTypes.find(dt => dt.id === d.duty_type_id);
+      return `
+        <div class="duty-row" data-duty-id="${d.id}" data-index="${i}">
+          <select class="form-select duty-type-select" name="duty_type_${i}" style="border-left: 3px solid ${dutyType?.color || '#666'}">
+            ${state.dutyTypes.map(dt => `<option value="${dt.id}" ${d.duty_type_id === dt.id ? 'selected' : ''} data-color="${dt.color}">${dt.name}</option>`).join('')}
+          </select>
+          <input type="time" class="form-input duty-start" name="duty_start_${i}" value="${formatTime(dutyStart)}" />
+          <input type="time" class="form-input duty-end" name="duty_end_${i}" value="${formatTime(dutyEnd)}" />
+          <button type="button" class="btn btn-danger btn-sm" onclick="window.app.removeDutyRow(this)">✕</button>
+        </div>
+      `;
+    }).join('');
+  }
+  
   showModal(isEdit ? 'Edit Template' : 'Add Template', `
     <form id="templateForm" class="form">
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Code *</label><input type="text" name="code" class="form-input" value="${tpl?.code || ''}" placeholder="e.g. AM-SHIFT" required /></div>
+        <div class="form-group"><label class="form-label">Code *</label><input type="text" name="code" class="form-input" value="${tpl?.code || ''}" placeholder="e.g. AM-01" required /></div>
         <div class="form-group"><label class="form-label">Name *</label><input type="text" name="name" class="form-input" value="${tpl?.name || ''}" placeholder="e.g. Morning Shift" required /></div>
       </div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Start Time *</label><input type="time" name="default_start" class="form-input" value="${defaultStartTime}" required /></div>
-        <div class="form-group"><label class="form-label">End Time *</label><input type="time" name="default_end" class="form-input" value="${defaultEndTime}" required /></div>
+        <div class="form-group"><label class="form-label">Shift Start *</label><input type="time" name="default_start" id="shiftStart" class="form-input" value="${defaultStartTime}" required onchange="window.app.onShiftTimesChange()" /></div>
+        <div class="form-group"><label class="form-label">Shift End *</label><input type="time" name="default_end" id="shiftEnd" class="form-input" value="${defaultEndTime}" required onchange="window.app.onShiftTimesChange()" /></div>
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Type</label><select name="shift_type" class="form-select"><option value="regular" ${tpl?.shift_type === 'regular' ? 'selected' : ''}>Regular</option><option value="charter" ${tpl?.shift_type === 'charter' ? 'selected' : ''}>Charter</option><option value="school" ${tpl?.shift_type === 'school' ? 'selected' : ''}>School</option></select></div>
         <div class="form-group"><label class="form-label">Default Vehicle</label><select name="default_vehicle_id" class="form-select"><option value="">None</option>${state.vehicles.filter(v => v.status === 'active').map(v => `<option value="${v.id}" ${tpl?.default_vehicle_id === v.id ? 'selected' : ''}>${v.fleet_number}</option>`).join('')}</select></div>
       </div>
-      <div class="form-group"><label class="form-label">Notes</label><textarea name="notes" class="form-input form-textarea" rows="2">${tpl?.notes || ''}</textarea></div>
-    </form>
-    ${isEdit && tpl.duties ? `
+      
       <div class="duties-section">
         <div class="duties-header">
           <h4>Duties</h4>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="window.app.showAddDuty('${tpl.id}')">+ Add Duty</button>
         </div>
-        <div class="duties-list">
-          ${tpl.duties.length === 0 ? '<div class="empty-message">No duties defined</div>' : tpl.duties.map((d, i) => `
-            <div class="duty-item" style="border-left: 3px solid ${d.duty_type_color}">
-              <div class="duty-info">
-                <span class="duty-type">${d.duty_type_name}</span>
-                <span class="duty-time font-mono">+${formatDuration(d.start_offset)} → ${formatDuration(d.duration)}</span>
-              </div>
-              <div class="duty-actions">
-                <button class="btn btn-secondary btn-sm" onclick="window.app.editDuty('${tpl.id}', '${d.id}')">Edit</button>
-                <button class="btn btn-danger btn-sm" onclick="window.app.deleteDuty('${tpl.id}', '${d.id}')">×</button>
-              </div>
-            </div>
-          `).join('')}
+        <div class="duties-table">
+          <div class="duties-table-header">
+            <span>Type</span>
+            <span>Start</span>
+            <span>End</span>
+            <span></span>
+          </div>
+          <div id="dutiesList">
+            ${dutiesHtml || '<div class="empty-message">No duties - click Add Duty below</div>'}
+          </div>
         </div>
+        <button type="button" class="btn btn-secondary mt-3" onclick="window.app.addDutyRow()">+ Add Duty</button>
       </div>
-    ` : ''}
+    </form>
   `, `
+    ${isEdit ? `<button class="btn btn-danger" onclick="window.app.confirmDeleteTemplate('${tpl.id}', '${tpl.name}')" style="margin-right:auto">Delete</button>` : ''}
     <button class="btn btn-secondary" onclick="window.app.closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="window.app.saveTemplate()">${isEdit ? 'Save' : 'Create'}</button>
   `, 'modal-large');
+}
+
+function addDutyRow() {
+  const dutiesList = document.getElementById('dutiesList');
+  const emptyMsg = dutiesList.querySelector('.empty-message');
+  if (emptyMsg) emptyMsg.remove();
+  
+  const shiftStart = parseTime($('#shiftStart').value) || 6;
+  const shiftEnd = parseTime($('#shiftEnd').value) || 14;
+  
+  // Find next available time slot
+  const existingRows = dutiesList.querySelectorAll('.duty-row');
+  let startTime = shiftStart;
+  if (existingRows.length > 0) {
+    const lastRow = existingRows[existingRows.length - 1];
+    const lastEnd = parseTime(lastRow.querySelector('.duty-end').value);
+    startTime = lastEnd || shiftStart;
+  }
+  
+  const endTime = Math.min(startTime + 1, shiftEnd);
+  const index = existingRows.length;
+  const defaultDutyType = state.dutyTypes[0];
+  
+  const rowHtml = `
+    <div class="duty-row" data-index="${index}">
+      <select class="form-select duty-type-select" name="duty_type_${index}" style="border-left: 3px solid ${defaultDutyType?.color || '#666'}" onchange="window.app.onDutyTypeChange(this)">
+        ${state.dutyTypes.map(dt => `<option value="${dt.id}" data-color="${dt.color}">${dt.name}</option>`).join('')}
+      </select>
+      <input type="time" class="form-input duty-start" name="duty_start_${index}" value="${formatTime(startTime)}" />
+      <input type="time" class="form-input duty-end" name="duty_end_${index}" value="${formatTime(endTime)}" />
+      <button type="button" class="btn btn-danger btn-sm" onclick="window.app.removeDutyRow(this)">✕</button>
+    </div>
+  `;
+  
+  dutiesList.insertAdjacentHTML('beforeend', rowHtml);
+}
+
+function removeDutyRow(btn) {
+  const row = btn.closest('.duty-row');
+  row.remove();
+  
+  const dutiesList = document.getElementById('dutiesList');
+  if (dutiesList.querySelectorAll('.duty-row').length === 0) {
+    dutiesList.innerHTML = '<div class="empty-message">No duties - click Add Duty below</div>';
+  }
+}
+
+function onDutyTypeChange(select) {
+  const option = select.options[select.selectedIndex];
+  const color = option.dataset.color || '#666';
+  select.style.borderLeftColor = color;
+}
+
+function onShiftTimesChange() {
+  // Could validate duties are within shift times here
 }
 
 async function saveTemplate() {
@@ -782,38 +837,67 @@ async function saveTemplate() {
   if (!form.checkValidity()) return form.reportValidity();
   
   const fd = new FormData(form);
+  const shiftStart = parseTime(fd.get('default_start'));
+  const shiftEnd = parseTime(fd.get('default_end'));
+  
   const data = {
     code: fd.get('code'),
     name: fd.get('name'),
-    default_start: parseTime(fd.get('default_start')),
-    default_end: parseTime(fd.get('default_end')),
+    default_start: shiftStart,
+    default_end: shiftEnd,
     shift_type: fd.get('shift_type'),
     default_vehicle_id: fd.get('default_vehicle_id') || null,
-    notes: fd.get('notes') || null,
   };
+  
+  // Collect duties
+  const dutyRows = document.querySelectorAll('#dutiesList .duty-row');
+  const duties = [];
+  dutyRows.forEach((row, i) => {
+    const dutyTypeId = row.querySelector('.duty-type-select').value;
+    const dutyStart = parseTime(row.querySelector('.duty-start').value);
+    const dutyEnd = parseTime(row.querySelector('.duty-end').value);
+    
+    duties.push({
+      duty_type_id: dutyTypeId,
+      start_offset: dutyStart - shiftStart,
+      duration: dutyEnd - dutyStart,
+      sequence: i + 1,
+    });
+  });
   
   try {
     if (state.editingTemplate) {
+      // Update template
       await api.updateShiftTemplate(state.editingTemplate.id, data);
+      
+      // Sync duties - delete old ones and create new
+      // For simplicity, we'll delete all and recreate
+      if (state.editingTemplate.duties) {
+        for (const duty of state.editingTemplate.duties) {
+          await api.deleteShiftDuty(state.editingTemplate.id, duty.id);
+        }
+      }
+      for (const duty of duties) {
+        await api.addShiftDuty(state.editingTemplate.id, duty);
+      }
+      
       showToast('Template updated');
     } else {
-      await api.createShiftTemplate(data);
+      // Create template
+      const result = await api.createShiftTemplate(data);
+      const templateId = result.data.id;
+      
+      // Add duties
+      for (const duty of duties) {
+        await api.addShiftDuty(templateId, duty);
+      }
+      
       showToast('Template created');
     }
     closeModal();
     loadShiftTemplates();
   } catch (err) {
     showToast(err.message || 'Failed to save', 'error');
-  }
-}
-
-async function duplicateTemplate(id) {
-  try {
-    await api.duplicateShiftTemplate(id);
-    showToast('Template duplicated');
-    loadShiftTemplates();
-  } catch (err) {
-    showToast(err.message || 'Failed to duplicate', 'error');
   }
 }
 
@@ -826,106 +910,27 @@ async function deleteTemplate(id) {
     await api.deleteShiftTemplate(id);
     showToast('Template deleted');
     closeDeleteModal();
+    closeModal();
     loadShiftTemplates();
   } catch (err) {
     showToast(err.message || 'Failed to delete', 'error');
   }
 }
 
-// Duty management within templates
-function showAddDuty(templateId) {
-  state.editingDuty = null;
-  showDutyForm(templateId);
-}
-
-function editDuty(templateId, dutyId) {
-  const tpl = state.editingTemplate;
-  state.editingDuty = tpl?.duties?.find(d => d.id === dutyId);
-  showDutyForm(templateId);
-}
-
-function showDutyForm(templateId) {
-  const duty = state.editingDuty;
-  const isEdit = !!duty;
-  
-  showModal(isEdit ? 'Edit Duty' : 'Add Duty', `
-    <form id="dutyForm" class="form">
-      <input type="hidden" name="templateId" value="${templateId}" />
-      <div class="form-group">
-        <label class="form-label">Duty Type *</label>
-        <select name="duty_type_id" class="form-select" required>
-          ${state.dutyTypes.map(dt => `<option value="${dt.id}" ${duty?.duty_type_id === dt.id ? 'selected' : ''}>${dt.name}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">Start Offset (hours) *</label><input type="number" name="start_offset" class="form-input" value="${duty?.start_offset || 0}" step="0.25" min="0" required /></div>
-        <div class="form-group"><label class="form-label">Duration (hours) *</label><input type="number" name="duration" class="form-input" value="${duty?.duration || 1}" step="0.25" min="0.25" required /></div>
-      </div>
-      <div class="form-group"><label class="form-label">Sequence</label><input type="number" name="sequence" class="form-input" value="${duty?.sequence || 1}" min="1" /></div>
-      <div class="form-group"><label class="form-label">Description</label><input type="text" name="description_template" class="form-input" value="${duty?.description_template || ''}" /></div>
-    </form>
-  `, `
-    <button class="btn btn-secondary" onclick="window.app.editTemplate('${templateId}')">Cancel</button>
-    <button class="btn btn-primary" onclick="window.app.saveDuty()">${isEdit ? 'Save' : 'Add'}</button>
-  `);
-}
-
-async function saveDuty() {
-  const form = document.getElementById('dutyForm');
-  if (!form.checkValidity()) return form.reportValidity();
-  
-  const fd = new FormData(form);
-  const templateId = fd.get('templateId');
-  const data = {
-    duty_type_id: fd.get('duty_type_id'),
-    start_offset: parseFloat(fd.get('start_offset')),
-    duration: parseFloat(fd.get('duration')),
-    sequence: parseInt(fd.get('sequence')) || 1,
-    description_template: fd.get('description_template') || null,
-  };
-  
-  try {
-    if (state.editingDuty) {
-      await api.updateShiftDuty(templateId, state.editingDuty.id, data);
-      showToast('Duty updated');
-    } else {
-      await api.addShiftDuty(templateId, data);
-      showToast('Duty added');
-    }
-    editTemplate(templateId); // Refresh template modal
-  } catch (err) {
-    showToast(err.message || 'Failed to save', 'error');
-  }
-}
-
-async function deleteDuty(templateId, dutyId) {
-  try {
-    await api.deleteShiftDuty(templateId, dutyId);
-    showToast('Duty removed');
-    editTemplate(templateId);
-  } catch (err) {
-    showToast(err.message || 'Failed to delete', 'error');
-  }
-}
-
 // ============================================
-// ROSTER
+// ROSTER (Gantt-style like dispatch)
 // ============================================
 
-async function loadRosterWeek() {
+async function loadRoster() {
   const container = $('#screen-roster');
   container.innerHTML = `<div class="loading-screen"><div class="loading-spinner"></div><div class="loading-text">Loading roster...</div></div>`;
   
-  // Initialize week start if not set
-  if (!state.rosterWeekStart) {
-    state.rosterWeekStart = getMonday(new Date());
-  }
-  
   try {
-    const result = await api.getRosterWeek(formatDate(state.rosterWeekStart));
-    state.rosterWeek = result.data;
+    // Load roster for the selected date
+    const result = await api.getRosterByDate(formatDate(state.rosterDate));
+    state.rosterData = result.data;
     
-    // Also load employees and vehicles for assignment dropdowns
+    // Also ensure we have employees loaded
     if (state.employees.length === 0) {
       const empResult = await api.getEmployees({ status: 'active' });
       state.employees = empResult.data || [];
@@ -947,79 +952,117 @@ async function loadRosterWeek() {
 
 function renderRoster() {
   const container = $('#screen-roster');
-  const data = state.rosterWeek;
+  const data = state.rosterData;
   
-  if (!data) {
-    container.innerHTML = `<div class="screen-placeholder"><h2>No roster data</h2></div>`;
-    return;
-  }
+  // Group entries by driver
+  const entries = data?.entries || [];
+  const assignedByDriver = {};
+  const unassigned = [];
   
-  const { week_start, week_end, days } = data;
-  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const dayDates = Object.keys(days);
+  entries.forEach(e => {
+    if (e.driver_id) {
+      if (!assignedByDriver[e.driver_id]) {
+        assignedByDriver[e.driver_id] = {
+          driver: { id: e.driver_id, name: e.driver_name, number: e.driver_number },
+          shifts: []
+        };
+      }
+      assignedByDriver[e.driver_id].shifts.push(e);
+    } else {
+      unassigned.push(e);
+    }
+  });
+  
+  const drivers = Object.values(assignedByDriver);
   
   container.innerHTML = `
     <div class="screen-header">
       <h2>Roster</h2>
-      <div class="roster-nav">
-        <button class="btn btn-secondary" onclick="window.app.prevRosterWeek()">◀ Prev</button>
-        <span class="week-range">${formatShortDate(week_start)} - ${formatShortDate(week_end)}</span>
-        <button class="btn btn-secondary" onclick="window.app.nextRosterWeek()">Next ▶</button>
-        <button class="btn btn-secondary" onclick="window.app.goToCurrentWeek()">Today</button>
+      <div class="roster-date-nav">
+        <button class="btn btn-secondary" onclick="window.app.prevRosterDate()">◀</button>
+        <span class="roster-current-date">${formatDisplayDate(state.rosterDate)}</span>
+        <button class="btn btn-secondary" onclick="window.app.nextRosterDate()">▶</button>
+        <button class="btn btn-secondary" onclick="window.app.goToToday()">Today</button>
       </div>
-      <div class="roster-actions">
-        <button class="btn btn-secondary" onclick="window.app.showCopyWeekModal()">Copy Week</button>
-      </div>
+      <button class="btn btn-primary" onclick="window.app.showAddRosterEntry()">+ Add Shift</button>
     </div>
-    <div class="roster-week">
-      ${dayDates.map((date, i) => {
-        const entries = days[date] || [];
-        const dayNum = date.split('-')[2];
-        const isToday = date === formatDate(new Date());
-        return `
-          <div class="roster-day ${isToday ? 'is-today' : ''}">
-            <div class="day-header">
-              <span class="day-name">${dayNames[i]}</span>
-              <span class="day-date">${dayNum}</span>
-              <span class="day-count">${entries.length} shifts</span>
-            </div>
-            <div class="day-entries">
-              ${entries.length === 0 ? '<div class="empty-day">No shifts</div>' : entries.map(e => `
-                <div class="roster-entry ${e.driver_id ? 'assigned' : 'unassigned'}" onclick="window.app.editRosterEntry('${e.id}')">
-                  <div class="entry-name">${e.name}</div>
-                  <div class="entry-time font-mono">${formatTime(e.start_time)}-${formatTime(e.end_time)}</div>
-                  <div class="entry-assignment">
-                    ${e.driver_name || '<span class="text-warning">Unassigned</span>'}
-                    ${e.vehicle_number ? `<span class="text-muted">• ${e.vehicle_number}</span>` : ''}
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-            <button class="btn btn-secondary btn-sm add-shift-btn" onclick="window.app.showAddRosterEntry('${date}')">+ Add</button>
-          </div>
-        `;
-      }).join('')}
+    
+    <div class="dispatch-content">
+      <div class="dispatch-section">
+        <div class="section-header"><h3>Assigned Drivers (${drivers.length})</h3></div>
+        <div class="section-body">
+          ${renderTimelineHeader()}
+          ${drivers.length === 0 
+            ? '<div class="empty-message">No drivers assigned for this day</div>' 
+            : drivers.map(d => renderRosterDriverRow(d)).join('')}
+        </div>
+      </div>
+      
+      <div class="dispatch-section">
+        <div class="section-header"><h3>Unassigned Shifts (${unassigned.length})</h3></div>
+        <div class="section-body">
+          ${unassigned.length === 0 
+            ? '<div class="empty-message">All shifts assigned ✓</div>' 
+            : unassigned.map(e => renderRosterUnassignedRow(e)).join('')}
+        </div>
+      </div>
     </div>
   `;
 }
 
-function prevRosterWeek() {
-  state.rosterWeekStart.setDate(state.rosterWeekStart.getDate() - 7);
-  loadRosterWeek();
+function renderRosterDriverRow(driverData) {
+  const { driver, shifts } = driverData;
+  return `
+    <div class="resource-row">
+      <div class="resource-info">
+        <span class="resource-id font-mono">${driver.number || '—'}</span>
+        <span class="resource-name">${driver.name}</span>
+      </div>
+      <div class="resource-timeline">
+        ${shifts.map(s => {
+          const startPct = ((s.start_time - 5) / 19) * 100;
+          const widthPct = ((s.end_time - s.start_time) / 19) * 100;
+          return `<div class="shift-block" style="left:${startPct}%;width:${widthPct}%" onclick="window.app.editRosterEntry('${s.id}')" title="${s.name}: ${formatTime(s.start_time)}-${formatTime(s.end_time)}"><span class="shift-name">${s.name}</span></div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
 }
 
-function nextRosterWeek() {
-  state.rosterWeekStart.setDate(state.rosterWeekStart.getDate() + 7);
-  loadRosterWeek();
+function renderRosterUnassignedRow(entry) {
+  return `
+    <div class="resource-row">
+      <div class="resource-info">
+        <span class="resource-name">${entry.name}</span>
+      </div>
+      <div class="resource-timeline">
+        ${(() => {
+          const startPct = ((entry.start_time - 5) / 19) * 100;
+          const widthPct = ((entry.end_time - entry.start_time) / 19) * 100;
+          return `<div class="shift-block unassigned" style="left:${startPct}%;width:${widthPct}%" onclick="window.app.editRosterEntry('${entry.id}')"><span class="shift-name">${formatTime(entry.start_time)}-${formatTime(entry.end_time)}</span></div>`;
+        })()}
+      </div>
+    </div>
+  `;
 }
 
-function goToCurrentWeek() {
-  state.rosterWeekStart = getMonday(new Date());
-  loadRosterWeek();
+function prevRosterDate() {
+  state.rosterDate.setDate(state.rosterDate.getDate() - 1);
+  loadRoster();
 }
 
-function showAddRosterEntry(date) {
-  state.editingRosterEntry = { date, isNew: true };
+function nextRosterDate() {
+  state.rosterDate.setDate(state.rosterDate.getDate() + 1);
+  loadRoster();
+}
+
+function goToToday() {
+  state.rosterDate = new Date();
+  loadRoster();
+}
+
+function showAddRosterEntry() {
+  state.editingRosterEntry = { date: formatDate(state.rosterDate), isNew: true };
   showRosterEntryForm();
 }
 
@@ -1037,29 +1080,29 @@ function showRosterEntryForm() {
   const entry = state.editingRosterEntry;
   const isNew = entry?.isNew;
   
-  const templates = state.shiftTemplates;
   const employees = state.employees.filter(e => e.status === 'active' && e.role === 'driver');
   const vehicles = state.vehicles.filter(v => v.status === 'active');
+  const templates = state.shiftTemplates;
   
   const startTime = entry && !isNew ? formatTime(entry.start_time) : '06:00';
   const endTime = entry && !isNew ? formatTime(entry.end_time) : '14:00';
   
   showModal(isNew ? 'Add Roster Entry' : 'Edit Roster Entry', `
     <form id="rosterEntryForm" class="form">
-      <input type="hidden" name="date" value="${entry?.date || ''}" />
+      <input type="hidden" name="date" value="${entry?.date || formatDate(state.rosterDate)}" />
       
       ${isNew ? `
         <div class="form-group">
-          <label class="form-label">From Template (optional)</label>
-          <select name="shift_template_id" class="form-select" onchange="window.app.onTemplateSelect(this)">
-            <option value="">— Manual Entry —</option>
-            ${templates.map(t => `<option value="${t.id}" data-start="${t.default_start}" data-end="${t.default_end}" data-name="${t.name}">${t.code} - ${t.name}</option>`).join('')}
+          <label class="form-label">From Template</label>
+          <select name="shift_template_id" class="form-select" onchange="window.app.onRosterTemplateSelect(this)">
+            <option value="">— Select or create manually —</option>
+            ${templates.map(t => `<option value="${t.id}" data-start="${t.default_start}" data-end="${t.default_end}" data-name="${t.name}" data-type="${t.shift_type}">${t.code} - ${t.name}</option>`).join('')}
           </select>
         </div>
       ` : ''}
       
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Name *</label><input type="text" name="name" class="form-input" value="${entry?.name || ''}" required /></div>
+        <div class="form-group"><label class="form-label">Name *</label><input type="text" name="name" class="form-input" value="${entry?.name || ''}" placeholder="Shift name" required /></div>
         <div class="form-group"><label class="form-label">Type</label><select name="shift_type" class="form-select"><option value="regular" ${entry?.shift_type === 'regular' ? 'selected' : ''}>Regular</option><option value="charter" ${entry?.shift_type === 'charter' ? 'selected' : ''}>Charter</option><option value="school" ${entry?.shift_type === 'school' ? 'selected' : ''}>School</option></select></div>
       </div>
       
@@ -1080,7 +1123,7 @@ function showRosterEntryForm() {
           <label class="form-label">Vehicle</label>
           <select name="vehicle_id" class="form-select">
             <option value="">— None —</option>
-            ${vehicles.map(v => `<option value="${v.id}" ${entry?.vehicle_id === v.id ? 'selected' : ''}>${v.fleet_number} (${v.capacity} seats)</option>`).join('')}
+            ${vehicles.map(v => `<option value="${v.id}" ${entry?.vehicle_id === v.id ? 'selected' : ''}>${v.fleet_number}</option>`).join('')}
           </select>
         </div>
       </div>
@@ -1094,12 +1137,13 @@ function showRosterEntryForm() {
   `);
 }
 
-function onTemplateSelect(select) {
+function onRosterTemplateSelect(select) {
   const option = select.options[select.selectedIndex];
   if (!option.value) return;
   
   const form = document.getElementById('rosterEntryForm');
   form.querySelector('[name="name"]').value = option.dataset.name || '';
+  form.querySelector('[name="shift_type"]').value = option.dataset.type || 'regular';
   form.querySelector('[name="start_time"]').value = formatTime(parseFloat(option.dataset.start));
   form.querySelector('[name="end_time"]').value = formatTime(parseFloat(option.dataset.end));
 }
@@ -1135,7 +1179,7 @@ async function saveRosterEntry() {
       showToast('Entry updated');
     }
     closeModal();
-    loadRosterWeek();
+    loadRoster();
   } catch (err) {
     showToast(err.message || 'Failed to save', 'error');
   }
@@ -1151,63 +1195,9 @@ async function deleteRosterEntry(id) {
     showToast('Entry deleted');
     closeDeleteModal();
     closeModal();
-    loadRosterWeek();
+    loadRoster();
   } catch (err) {
     showToast(err.message || 'Failed to delete', 'error');
-  }
-}
-
-// Copy Week Modal
-function showCopyWeekModal() {
-  const weekStart = formatDate(state.rosterWeekStart);
-  
-  showModal('Copy Week', `
-    <form id="copyWeekForm" class="form">
-      <p class="text-muted mb-4">Copy all roster entries from this week to another week.</p>
-      <div class="form-group">
-        <label class="form-label">Source Week</label>
-        <input type="text" class="form-input" value="${formatShortDate(weekStart)} - ${formatShortDate(new Date(state.rosterWeekStart.getTime() + 6*24*60*60*1000))}" disabled />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Target Week Start (Monday) *</label>
-        <input type="date" name="target_week_start" class="form-input" required />
-      </div>
-      <div class="form-group">
-        <label class="form-checkbox">
-          <input type="checkbox" name="include_assignments" checked />
-          <span>Include driver/vehicle assignments</span>
-        </label>
-      </div>
-    </form>
-  `, `
-    <button class="btn btn-secondary" onclick="window.app.closeModal()">Cancel</button>
-    <button class="btn btn-primary" onclick="window.app.copyWeek()">Copy Week</button>
-  `);
-}
-
-async function copyWeek() {
-  const form = document.getElementById('copyWeekForm');
-  if (!form.checkValidity()) return form.reportValidity();
-  
-  const fd = new FormData(form);
-  const targetDate = new Date(fd.get('target_week_start'));
-  const targetMonday = getMonday(targetDate);
-  
-  const data = {
-    source_week_start: formatDate(state.rosterWeekStart),
-    target_week_start: formatDate(targetMonday),
-    include_assignments: fd.get('include_assignments') === 'on',
-  };
-  
-  try {
-    const result = await api.copyRosterWeek(data);
-    showToast(`Copied ${result.data.total_copied} entries`);
-    closeModal();
-    // Navigate to target week
-    state.rosterWeekStart = targetMonday;
-    loadRosterWeek();
-  } catch (err) {
-    showToast(err.message || 'Failed to copy', 'error');
   }
 }
 
@@ -1340,26 +1330,23 @@ window.app = {
   showAddTemplate,
   editTemplate,
   saveTemplate,
-  duplicateTemplate,
   confirmDeleteTemplate,
   handleTemplateSearch,
   handleTemplateTypeFilter,
-  showAddDuty,
-  editDuty,
-  saveDuty,
-  deleteDuty,
+  addDutyRow,
+  removeDutyRow,
+  onDutyTypeChange,
+  onShiftTimesChange,
   
   // Roster
-  prevRosterWeek,
-  nextRosterWeek,
-  goToCurrentWeek,
+  prevRosterDate,
+  nextRosterDate,
+  goToToday,
   showAddRosterEntry,
   editRosterEntry,
   saveRosterEntry,
-  onTemplateSelect,
+  onRosterTemplateSelect,
   confirmDeleteRosterEntry,
-  showCopyWeekModal,
-  copyWeek,
   
   // Dispatch
   showAssignModal,
