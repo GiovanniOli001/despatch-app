@@ -1,0 +1,18 @@
+{
+  "name": "dispatch-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:frontend\"",
+    "dev:api": "cd workers && npm run dev",
+    "dev:frontend": "npx serve frontend -l 3000",
+    "db:init": "cd workers && npm run db:init",
+    "db:init:remote": "cd workers && npm run db:init:remote",
+    "deploy:api": "cd workers && npm run deploy",
+    "install:all": "npm install && cd workers && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "serve": "^14.2.1"
+  }
+}

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dispatch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header" id="header">
+      <div class="header-left">
+        <button class="menu-toggle" id="menuToggle">Menu</button>
+        <div class="logo">DISPATCH//</div>
+        <div class="date-nav" id="dateNav">
+          <button id="prevDate">◀</button>
+          <span class="current-date" id="currentDate">Loading...</span>
+          <button id="nextDate">▶</button>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="connection-status" id="connectionStatus">●</span>
+      </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="app-container">
+      <!-- Sidebar -->
+      <nav class="nav-sidebar" id="navSidebar">
+        <div class="nav-section">
+          <div class="nav-section-title">Operations</div>
+          <a class="nav-item active" data-screen="dispatch">Dispatch</a>
+          <a class="nav-item" data-screen="calendar">Operations Calendar</a>
+          <a class="nav-item" data-screen="charters">Charters</a>
+          <a class="nav-item" data-screen="customers">Customers</a>
+        </div>
+        <div class="nav-section">
+          <div class="nav-section-title">Resources</div>
+          <a class="nav-item" data-screen="hrm">HRM</a>
+          <a class="nav-item" data-screen="vehicles">Vehicles</a>
+          <a class="nav-item" data-screen="shifts">Shift Templates</a>
+          <a class="nav-item" data-screen="roster">Roster</a>
+          <a class="nav-item" data-screen="maintenance">Maintenance</a>
+        </div>
+        <div class="nav-toggle">
+          <button id="hideSidebar">Hide Menu</button>
+        </div>
+      </nav>
+
+      <!-- Main Content Area -->
+      <main class="main-content" id="mainContent">
+        <!-- Screens will be loaded here -->
+        <div class="screen active" id="screen-dispatch">
+          <div class="loading-screen">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading dispatch...</div>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-calendar">
+          <div class="screen-placeholder">
+            <h2>Operations Calendar</h2>
+            <p>Week and month view of scheduled operations.</p>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-charters">
+          <div class="screen-placeholder">
+            <h2>Charters</h2>
+            <p>Charter booking management.</p>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-customers">
+          <div class="screen-placeholder">
+            <h2>Customers</h2>
+            <p>Customer accounts and contacts.</p>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-hrm">
+          <div class="screen-placeholder">
+            <h2>Human Resources</h2>
+            <p>Employee management coming soon.</p>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-vehicles">
+          <div class="screen-placeholder">
+            <h2>Vehicles</h2>
+            <p>Fleet management coming soon.</p>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-shifts">
+          <div class="screen-placeholder">
+            <h2>Shift Templates</h2>
+            <p>Reusable shift definitions.</p>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-roster">
+          <div class="screen-placeholder">
+            <h2>Roster</h2>
+            <p>Schedule management coming soon.</p>
+          </div>
+        </div>
+
+        <div class="screen" id="screen-maintenance">
+          <div class="screen-placeholder">
+            <h2>Maintenance</h2>
+            <p>Vehicle maintenance tracking.</p>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div class="toast" id="toast">
+      <span class="toast-message" id="toastMessage"></span>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

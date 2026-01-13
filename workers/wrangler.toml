@@ -1,0 +1,22 @@
+name = "dispatch-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+ENVIRONMENT = "development"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dispatch-db"
+database_id = "53d12d88-4321-4729-a1a6-3810d898e5b6" # Replace with actual ID after creation
+
+# For local development
+[dev]
+port = 8787
+
+# Production environment
+[env.production]
+vars = { ENVIRONMENT = "production" }
+
+# Routes - adjust domain as needed
+# routes = [{ pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }]

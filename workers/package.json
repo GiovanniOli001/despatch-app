@@ -1,0 +1,17 @@
+{
+  "name": "dispatch-api",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute dispatch-db --local --file=src/db/schema.sql",
+    "db:init:remote": "wrangler d1 execute dispatch-db --remote --file=src/db/schema.sql",
+    "db:studio": "wrangler d1 studio dispatch-db --local"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^3.24.0"
+  }
+}
