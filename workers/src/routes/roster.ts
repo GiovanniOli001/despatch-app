@@ -341,12 +341,16 @@ async function publishRoster(env: Env, id: string): Promise<Response> {
     return error('Roster must be added to calendar before publishing');
   }
   
-  // Check for driver conflicts with other published rosters
-  // Get all drivers assigned in this roster's calendar date range
-  const assignedDrivers = await env.DB.prepare(`
-    SELECT DISTINCT re.driver_id, e.first_name || ' ' || e.last_name as driver_name
+  // Check for TIME-LEVEL conflicts with other published rosters
+  // Get all entries in this roster's calendar date range
+  const entries = await env.DB.prepare(`
+    SELECT re.id, re.date, re.start_time, re.end_time, re.driver_id,
+           e.first_name || ' ' || e.last_name as driver_name,
+           db.name as block_name, st.code as shift_code
     FROM roster_entries re
     JOIN employees e ON re.driver_id = e.id
+    JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
+    JOIN shift_templates st ON re.shift_template_id = st.id
     WHERE re.roster_id = ? 
       AND re.deleted_at IS NULL 
       AND re.driver_id IS NOT NULL
@@ -354,36 +358,44 @@ async function publishRoster(env: Env, id: string): Promise<Response> {
       AND re.date <= ?
   `).bind(id, r.calendar_start_date, r.calendar_end_date).all();
   
-  // For each driver, check if they're assigned in another published roster on overlapping dates
-  for (const driver of assignedDrivers.results as any[]) {
+  // For each entry, check if there's a time conflict with another published roster
+  for (const entry of entries.results as any[]) {
+    const startTime = entry.start_time || 6;
+    const endTime = entry.end_time || 18;
+    
     const conflict = await env.DB.prepare(`
-      SELECT 
-        re.date,
-        ros.code as roster_code,
-        ros.name as roster_name
+      SELECT re.date, re.start_time, re.end_time,
+             ros.code as roster_code, ros.name as roster_name,
+             db.name as block_name, st.code as shift_code
       FROM roster_entries re
       JOIN rosters ros ON re.roster_id = ros.id
+      JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
+      JOIN shift_templates st ON re.shift_template_id = st.id
       WHERE re.driver_id = ?
+        AND re.date = ?
         AND re.deleted_at IS NULL
         AND ros.id != ?
         AND ros.status = 'published'
         AND ros.deleted_at IS NULL
-        AND ros.calendar_start_date IS NOT NULL
-        AND ros.calendar_end_date IS NOT NULL
-        AND re.date >= ?
-        AND re.date <= ?
+        AND (
+          (re.start_time < ? AND re.end_time > ?) OR
+          (re.start_time >= ? AND re.start_time < ?) OR
+          (re.end_time > ? AND re.end_time <= ?)
+        )
       LIMIT 1
-    `).bind(driver.driver_id, id, r.calendar_start_date, r.calendar_end_date).first();
+    `).bind(entry.driver_id, entry.date, id, endTime, startTime, startTime, endTime, startTime, endTime).first();
     
     if (conflict) {
       const c = conflict as any;
       return json({
-        error: 'Driver conflict detected',
+        error: 'Time conflict detected',
         conflict: {
-          driverId: driver.driver_id,
-          driverName: driver.driver_name,
-          date: c.date,
-          conflictingRoster: `${c.roster_code} - ${c.roster_name}`
+          driverId: entry.driver_id,
+          driverName: entry.driver_name,
+          date: entry.date,
+          thisShift: `${entry.shift_code} - ${entry.block_name}`,
+          conflictingRoster: c.roster_code,
+          conflictingShift: `${c.shift_code} - ${c.block_name}`
         }
       }, 409);
     }
@@ -579,17 +591,18 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
   
   if (blocksToAssign.length === 0) return error('Block not found', 404);
   
-  // Check overlaps if assigning to driver
+  // Check overlaps if assigning to driver - checks across ALL rosters
   if (driver_id) {
     for (const block of blocksToAssign) {
       const startTime = block.start_time || 6;
       const endTime = block.end_time || 18;
       
       const overlap = await env.DB.prepare(`
-        SELECT re.id, db.name as block_name, st.code as shift_code
+        SELECT re.id, db.name as block_name, st.code as shift_code, r.code as roster_code
         FROM roster_entries re
         JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
         JOIN shift_templates st ON re.shift_template_id = st.id
+        JOIN rosters r ON re.roster_id = r.id
         WHERE re.date = ? AND re.driver_id = ? AND re.deleted_at IS NULL
         AND re.duty_block_id != ?
         AND (
@@ -597,11 +610,12 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
           (re.start_time >= ? AND re.start_time < ?) OR
           (re.end_time > ? AND re.end_time <= ?)
         )
+        LIMIT 1
       `).bind(date, driver_id, block.id, endTime, startTime, startTime, endTime, startTime, endTime).first();
       
       if (overlap) {
         const o = overlap as any;
-        return error(`Overlaps with ${o.shift_code} - ${o.block_name}`);
+        return error(`Conflict: ${o.shift_code} - ${o.block_name} in roster "${o.roster_code}"`);
       }
     }
   }

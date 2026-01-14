@@ -11955,7 +11955,7 @@ Guidelines:
     
     async function doAssign(blockId, shiftId, driverId, includeConnected) {
       try {
-        await apiRequest('/roster/assign', {
+        const result = await apiRequest('/roster/assign', {
           method: 'POST',
           body: {
             roster_id: currentRosterId,
@@ -11966,6 +11966,13 @@ Guidelines:
             include_connected: includeConnected,
           }
         });
+        
+        // Check if API returned an error
+        if (result.error) {
+          showToast(result.error, 'error');
+          return;
+        }
+        
         showToast(driverId ? 'Block assigned' : 'Block unassigned');
         await loadDayView();
       } catch (err) {
