@@ -11162,9 +11162,9 @@ Guidelines:
           
           // Update via API
           try {
-            await apiRequest(`/roster/${entryId}/assign`, 'PUT', {
+            await apiRequest(`/roster/${entryId}/assign`, { method: 'PUT', body: {
               driver_id: newDriverId
-            });
+            }});
             
             // Update local data
             entry.driver_id = newDriverId;
@@ -11258,10 +11258,10 @@ Guidelines:
       
       try {
         if (editingRosterId) {
-          await apiRequest(`/roster/containers/${editingRosterId}`, 'PUT', data);
+          await apiRequest(`/roster/containers/${editingRosterId}`, { method: 'PUT', body: data });
           showToast('Roster updated');
         } else {
-          await apiRequest('/roster/containers', 'POST', data);
+          await apiRequest('/roster/containers', { method: 'POST', body: data });
           showToast('Roster created');
         }
         closeRosterModal();
@@ -11275,7 +11275,7 @@ Guidelines:
       if (!confirm('Delete this roster and all its entries?')) return;
       
       try {
-        await apiRequest(`/roster/containers/${id}`, 'DELETE');
+        await apiRequest(`/roster/containers/${id}`, { method: 'DELETE' });
         showToast('Roster deleted');
         loadRosters();
       } catch (err) {
@@ -11314,11 +11314,11 @@ Guidelines:
       }
       
       try {
-        const result = await apiRequest(`/roster/containers/${currentRoster.id}/add-shift`, 'POST', {
+        const result = await apiRequest(`/roster/containers/${currentRoster.id}/add-shift`, { method: 'POST', body: {
           shift_template_id: shiftId,
           date: date,
           driver_id: driverId
-        });
+        }});
         
         showToast(`Added ${result.data.entries_created} duty block(s) to roster`);
         closeAddShiftModal();
