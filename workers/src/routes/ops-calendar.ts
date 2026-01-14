@@ -3,7 +3,7 @@
  * /api/ops-calendar/*
  * 
  * Provides month view of rosters and overlap checking.
- * Rosters appear as spans across their date ranges.
+ * Rosters only appear on calendar when explicitly scheduled (calendar_start_date/calendar_end_date set).
  */
 
 import { Env, json, error } from '../index';
@@ -67,7 +67,7 @@ export async function handleOpsCalendar(
       return getMonthView(env, year, month);
     }
 
-    // GET /api/ops-calendar/check-overlap?start_date=&end_date=
+    // GET /api/ops-calendar/check-overlap?start_date=&end_date=&exclude_roster_id=
     if (method === 'GET' && seg1 === 'check-overlap') {
       const url = new URL(request.url);
       const startDate = url.searchParams.get('start_date');
@@ -78,6 +78,11 @@ export async function handleOpsCalendar(
         return error('start_date and end_date are required');
       }
       return checkOverlap(env, startDate, endDate, excludeRosterId);
+    }
+
+    // GET /api/ops-calendar/rosters - Get all rosters (for sidebar)
+    if (method === 'GET' && seg1 === 'rosters') {
+      return getAllRosters(env);
     }
 
     return error('Not found', 404);
@@ -99,14 +104,16 @@ async function getMonthView(env: Env, year: number, month: number): Promise<Resp
   const startDateStr = `${year}-${String(month).padStart(2, '0')}-01`;
   const endDateStr = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
-  // Get rosters that overlap with this month
-  const rosters = await env.DB.prepare(`
+  // Get rosters that are SCHEDULED on this month (calendar_start_date and calendar_end_date are set)
+  const scheduledRosters = await env.DB.prepare(`
     SELECT 
       r.id,
       r.code,
       r.name,
       r.start_date,
       r.end_date,
+      r.calendar_start_date,
+      r.calendar_end_date,
       r.status,
       r.notes,
       (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL) as entry_count,
@@ -114,23 +121,28 @@ async function getMonthView(env: Env, year: number, month: number): Promise<Resp
     FROM rosters r
     WHERE r.tenant_id = ? 
       AND r.deleted_at IS NULL
-      AND r.start_date <= ?
-      AND r.end_date >= ?
-    ORDER BY r.start_date, r.code
+      AND r.calendar_start_date IS NOT NULL
+      AND r.calendar_end_date IS NOT NULL
+      AND r.calendar_start_date <= ?
+      AND r.calendar_end_date >= ?
+    ORDER BY r.calendar_start_date, r.code
   `).bind(TENANT_ID, endDateStr, startDateStr).all();
 
-  // Build roster data
-  const calendarRosters = (rosters.results as any[]).map(r => ({
+  // Build roster data for calendar (only scheduled ones)
+  const calendarRosters = (scheduledRosters.results as any[]).map(r => ({
     id: r.id,
     code: r.code,
     name: r.name,
     startDate: r.start_date,
     endDate: r.end_date,
+    calendarStartDate: r.calendar_start_date,
+    calendarEndDate: r.calendar_end_date,
     status: r.status,
     entryCount: r.entry_count,
     assignedCount: r.assigned_count,
     unassignedCount: r.entry_count - r.assigned_count,
-    notes: r.notes
+    notes: r.notes,
+    isScheduled: true
   }));
 
   // Build days array
@@ -142,8 +154,9 @@ async function getMonthView(env: Env, year: number, month: number): Promise<Resp
     const dayDate = new Date(year, month - 1, d);
     const dayOfWeek = dayDate.getDay();
 
+    // Use calendar dates (not roster dates) to determine which rosters appear on this day
     const rostersOnDay = calendarRosters
-      .filter(r => r.startDate <= dateStr && r.endDate >= dateStr)
+      .filter(r => r.calendarStartDate <= dateStr && r.calendarEndDate >= dateStr)
       .map(r => r.id);
 
     days.push({
@@ -168,20 +181,64 @@ async function getMonthView(env: Env, year: number, month: number): Promise<Resp
   });
 }
 
+// Get ALL rosters (for sidebar - includes unscheduled ones)
+async function getAllRosters(env: Env): Promise<Response> {
+  const rosters = await env.DB.prepare(`
+    SELECT 
+      r.id,
+      r.code,
+      r.name,
+      r.start_date,
+      r.end_date,
+      r.calendar_start_date,
+      r.calendar_end_date,
+      r.status,
+      r.notes,
+      (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL) as entry_count,
+      (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL AND re.driver_id IS NOT NULL) as assigned_count
+    FROM rosters r
+    WHERE r.tenant_id = ? 
+      AND r.deleted_at IS NULL
+      AND r.status != 'archived'
+    ORDER BY r.start_date DESC, r.code
+  `).bind(TENANT_ID).all();
+
+  const result = (rosters.results as any[]).map(r => ({
+    id: r.id,
+    code: r.code,
+    name: r.name,
+    startDate: r.start_date,
+    endDate: r.end_date,
+    calendarStartDate: r.calendar_start_date,
+    calendarEndDate: r.calendar_end_date,
+    status: r.status,
+    entryCount: r.entry_count,
+    assignedCount: r.assigned_count,
+    unassignedCount: r.entry_count - r.assigned_count,
+    notes: r.notes,
+    isScheduled: !!(r.calendar_start_date && r.calendar_end_date)
+  }));
+
+  return json({ data: result });
+}
+
 async function checkOverlap(
   env: Env, 
   startDate: string, 
   endDate: string,
   excludeRosterId: string | null
 ): Promise<Response> {
+  // Check against calendar dates of published rosters
   let query = `
-    SELECT r.id, r.code, r.name, r.start_date, r.end_date
+    SELECT r.id, r.code, r.name, r.calendar_start_date, r.calendar_end_date
     FROM rosters r
     WHERE r.tenant_id = ? 
       AND r.deleted_at IS NULL
       AND r.status = 'published'
-      AND r.start_date <= ?
-      AND r.end_date >= ?
+      AND r.calendar_start_date IS NOT NULL
+      AND r.calendar_end_date IS NOT NULL
+      AND r.calendar_start_date <= ?
+      AND r.calendar_end_date >= ?
   `;
   
   const bindings: any[] = [TENANT_ID, endDate, startDate];
@@ -194,8 +251,8 @@ async function checkOverlap(
   const overlapping = await env.DB.prepare(query).bind(...bindings).all();
 
   const conflicts = (overlapping.results as any[]).map(roster => {
-    const overlapStart = startDate > roster.start_date ? startDate : roster.start_date;
-    const overlapEnd = endDate < roster.end_date ? endDate : roster.end_date;
+    const overlapStart = startDate > roster.calendar_start_date ? startDate : roster.calendar_start_date;
+    const overlapEnd = endDate < roster.calendar_end_date ? endDate : roster.calendar_end_date;
     
     return {
       rosterId: roster.id,

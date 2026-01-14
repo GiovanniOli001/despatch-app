@@ -3014,6 +3014,99 @@
       font-size: 13px;
     }
     
+    .ops-section-title {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      padding: 8px 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    
+    .ops-roster-item.unscheduled {
+      border-left-color: var(--text-muted);
+      opacity: 0.8;
+    }
+    
+    .ops-roster-status.unscheduled {
+      background: rgba(100, 116, 139, 0.2);
+      color: var(--text-muted);
+    }
+    
+    .ops-roster-cal-dates {
+      font-size: 11px;
+      color: var(--accent-blue);
+      margin-bottom: 6px;
+    }
+    
+    .ops-roster-actions .btn-schedule {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid var(--accent-blue);
+      color: var(--accent-blue);
+      width: 100%;
+    }
+    .ops-roster-actions .btn-schedule:hover { background: rgba(59, 130, 246, 0.3); }
+    
+    .ops-roster-actions .btn-unschedule {
+      background: rgba(100, 116, 139, 0.15);
+      border: 1px solid var(--text-muted);
+      color: var(--text-secondary);
+    }
+    .ops-roster-actions .btn-unschedule:hover { background: rgba(100, 116, 139, 0.3); }
+    
+    /* Schedule Modal */
+    .schedule-modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .schedule-modal-overlay.show { display: flex; }
+    
+    .schedule-modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 400px;
+      max-width: 90vw;
+    }
+    
+    .schedule-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .schedule-modal-title { font-weight: 600; font-size: 15px; }
+    
+    .schedule-modal-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+    .schedule-modal-close:hover { color: var(--text-primary); }
+    
+    .schedule-modal-body { padding: 20px; }
+    .schedule-modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    
     .badge {
       display: inline-block;
       padding: 4px 8px;
@@ -11129,6 +11222,8 @@ Guidelines:
     let opsCalendarYear = new Date().getFullYear();
     let opsCalendarMonth = new Date().getMonth() + 1;
     let opsCalendarData = null;
+    let allRostersData = []; // All rosters (for sidebar)
+    let selectedRosterForSchedule = null; // For schedule modal
     
     async function loadOpsCalendar() {
       const grid = document.getElementById('opsCalendarGrid');
@@ -11142,8 +11237,14 @@ Guidelines:
       document.getElementById('calendarMonthLabel').textContent = `${monthNames[opsCalendarMonth - 1]} ${opsCalendarYear}`;
       
       try {
-        const result = await apiRequest(`/ops-calendar/${opsCalendarYear}/${opsCalendarMonth}`);
-        opsCalendarData = result.data;
+        // Load calendar view (only scheduled rosters appear here)
+        const calResult = await apiRequest(`/ops-calendar/${opsCalendarYear}/${opsCalendarMonth}`);
+        opsCalendarData = calResult.data;
+        
+        // Load ALL rosters for sidebar
+        const rostersResult = await apiRequest('/ops-calendar/rosters');
+        allRostersData = rostersResult.data || [];
+        
         renderOpsCalendar();
         renderOpsRosterList();
       } catch (err) {
@@ -11158,6 +11259,7 @@ Guidelines:
       const grid = document.getElementById('opsCalendarGrid');
       const { days, rosters } = opsCalendarData;
       
+      // Only scheduled rosters come from calendar endpoint
       const rosterMap = {};
       rosters.forEach(r => rosterMap[r.id] = r);
       
@@ -11222,53 +11324,84 @@ Guidelines:
     }
     
     function renderOpsRosterList() {
-      if (!opsCalendarData) return;
-      
       const list = document.getElementById('opsRosterList');
-      const { rosters } = opsCalendarData;
       
-      if (rosters.length === 0) {
+      if (allRostersData.length === 0) {
         list.innerHTML = `
           <div class="calendar-no-rosters">
-            <p>No rosters in this month.</p>
+            <p>No rosters available.</p>
             <p style="margin-top: 8px;"><a href="#" onclick="navigateTo('roster'); return false;" style="color: var(--accent-blue);">Go to Roster</a> to create one.</p>
           </div>
         `;
         return;
       }
       
+      // Separate scheduled and unscheduled
+      const scheduled = allRostersData.filter(r => r.isScheduled);
+      const unscheduled = allRostersData.filter(r => !r.isScheduled);
+      
       let html = '';
       
-      for (const roster of rosters) {
-        const startDate = new Date(roster.startDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
-        const endDate = new Date(roster.endDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
-        
-        html += `
-          <div class="ops-roster-item status-${roster.status}" onclick="openRosterFromCalendar('${roster.id}')">
-            <div class="ops-roster-header">
-              <span class="ops-roster-code">${roster.code}</span>
-              <span class="ops-roster-status ${roster.status}">${roster.status}</span>
-            </div>
-            <div class="ops-roster-name">${roster.name}</div>
-            <div class="ops-roster-dates">${startDate} → ${endDate}</div>
-            <div class="ops-roster-stats">
-              <span>📋 ${roster.entryCount} entries</span>
-              <span>✓ ${roster.assignedCount} assigned</span>
-              ${roster.unassignedCount > 0 ? `<span style="color: var(--accent-amber);">⚠ ${roster.unassignedCount} unassigned</span>` : ''}
-            </div>
-            <div class="ops-roster-actions" onclick="event.stopPropagation();">
-              ${roster.status === 'draft' ? 
-                `<button class="btn-publish" onclick="publishRosterFromCalendar('${roster.id}')">Publish</button>` :
-                roster.status === 'published' ?
-                `<button class="btn-unpublish" onclick="unpublishRosterFromCalendar('${roster.id}')">Unpublish</button>` : ''
-              }
-              <button class="btn-open" onclick="openRosterFromCalendar('${roster.id}')">Open →</button>
-            </div>
-          </div>
-        `;
+      // Scheduled rosters section
+      if (scheduled.length > 0) {
+        html += `<div class="ops-section-title">On Calendar (${scheduled.length})</div>`;
+        for (const roster of scheduled) {
+          html += renderOpsRosterItem(roster, true);
+        }
+      }
+      
+      // Unscheduled rosters section
+      if (unscheduled.length > 0) {
+        html += `<div class="ops-section-title" style="margin-top: 16px;">Available Rosters (${unscheduled.length})</div>`;
+        for (const roster of unscheduled) {
+          html += renderOpsRosterItem(roster, false);
+        }
       }
       
       list.innerHTML = html;
+    }
+    
+    function renderOpsRosterItem(roster, isScheduled) {
+      const validStart = new Date(roster.startDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+      const validEnd = new Date(roster.endDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+      
+      let calendarDates = '';
+      if (isScheduled && roster.calendarStartDate && roster.calendarEndDate) {
+        const calStart = new Date(roster.calendarStartDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+        const calEnd = new Date(roster.calendarEndDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+        calendarDates = `<div class="ops-roster-cal-dates">📅 ${calStart} → ${calEnd}</div>`;
+      }
+      
+      return `
+        <div class="ops-roster-item ${isScheduled ? 'status-' + roster.status : 'unscheduled'}" onclick="${isScheduled ? `openRosterFromCalendar('${roster.id}')` : ''}">
+          <div class="ops-roster-header">
+            <span class="ops-roster-code">${roster.code}</span>
+            ${isScheduled ? 
+              `<span class="ops-roster-status ${roster.status}">${roster.status}</span>` :
+              `<span class="ops-roster-status unscheduled">not scheduled</span>`
+            }
+          </div>
+          <div class="ops-roster-name">${roster.name}</div>
+          <div class="ops-roster-dates">Valid: ${validStart} → ${validEnd}</div>
+          ${calendarDates}
+          <div class="ops-roster-stats">
+            <span>📋 ${roster.entryCount} entries</span>
+            <span>✓ ${roster.assignedCount} assigned</span>
+            ${roster.unassignedCount > 0 ? `<span style="color: var(--accent-amber);">⚠ ${roster.unassignedCount} unassigned</span>` : ''}
+          </div>
+          <div class="ops-roster-actions" onclick="event.stopPropagation();">
+            ${!isScheduled ? 
+              `<button class="btn-schedule" onclick="showScheduleModal('${roster.id}')">+ Add to Calendar</button>` :
+              roster.status === 'draft' ? 
+                `<button class="btn-unschedule" onclick="unscheduleRoster('${roster.id}')">Remove</button>
+                 <button class="btn-publish" onclick="publishRosterFromCalendar('${roster.id}')">Publish</button>` :
+              roster.status === 'published' ?
+                `<button class="btn-unpublish" onclick="unpublishRosterFromCalendar('${roster.id}')">Unpublish</button>` : ''
+            }
+            ${isScheduled ? `<button class="btn-open" onclick="openRosterFromCalendar('${roster.id}')">Open →</button>` : ''}
+          </div>
+        </div>
+      `;
     }
     
     function changeCalendarMonth(delta) {
@@ -11288,6 +11421,74 @@ Guidelines:
     function openRosterFromCalendar(rosterId) {
       navigateTo('roster');
       setTimeout(() => openRoster(rosterId), 100);
+    }
+    
+    // Schedule Modal
+    function showScheduleModal(rosterId) {
+      selectedRosterForSchedule = allRostersData.find(r => r.id === rosterId);
+      if (!selectedRosterForSchedule) return;
+      
+      // Set default dates to roster's valid range
+      document.getElementById('scheduleStartDate').value = selectedRosterForSchedule.startDate;
+      document.getElementById('scheduleEndDate').value = selectedRosterForSchedule.endDate;
+      document.getElementById('scheduleStartDate').min = selectedRosterForSchedule.startDate;
+      document.getElementById('scheduleStartDate').max = selectedRosterForSchedule.endDate;
+      document.getElementById('scheduleEndDate').min = selectedRosterForSchedule.startDate;
+      document.getElementById('scheduleEndDate').max = selectedRosterForSchedule.endDate;
+      
+      document.getElementById('scheduleRosterName').textContent = `${selectedRosterForSchedule.code} - ${selectedRosterForSchedule.name}`;
+      document.getElementById('scheduleValidRange').textContent = `Valid range: ${selectedRosterForSchedule.startDate} to ${selectedRosterForSchedule.endDate}`;
+      
+      document.getElementById('scheduleModalOverlay').classList.add('show');
+    }
+    
+    function closeScheduleModal() {
+      document.getElementById('scheduleModalOverlay').classList.remove('show');
+      selectedRosterForSchedule = null;
+    }
+    
+    async function confirmScheduleRoster() {
+      if (!selectedRosterForSchedule) return;
+      
+      const startDate = document.getElementById('scheduleStartDate').value;
+      const endDate = document.getElementById('scheduleEndDate').value;
+      
+      if (!startDate || !endDate) {
+        showToast('Please select both start and end dates', 'error');
+        return;
+      }
+      
+      if (startDate > endDate) {
+        showToast('Start date cannot be after end date', 'error');
+        return;
+      }
+      
+      try {
+        await apiRequest(`/roster/containers/${selectedRosterForSchedule.id}/schedule`, {
+          method: 'POST',
+          body: {
+            calendar_start_date: startDate,
+            calendar_end_date: endDate
+          }
+        });
+        showToast('Roster added to calendar!', 'success');
+        closeScheduleModal();
+        loadOpsCalendar();
+      } catch (err) {
+        showToast(err.message || 'Failed to schedule roster', 'error');
+      }
+    }
+    
+    async function unscheduleRoster(rosterId) {
+      if (!confirm('Remove this roster from the calendar?')) return;
+      
+      try {
+        await apiRequest(`/roster/containers/${rosterId}/unschedule`, { method: 'POST' });
+        showToast('Roster removed from calendar', 'success');
+        loadOpsCalendar();
+      } catch (err) {
+        showToast(err.message || 'Failed to remove roster', 'error');
+      }
     }
     
     async function publishRosterFromCalendar(rosterId) {
@@ -12151,6 +12352,37 @@ Guidelines:
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeRosterModal()">Cancel</button>
         <button class="btn-primary" onclick="saveRoster()">Save Roster</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Schedule Roster Modal -->
+  <div class="schedule-modal-overlay" id="scheduleModalOverlay">
+    <div class="schedule-modal">
+      <div class="schedule-modal-header">
+        <span class="schedule-modal-title">Add Roster to Calendar</span>
+        <button class="schedule-modal-close" onclick="closeScheduleModal()">&times;</button>
+      </div>
+      <div class="schedule-modal-body">
+        <div style="margin-bottom: 16px;">
+          <strong id="scheduleRosterName"></strong>
+          <div id="scheduleValidRange" style="font-size: 12px; color: var(--text-muted); margin-top: 4px;"></div>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label class="form-label">Calendar Start Date</label>
+          <input type="date" id="scheduleStartDate" class="form-input">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Calendar End Date</label>
+          <input type="date" id="scheduleEndDate" class="form-input">
+        </div>
+        <p style="font-size: 11px; color: var(--text-muted); margin-top: 12px;">
+          The roster will appear on the calendar for these dates. You can schedule a subset of the roster's valid date range.
+        </p>
+      </div>
+      <div class="schedule-modal-footer">
+        <button class="btn-secondary" onclick="closeScheduleModal()">Cancel</button>
+        <button class="btn-primary" onclick="confirmScheduleRoster()">Add to Calendar</button>
       </div>
     </div>
   </div>
