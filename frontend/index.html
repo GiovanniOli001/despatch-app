@@ -9542,7 +9542,7 @@ Guidelines:
     // ============================================
     // API CLIENT
     // ============================================
-    const API_BASE = '/api';
+    const API_BASE = 'https://dispatch-api.oliveri-john001.workers.dev/api';
     
     async function apiRequest(endpoint, options = {}) {
       const url = `${API_BASE}${endpoint}`;
@@ -10068,7 +10068,7 @@ Guidelines:
   </script>
   
   <!-- Employee Modal -->
-  <div class="crud-modal-overlay" id="employeeModalOverlay" onclick="if(event.target===this)closeEmployeeModal()">
+  <div class="crud-modal-overlay" id="employeeModalOverlay">
     <div class="crud-modal">
       <div class="crud-modal-header">
         <span class="crud-modal-title" id="employeeModalTitle">Add Employee</span>
@@ -10133,7 +10133,7 @@ Guidelines:
   </div>
   
   <!-- Vehicle Modal -->
-  <div class="crud-modal-overlay" id="vehicleModalOverlay" onclick="if(event.target===this)closeVehicleModal()">
+  <div class="crud-modal-overlay" id="vehicleModalOverlay">
     <div class="crud-modal">
       <div class="crud-modal-header">
         <span class="crud-modal-title" id="vehicleModalTitle">Add Vehicle</span>
@@ -10189,7 +10189,7 @@ Guidelines:
   </div>
   
   <!-- Shift Template Modal -->
-  <div class="crud-modal-overlay" id="shiftModalOverlay" onclick="if(event.target===this)closeShiftModal()">
+  <div class="crud-modal-overlay" id="shiftModalOverlay">
     <div class="crud-modal">
       <div class="crud-modal-header">
         <span class="crud-modal-title" id="shiftModalTitle">Add Shift Template</span>
