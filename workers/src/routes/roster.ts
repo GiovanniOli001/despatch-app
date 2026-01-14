@@ -37,6 +37,7 @@ interface RosterInput {
 }
 
 interface AssignInput {
+  roster_id?: string;
   shift_template_id: string;
   duty_block_id: string;
   date: string;
@@ -533,21 +534,24 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
 // ============================================
 
 async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
-  const { shift_template_id, duty_block_id, date, driver_id, include_connected } = input;
+  const { roster_id, shift_template_id, duty_block_id, date, driver_id, include_connected } = input;
   
   if (!shift_template_id || !duty_block_id || !date) {
     return error('shift_template_id, duty_block_id, and date are required');
   }
   
-  // Find roster for this date
-  const roster = await env.DB.prepare(`
-    SELECT id FROM rosters 
-    WHERE tenant_id = ? AND deleted_at IS NULL AND start_date <= ? AND end_date >= ?
-    LIMIT 1
-  `).bind(TENANT_ID, date, date).first();
-  
-  if (!roster) return error('No roster found for this date', 404);
-  const rosterId = (roster as any).id;
+  // Use provided roster_id or find roster for this date
+  let rosterId = roster_id;
+  if (!rosterId) {
+    const roster = await env.DB.prepare(`
+      SELECT id FROM rosters 
+      WHERE tenant_id = ? AND deleted_at IS NULL AND start_date <= ? AND end_date >= ?
+      LIMIT 1
+    `).bind(TENANT_ID, date, date).first();
+    
+    if (!roster) return error('No roster found for this date', 404);
+    rosterId = (roster as any).id;
+  }
   
   // Get blocks to assign
   let blocksToAssign: any[] = [];
