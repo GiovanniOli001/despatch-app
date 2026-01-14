@@ -3103,6 +3103,37 @@
       opacity: 0.8;
     }
     
+    .quick-assign-btn {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 18px;
+      height: 18px;
+      border: none;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.3);
+      color: white;
+      font-size: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    
+    .roster-gantt-block:hover .quick-assign-btn {
+      opacity: 1;
+    }
+    
+    .quick-assign-btn:hover {
+      background: rgba(255,255,255,0.5);
+    }
+    
+    .roster-gantt-row.unassigned-row .roster-gantt-blocks {
+      background: rgba(107, 114, 128, 0.05);
+    }
+    
     .roster-gantt-grid-line {
       position: absolute;
       top: 0;
@@ -3854,18 +3885,17 @@
         </div>
         
         <!-- Roster Detail/Gantt View -->
-        <div id="rosterDetailView" style="display: none;">
+        <div id="rosterDetailView" style="display: none; flex-direction: column; height: 100%;">
           <div class="screen-header-bar">
             <div style="display: flex; align-items: center; gap: 16px;">
               <button class="btn-secondary" onclick="backToRosterList()">← Back</button>
               <h2 id="rosterDetailTitle">Roster Detail</h2>
               <span id="rosterDetailDates" style="color: var(--text-muted); font-size: 13px;"></span>
             </div>
-            <div style="display: flex; gap: 8px;">
-              <button class="btn-secondary" onclick="changeRosterDay(-1)">← Prev Day</button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button class="btn-secondary" onclick="changeRosterDay(-1)">← Prev</button>
               <input type="date" id="rosterDayPicker" onchange="goToRosterDay(this.value)" style="background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 10px; border-radius: 4px;">
-              <button class="btn-secondary" onclick="changeRosterDay(1)">Next Day →</button>
-              <button class="btn-primary" onclick="showAddShiftToRosterModal()">+ Add Shift</button>
+              <button class="btn-secondary" onclick="changeRosterDay(1)">Next →</button>
             </div>
           </div>
           
@@ -10814,11 +10844,8 @@ Guidelines:
     }
     
     // ============================================
-    // ROSTER CRUD
+    // DATE HELPERS
     // ============================================
-    let rosterData = [];
-    let rosterWeekStart = new Date();
-    rosterWeekStart.setDate(rosterWeekStart.getDate() - rosterWeekStart.getDay() + 1); // Monday
     
     function formatDateShort(date) {
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -10830,21 +10857,27 @@ Guidelines:
     }
     
     // ============================================
-    // ROSTER CRUD
+    // ROSTER - NEW DESIGN
     // ============================================
+    // All shift duty blocks appear in Unassigned by default
+    // User drags blocks from Unassigned to Drivers
+    // ============================================
+    
     let rostersData = [];
     let currentRoster = null;
-    let currentRosterId = null; // Store ID separately for safety
+    let currentRosterId = null;
     let currentRosterDate = null;
-    let rosterDrivers = [];
-    let rosterShifts = [];
-    let rosterEntries = [];
-    let australianHolidays = {};
+    let dayViewData = null; // Holds the day's blocks and assignments
+    let pendingAssignment = null; // For the "move connected" modal
     
     // Gantt config
-    const GANTT_START_HOUR = 4;  // 4 AM
-    const GANTT_END_HOUR = 24;   // Midnight
+    const GANTT_START_HOUR = 4;
+    const GANTT_END_HOUR = 24;
     const GANTT_HOURS = GANTT_END_HOUR - GANTT_START_HOUR;
+    
+    // ============================================
+    // ROSTER LIST
+    // ============================================
     
     async function loadRosters() {
       const tbody = document.getElementById('rosterListTableBody');
@@ -10866,8 +10899,8 @@ Guidelines:
       let filtered = rostersData;
       if (search) {
         filtered = rostersData.filter(r => 
-          r.code.toLowerCase().includes(search) || 
-          r.name.toLowerCase().includes(search)
+          r.code?.toLowerCase().includes(search) || 
+          r.name?.toLowerCase().includes(search)
         );
       }
       
@@ -10885,7 +10918,7 @@ Guidelines:
           <td>${r.entry_count || 0}</td>
           <td>
             <button class="action-btn" onclick="openRoster('${r.id}')" title="View">📋</button>
-            <button class="action-btn" onclick="editRoster('${r.id}')" title="Edit">✏️</button>
+            <button class="action-btn" onclick="editRosterDetails('${r.id}')" title="Edit">✏️</button>
             <button class="action-btn" onclick="deleteRoster('${r.id}')" title="Delete">🗑️</button>
           </td>
         </tr>
@@ -10896,37 +10929,26 @@ Guidelines:
       renderRosterList();
     }
     
+    // ============================================
+    // ROSTER DETAIL VIEW
+    // ============================================
+    
     async function openRoster(id) {
       try {
-        // Show loading state
         document.getElementById('rosterListView').style.display = 'none';
         document.getElementById('rosterDetailView').style.display = 'flex';
-        document.getElementById('rosterDetailView').style.flexDirection = 'column';
-        document.getElementById('rosterDetailView').style.height = '100%';
-        document.getElementById('rosterGantt').innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">Loading roster...</div>';
+        document.getElementById('rosterGantt').innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">Loading...</div>';
         
         const result = await apiRequest(`/roster/containers/${id}`);
         currentRoster = result.data;
-        currentRosterId = id; // Store ID separately
-        rosterDrivers = Array.isArray(currentRoster.drivers) ? currentRoster.drivers : [];
-        rosterEntries = Array.isArray(currentRoster.entries) ? currentRoster.entries : [];
-        
-        // Load shifts for the add shift modal
-        const shiftsResult = await apiRequest('/shifts');
-        rosterShifts = Array.isArray(shiftsResult.data) ? shiftsResult.data : [];
-        
-        // Load Australian holidays
-        await loadAustralianHolidays();
-        
-        // Set initial date to roster start
+        currentRosterId = id;
         currentRosterDate = new Date(currentRoster.start_date);
         
-        // Update UI
         document.getElementById('rosterDetailTitle').textContent = `${currentRoster.code} - ${currentRoster.name}`;
         document.getElementById('rosterDetailDates').textContent = 
           `${formatDateShort(new Date(currentRoster.start_date))} to ${formatDateShort(new Date(currentRoster.end_date))}`;
         
-        renderRosterGantt();
+        await loadDayView();
       } catch (err) {
         showToast(err.message || 'Failed to load roster', 'error');
         backToRosterList();
@@ -10938,196 +10960,141 @@ Guidelines:
       document.getElementById('rosterListView').style.display = 'block';
       currentRoster = null;
       currentRosterId = null;
-      rosterEntries = [];
-      rosterDrivers = [];
+      dayViewData = null;
       loadRosters();
-    }
-    
-    async function loadAustralianHolidays() {
-      // Australian public holidays for current year and next
-      const years = [2025, 2026, 2027];
-      australianHolidays = {};
-      
-      for (const year of years) {
-        australianHolidays[`${year}-01-01`] = "New Year's Day";
-        australianHolidays[`${year}-01-26`] = "Australia Day";
-        australianHolidays[`${year}-01-27`] = "Australia Day (Observed)";
-        australianHolidays[`${year}-04-18`] = "Good Friday";
-        australianHolidays[`${year}-04-21`] = "Easter Monday";
-        australianHolidays[`${year}-04-25`] = "ANZAC Day";
-        australianHolidays[`${year}-06-09`] = "Queen's Birthday (QLD)";
-        australianHolidays[`${year}-12-25`] = "Christmas Day";
-        australianHolidays[`${year}-12-26`] = "Boxing Day";
-      }
     }
     
     function changeRosterDay(delta) {
       if (!currentRosterDate || !currentRoster) return;
-      
       currentRosterDate.setDate(currentRosterDate.getDate() + delta);
       
-      // Clamp to roster range
       const start = new Date(currentRoster.start_date);
       const end = new Date(currentRoster.end_date);
       if (currentRosterDate < start) currentRosterDate = new Date(start);
       if (currentRosterDate > end) currentRosterDate = new Date(end);
       
-      renderRosterGantt();
+      loadDayView();
     }
     
     function goToRosterDay(dateStr) {
       if (!dateStr) return;
       currentRosterDate = new Date(dateStr);
-      renderRosterGantt();
+      loadDayView();
     }
     
-    function renderRosterGantt() {
-      const container = document.getElementById('rosterGantt');
+    async function loadDayView() {
+      if (!currentRosterId || !currentRosterDate) return;
       
-      // Safety checks
-      if (!currentRosterDate) {
-        container.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">No date selected</div>';
+      const dateStr = formatDateISO(currentRosterDate);
+      document.getElementById('rosterDayPicker').value = dateStr;
+      
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      document.getElementById('rosterDayLabel').textContent = 
+        `${dayNames[currentRosterDate.getDay()]}, ${formatDateShort(currentRosterDate)}`;
+      
+      try {
+        const result = await apiRequest(`/roster/day/${currentRosterId}/${dateStr}`);
+        dayViewData = result.data;
+        renderGantt();
+      } catch (err) {
+        document.getElementById('rosterGantt').innerHTML = 
+          `<div style="padding: 40px; text-align: center; color: var(--accent-red);">Error: ${err.message}</div>`;
+      }
+    }
+    
+    // ============================================
+    // GANTT RENDERING
+    // ============================================
+    
+    function renderGantt() {
+      const container = document.getElementById('rosterGantt');
+      if (!dayViewData) {
+        container.innerHTML = '<div style="padding: 40px; text-align: center;">No data</div>';
         return;
       }
       
-      if (!Array.isArray(rosterEntries)) {
-        console.error('rosterEntries is not an array:', rosterEntries);
-        rosterEntries = [];
-      }
-      
-      if (!Array.isArray(rosterDrivers)) {
-        console.error('rosterDrivers is not an array:', rosterDrivers);
-        rosterDrivers = [];
-      }
-      
-      const dateStr = formatDateISO(currentRosterDate);
-      
-      // Update date picker
-      document.getElementById('rosterDayPicker').value = dateStr;
-      
-      // Update day label
-      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      const dayLabel = document.getElementById('rosterDayLabel');
-      dayLabel.textContent = `${dayNames[currentRosterDate.getDay()]}, ${formatDateShort(currentRosterDate)}`;
-      
-      // Check for holiday
-      const holidayBadge = document.getElementById('rosterDayHoliday');
-      const holiday = australianHolidays[dateStr];
-      if (holiday) {
-        holidayBadge.textContent = holiday;
-        holidayBadge.style.display = 'inline';
-      } else {
-        holidayBadge.style.display = 'none';
-      }
-      
-      // Get entries for this date
-      const dayEntries = rosterEntries.filter(e => e && e.date === dateStr);
+      const { drivers, unassigned, by_driver } = dayViewData;
       
       // Stats
-      const statsEl = document.getElementById('rosterDayStats');
-      statsEl.textContent = `${dayEntries.length} shifts assigned | ${rosterDrivers.length} drivers`;
+      const totalBlocks = unassigned.length + Object.values(by_driver).flat().length;
+      const assignedBlocks = Object.values(by_driver).flat().length;
+      document.getElementById('rosterDayStats').textContent = 
+        `${assignedBlocks} of ${totalBlocks} blocks assigned | ${drivers.length} drivers`;
       
-      // Build Gantt header
-      let headerHtml = '<div class="roster-gantt-header">';
-      headerHtml += '<div class="roster-gantt-driver-col">Driver</div>';
-      headerHtml += '<div class="roster-gantt-timeline">';
+      // Header
+      let html = '<div class="roster-gantt-header">';
+      html += '<div class="roster-gantt-driver-col">Driver</div>';
+      html += '<div class="roster-gantt-timeline">';
       for (let h = GANTT_START_HOUR; h < GANTT_END_HOUR; h++) {
-        const label = h < 10 ? `0${h}:00` : `${h}:00`;
-        headerHtml += `<div class="roster-gantt-hour">${label}</div>`;
+        html += `<div class="roster-gantt-hour">${h.toString().padStart(2, '0')}:00</div>`;
       }
-      headerHtml += '</div></div>';
+      html += '</div></div>';
       
-      // Build rows for each driver
-      let rowsHtml = '';
-      for (const driver of rosterDrivers) {
-        if (!driver) continue;
-        const driverEntries = dayEntries.filter(e => e.driver_id === driver.id);
-        const isOnLeave = false; // TODO: Check employee_daily_status
-        
-        rowsHtml += `<div class="roster-gantt-row ${isOnLeave ? 'on-leave' : ''}" data-driver-id="${driver.id}">`;
-        rowsHtml += `<div class="roster-gantt-driver">`;
-        rowsHtml += `<div class="roster-gantt-driver-name">${driver.first_name} ${driver.last_name}</div>`;
-        rowsHtml += `<div class="roster-gantt-driver-id">${driver.employee_number}</div>`;
-        if (isOnLeave) {
-          rowsHtml += `<div class="roster-gantt-driver-leave">ON LEAVE</div>`;
-        }
-        rowsHtml += `</div>`;
-        
-        rowsHtml += `<div class="roster-gantt-blocks" data-driver-id="${driver.id}">`;
-        
-        // Grid lines for each hour
-        for (let h = 0; h < GANTT_HOURS; h++) {
-          const leftPct = (h / GANTT_HOURS) * 100;
-          rowsHtml += `<div class="roster-gantt-grid-line" style="left: ${leftPct}%;"></div>`;
-        }
-        
-        // Render blocks for this driver
-        for (const entry of driverEntries) {
-          if (!entry) continue;
-          const startPct = ((entry.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
-          const widthPct = ((entry.end_time - entry.start_time) / GANTT_HOURS) * 100;
-          
-          // Clamp to visible range
-          if (startPct < 0 || startPct >= 100) continue;
-          
-          const color = getShiftColor(entry.shift_type || 'regular');
-          
-          rowsHtml += `<div class="roster-gantt-block" 
-            style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: ${color};"
-            draggable="true"
-            data-entry-id="${entry.id}"
-            onclick="showRosterEntryDetail('${entry.id}')"
-            ondragstart="onRosterBlockDragStart(event, '${entry.id}')"
-          >`;
-          rowsHtml += `<div class="roster-gantt-block-name">${entry.shift_code || entry.name || 'Shift'}</div>`;
-          rowsHtml += `<div class="roster-gantt-block-time">${formatDecimalTime(entry.start_time)} - ${formatDecimalTime(entry.end_time)}</div>`;
-          if (entry.vehicle_number) {
-            rowsHtml += `<div class="roster-gantt-block-vehicle">${entry.vehicle_number}</div>`;
-          }
-          rowsHtml += `</div>`;
-        }
-        
-        rowsHtml += `</div></div>`;
+      // Driver rows
+      for (const driver of drivers) {
+        const driverBlocks = by_driver[driver.id] || [];
+        html += renderGanttRow(driver, driverBlocks);
       }
       
-      // Add unassigned row
-      const unassignedEntries = dayEntries.filter(e => !e.driver_id);
-      rowsHtml += `<div class="roster-gantt-row" data-driver-id="">`;
-      rowsHtml += `<div class="roster-gantt-driver" style="background: var(--bg-tertiary);">`;
-      rowsHtml += `<div class="roster-gantt-driver-name" style="color: var(--text-muted);">Unassigned</div>`;
-      rowsHtml += `<div class="roster-gantt-driver-id">${unassignedEntries.length} shifts</div>`;
-      rowsHtml += `</div>`;
-      rowsHtml += `<div class="roster-gantt-blocks" data-driver-id="">`;
+      // Unassigned row
+      html += renderGanttRow(null, unassigned);
       
+      container.innerHTML = html;
+      setupDragDrop();
+    }
+    
+    function renderGanttRow(driver, blocks) {
+      const driverId = driver?.id || '';
+      const driverName = driver ? `${driver.first_name} ${driver.last_name}` : 'Unassigned';
+      const driverNumber = driver?.employee_number || `${blocks.length} blocks`;
+      const isUnassigned = !driver;
+      
+      let html = `<div class="roster-gantt-row ${isUnassigned ? 'unassigned-row' : ''}" data-driver-id="${driverId}">`;
+      html += `<div class="roster-gantt-driver" ${isUnassigned ? 'style="background: var(--bg-tertiary);"' : ''}>`;
+      html += `<div class="roster-gantt-driver-name" ${isUnassigned ? 'style="color: var(--text-muted);"' : ''}>${driverName}</div>`;
+      html += `<div class="roster-gantt-driver-id">${driverNumber}</div>`;
+      html += `</div>`;
+      
+      html += `<div class="roster-gantt-blocks" data-driver-id="${driverId}">`;
+      
+      // Grid lines
       for (let h = 0; h < GANTT_HOURS; h++) {
-        const leftPct = (h / GANTT_HOURS) * 100;
-        rowsHtml += `<div class="roster-gantt-grid-line" style="left: ${leftPct}%;"></div>`;
+        html += `<div class="roster-gantt-grid-line" style="left: ${(h / GANTT_HOURS) * 100}%;"></div>`;
       }
       
-      for (const entry of unassignedEntries) {
-        if (!entry) continue;
-        const startPct = ((entry.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
-        const widthPct = ((entry.end_time - entry.start_time) / GANTT_HOURS) * 100;
+      // Blocks
+      for (const block of blocks) {
+        const startPct = ((block.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
+        const widthPct = ((block.end_time - block.start_time) / GANTT_HOURS) * 100;
         if (startPct < 0 || startPct >= 100) continue;
         
-        rowsHtml += `<div class="roster-gantt-block" 
-          style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: #6b7280;"
+        const color = getShiftColor(block.shift_type);
+        const hasMultiple = block.blocks_in_shift > 1;
+        const hasDefault = block.default_driver_id && !block.assigned_driver_id;
+        
+        html += `<div class="roster-gantt-block" 
+          style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: ${color};"
           draggable="true"
-          data-entry-id="${entry.id}"
-          onclick="showRosterEntryDetail('${entry.id}')"
-          ondragstart="onRosterBlockDragStart(event, '${entry.id}')"
+          data-block-id="${block.id}"
+          data-shift-id="${block.shift_template_id}"
+          data-entry-id="${block.entry_id || ''}"
+          data-has-multiple="${hasMultiple}"
+          ondragstart="onBlockDragStart(event)"
+          onclick="showBlockInfo('${block.id}')"
         >`;
-        rowsHtml += `<div class="roster-gantt-block-name">${entry.shift_code || entry.name || 'Shift'}</div>`;
-        rowsHtml += `<div class="roster-gantt-block-time">${formatDecimalTime(entry.start_time)} - ${formatDecimalTime(entry.end_time)}</div>`;
-        rowsHtml += `</div>`;
+        html += `<div class="roster-gantt-block-name">${block.shift_code} / ${block.block_name}</div>`;
+        html += `<div class="roster-gantt-block-time">${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}</div>`;
+        
+        // Quick assign button for blocks with default driver
+        if (hasDefault) {
+          html += `<button class="quick-assign-btn" onclick="event.stopPropagation(); quickAssign('${block.id}', '${block.shift_template_id}', '${block.default_driver_id}')" title="Assign to ${block.default_driver_name}">⚡</button>`;
+        }
+        
+        html += `</div>`;
       }
       
-      rowsHtml += `</div></div>`;
-      
-      container.innerHTML = headerHtml + rowsHtml;
-      
-      // Setup drop zones
-      setupRosterDragDrop();
+      html += `</div></div>`;
+      return html;
     }
     
     function getShiftColor(shiftType) {
@@ -11139,11 +11106,13 @@ Guidelines:
       return colors[shiftType] || '#3b82f6';
     }
     
-    function setupRosterDragDrop() {
-      const blockContainers = document.querySelectorAll('.roster-gantt-blocks');
-      
-      blockContainers.forEach(container => {
-        container.addEventListener('dragover', (e) => {
+    // ============================================
+    // DRAG & DROP
+    // ============================================
+    
+    function setupDragDrop() {
+      document.querySelectorAll('.roster-gantt-blocks').forEach(container => {
+        container.addEventListener('dragover', e => {
           e.preventDefault();
           container.classList.add('drag-over');
         });
@@ -11152,91 +11121,115 @@ Guidelines:
           container.classList.remove('drag-over');
         });
         
-        container.addEventListener('drop', async (e) => {
+        container.addEventListener('drop', async e => {
           e.preventDefault();
           container.classList.remove('drag-over');
           
-          const entryId = e.dataTransfer.getData('text/plain');
+          const blockId = e.dataTransfer.getData('blockId');
+          const shiftId = e.dataTransfer.getData('shiftId');
+          const hasMultiple = e.dataTransfer.getData('hasMultiple') === 'true';
           const newDriverId = container.dataset.driverId || null;
           
-          if (!Array.isArray(rosterEntries)) {
-            showToast('Data error - please refresh', 'error');
-            return;
-          }
-          
-          // Find the entry
-          const entry = rosterEntries.find(en => en && en.id === entryId);
-          if (!entry) {
-            showToast('Entry not found', 'error');
-            return;
-          }
-          
-          // Check for overlap if assigning to a driver
-          if (newDriverId) {
-            const driverEntries = rosterEntries.filter(en => 
-              en && 
-              en.driver_id === newDriverId && 
-              en.id !== entryId && 
-              en.date === entry.date
-            );
-            
-            const hasOverlap = driverEntries.some(other => {
-              return entry.start_time < other.end_time && entry.end_time > other.start_time;
-            });
-            
-            if (hasOverlap) {
-              showToast('Cannot assign - overlaps with existing shift', 'error');
-              return;
-            }
-          }
-          
-          // Update via API
-          try {
-            await apiRequest(`/roster/${entryId}/assign`, { method: 'PUT', body: {
-              driver_id: newDriverId
-            }});
-            
-            // Update local data
-            entry.driver_id = newDriverId;
-            const driver = rosterDrivers.find(d => d && d.id === newDriverId);
-            entry.driver_name = driver ? `${driver.first_name} ${driver.last_name}` : null;
-            
-            renderRosterGantt();
-            showToast('Shift reassigned');
-          } catch (err) {
-            showToast(err.message || 'Failed to reassign', 'error');
+          if (hasMultiple && newDriverId) {
+            // Show modal asking about connected blocks
+            pendingAssignment = { blockId, shiftId, driverId: newDriverId };
+            showConnectedModal();
+          } else {
+            // Direct assign
+            await doAssign(blockId, shiftId, newDriverId, false);
           }
         });
       });
     }
     
-    function onRosterBlockDragStart(e, entryId) {
-      e.dataTransfer.setData('text/plain', entryId);
-      e.target.classList.add('dragging');
-      
-      setTimeout(() => {
-        e.target.classList.remove('dragging');
-      }, 100);
-    }
-    
-    function showRosterEntryDetail(entryId) {
-      if (!Array.isArray(rosterEntries)) return;
-      const entry = rosterEntries.find(e => e && e.id === entryId);
-      if (!entry) return;
-      
-      // For now, show a toast with info. Later: open detail modal
-      showToast(`${entry.name || 'Shift'}: ${formatDecimalTime(entry.start_time)}-${formatDecimalTime(entry.end_time)}`);
+    function onBlockDragStart(e) {
+      const target = e.target.closest('.roster-gantt-block');
+      e.dataTransfer.setData('blockId', target.dataset.blockId);
+      e.dataTransfer.setData('shiftId', target.dataset.shiftId);
+      e.dataTransfer.setData('hasMultiple', target.dataset.hasMultiple);
+      target.classList.add('dragging');
+      setTimeout(() => target.classList.remove('dragging'), 100);
     }
     
     // ============================================
-    // ROSTER MODALS
+    // ASSIGNMENT API
     // ============================================
+    
+    async function doAssign(blockId, shiftId, driverId, includeConnected) {
+      try {
+        await apiRequest('/roster/assign', {
+          method: 'POST',
+          body: {
+            shift_template_id: shiftId,
+            duty_block_id: blockId,
+            date: formatDateISO(currentRosterDate),
+            driver_id: driverId,
+            include_connected: includeConnected,
+          }
+        });
+        showToast(driverId ? 'Block assigned' : 'Block unassigned');
+        await loadDayView();
+      } catch (err) {
+        showToast(err.message || 'Assignment failed', 'error');
+      }
+    }
+    
+    async function quickAssign(blockId, shiftId, defaultDriverId) {
+      // Find the block to check if it has multiple
+      let hasMultiple = false;
+      if (dayViewData) {
+        const allBlocks = [...dayViewData.unassigned, ...Object.values(dayViewData.by_driver).flat()];
+        const block = allBlocks.find(b => b.id === blockId);
+        hasMultiple = block?.blocks_in_shift > 1;
+      }
+      
+      if (hasMultiple) {
+        pendingAssignment = { blockId, shiftId, driverId: defaultDriverId };
+        showConnectedModal();
+      } else {
+        await doAssign(blockId, shiftId, defaultDriverId, false);
+      }
+    }
+    
+    function showBlockInfo(blockId) {
+      if (!dayViewData) return;
+      const allBlocks = [...dayViewData.unassigned, ...Object.values(dayViewData.by_driver).flat()];
+      const block = allBlocks.find(b => b.id === blockId);
+      if (block) {
+        showToast(`${block.shift_code} / ${block.block_name}: ${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}`);
+      }
+    }
+    
+    // ============================================
+    // CONNECTED BLOCKS MODAL
+    // ============================================
+    
+    function showConnectedModal() {
+      document.getElementById('connectedModalOverlay').classList.add('show');
+    }
+    
+    function closeConnectedModal() {
+      document.getElementById('connectedModalOverlay').classList.remove('show');
+      pendingAssignment = null;
+    }
+    
+    async function confirmConnected(includeAll) {
+      if (!pendingAssignment) return;
+      const { blockId, shiftId, driverId } = pendingAssignment;
+      closeConnectedModal();
+      await doAssign(blockId, shiftId, driverId, includeAll);
+    }
+    
+    // ============================================
+    // ROSTER CRUD MODALS
+    // ============================================
+    
+    let editingRosterId = null;
     
     function showAddRosterModal() {
       document.getElementById('rosterModalTitle').textContent = 'New Roster';
       document.getElementById('rosterForm').reset();
       
-      // Default dates: next Monday to Sunday
       const today = new Date();
       const daysUntilMonday = (8 - today.getDay()) % 7 || 7;
       const nextMonday = new Date(today);
@@ -11251,7 +11244,7 @@ Guidelines:
       document.getElementById('rosterModalOverlay').classList.add('show');
     }
     
-    async function editRoster(id) {
+    function editRosterDetails(id) {
       const roster = rostersData.find(r => r.id === id);
       if (!roster) return;
       
@@ -11298,13 +11291,12 @@ Guidelines:
         closeRosterModal();
         loadRosters();
       } catch (err) {
-        showToast(err.message || 'Failed to save roster', 'error');
+        showToast(err.message || 'Failed to save', 'error');
       }
     }
     
     async function deleteRoster(id) {
-      if (!confirm('Delete this roster and all its entries?')) return;
-      
+      if (!confirm('Delete this roster and all assignments?')) return;
       try {
         await apiRequest(`/roster/containers/${id}`, { method: 'DELETE' });
         showToast('Roster deleted');
@@ -11314,81 +11306,10 @@ Guidelines:
       }
     }
     
-    // Add Shift to Roster Modal
-    function showAddShiftToRosterModal() {
-      if (!currentRosterId) {
-        showToast('No roster selected', 'error');
-        return;
-      }
-      
-      const select = document.getElementById('addShiftSelect');
-      select.innerHTML = '<option value="">Select a shift template...</option>' +
-        rosterShifts.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join('');
-      
-      document.getElementById('addShiftDate').value = formatDateISO(currentRosterDate);
-      
-      // Populate driver override dropdown
-      const driverSelect = document.getElementById('addShiftDriver');
-      driverSelect.innerHTML = '<option value="">— Use template defaults —</option>' +
-        rosterDrivers.map(d => `<option value="${d.id}">${d.first_name} ${d.last_name}</option>`).join('');
-      
-      document.getElementById('addShiftModalOverlay').classList.add('show');
-    }
-    
-    function closeAddShiftModal() {
-      document.getElementById('addShiftModalOverlay').classList.remove('show');
-    }
-    
-    async function addShiftToRoster() {
-      const shiftId = document.getElementById('addShiftSelect').value;
-      const date = document.getElementById('addShiftDate').value;
-      const driverId = document.getElementById('addShiftDriver').value || null;
-      
-      if (!shiftId) {
-        showToast('Please select a shift template', 'error');
-        return;
-      }
-      
-      if (!currentRosterId) {
-        showToast('No roster selected', 'error');
-        return;
-      }
-      
-      try {
-        const result = await apiRequest(`/roster/containers/${currentRosterId}/add-shift`, { method: 'POST', body: {
-          shift_template_id: shiftId,
-          date: date,
-          driver_id: driverId
-        }});
-        
-        showToast(`Added ${result.data.entries_created} duty block(s) to roster`);
-        closeAddShiftModal();
-        
-        // Reload roster data using stored ID
-        await openRoster(currentRosterId);
-      } catch (err) {
-        showToast(err.message || 'Failed to add shift', 'error');
-      }
-    }
-    
-    let editingRosterId = null;
-    
-    // Legacy function redirects
-    async function loadRoster() {
-      await loadRosters();
-    }
-    
-    function renderRosterTable() {
-      renderRosterList();
-    }
-    
-    function changeRosterWeek(delta) {
-      // Legacy - now handled by day navigation
-    }
-    
-    function showAddRosterEntryModal() {
-      showAddRosterModal();
-    }
+    // Legacy aliases
+    async function loadRoster() { await loadRosters(); }
+    function renderRosterTable() { renderRosterList(); }
+    function showAddRosterEntryModal() { showAddRosterModal(); }
     
     // ============================================
     // NAVIGATION HOOKS
@@ -11637,37 +11558,21 @@ Guidelines:
     </div>
   </div>
   
-  <!-- Add Shift to Roster Modal -->
-  <div class="crud-modal-overlay" id="addShiftModalOverlay">
-    <div class="crud-modal">
+  <!-- Connected Blocks Modal -->
+  <div class="crud-modal-overlay" id="connectedModalOverlay">
+    <div class="crud-modal" style="max-width: 400px;">
       <div class="crud-modal-header">
-        <span class="crud-modal-title">Add Shift to Roster</span>
-        <button class="crud-modal-close" onclick="closeAddShiftModal()">&times;</button>
+        <span class="crud-modal-title">Multiple Blocks in Shift</span>
+        <button class="crud-modal-close" onclick="closeConnectedModal()">&times;</button>
       </div>
       <div class="crud-modal-body">
-        <form id="addShiftForm" onsubmit="event.preventDefault(); addShiftToRoster();">
-          <div class="form-group">
-            <label class="form-label">Shift Template *</label>
-            <select id="addShiftSelect" class="form-input" required>
-              <option value="">Select a shift template...</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Date *</label>
-            <input type="date" id="addShiftDate" class="form-input" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Driver Override</label>
-            <select id="addShiftDriver" class="form-input">
-              <option value="">— Use template defaults —</option>
-            </select>
-            <small style="color: var(--text-muted); font-size: 11px;">Override the driver from the template, or leave blank to use template assignments</small>
-          </div>
-        </form>
+        <p style="margin: 0 0 16px 0; color: var(--text-secondary);">
+          This shift has multiple duty blocks. Would you like to assign all connected blocks to this driver?
+        </p>
       </div>
-      <div class="crud-modal-footer">
-        <button class="btn-secondary" onclick="closeAddShiftModal()">Cancel</button>
-        <button class="btn-primary" onclick="addShiftToRoster()">Add to Roster</button>
+      <div class="crud-modal-footer" style="justify-content: space-between;">
+        <button class="btn-secondary" onclick="confirmConnected(false)">Just This Block</button>
+        <button class="btn-primary" onclick="confirmConnected(true)">All Connected Blocks</button>
       </div>
     </div>
   </div>
