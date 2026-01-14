@@ -1,8 +1,8 @@
 # Dispatch App
 
-**Version:** 1.1.0  
+**Version:** 2.0.0  
 **Last Updated:** January 15, 2026  
-**Status:** MVP Development - Roster Module Complete
+**Status:** MVP Development - Dispatch & Roster Complete
 
 ## Overview
 
@@ -32,21 +32,30 @@ Built with:
 
 ### Data Model
 ```
-Shift Templates (reusable definitions)
+Shift Templates (reusable definitions - MASTER TEMPLATES)
   └── Duty Blocks (assignable units, e.g., "AM Block", "PM Block")
        └── Duty Lines (time segments within a block)
 
 Rosters (date range containers, e.g., "Week 3 Jan 2026")
   └── Roster Entries (assignments: block + date + driver)
+       └── Roster Duty Lines (INSTANCE COPIES - editable in Dispatch)
 ```
 
-### Roster Design (NEW)
-- **All shift duty blocks appear in Unassigned by default** for every day
-- User drags blocks from Unassigned rows to Driver rows to create assignments
-- Each shift template gets its own row in the Unassigned section
-- Multi-block shifts prompt: "Move all connected blocks?" or "Just this one?"
-- Blocks with pre-assigned drivers show ⚡ quick-assign button
-- Australian public holidays (QLD) displayed as orange badge
+### Copy-on-Write Architecture (NEW)
+- **Shift Templates** contain master duty lines (never modified by Dispatch)
+- When a roster entry is created, duty lines are **copied** to `roster_duty_lines`
+- **Dispatch edits modify instance copies**, not the original templates
+- This allows per-day customization without affecting future rosters
+
+### Roster → Dispatch Flow
+```
+1. Create Roster (Ops Calendar)
+2. Add Shifts to Roster (Roster screen)
+3. Assign Drivers OR Toggle "Include in Dispatch"
+4. Publish Roster
+5. View in Dispatch (only published rosters appear)
+6. Edit duty lines in Dispatch (edits saved to roster_duty_lines)
+```
 
 ## Database Schema
 
@@ -62,9 +71,10 @@ Rosters (date range containers, e.g., "Week 3 Jan 2026")
 | `pay_types` | Pay categories (standard, overtime, etc.) |
 | `shift_templates` | Reusable shift definitions |
 | `shift_template_duty_blocks` | Assignable units within a shift |
-| `shift_template_duty_lines` | Time segments within a duty block |
-| `rosters` | Date range containers |
+| `shift_template_duty_lines` | Time segments within a duty block (MASTER) |
+| `rosters` | Date range containers with status (draft/published/archived) |
 | `roster_entries` | Assignments (block + date + driver) |
+| `roster_duty_lines` | **Instance copies** for Dispatch editing (NEW) |
 
 ### Key Table Structures
 
@@ -77,7 +87,7 @@ name TEXT NOT NULL,
 driver_id TEXT  -- Default driver (optional)
 ```
 
-**shift_template_duty_lines**
+**shift_template_duty_lines** (Master - never edited by Dispatch)
 ```sql
 id TEXT PRIMARY KEY,
 duty_block_id TEXT NOT NULL,
@@ -89,6 +99,24 @@ vehicle_id TEXT,
 pay_type TEXT NOT NULL DEFAULT 'STD'
 ```
 
+**roster_duty_lines** (Instance copies - edited by Dispatch)
+```sql
+id TEXT PRIMARY KEY,
+tenant_id TEXT NOT NULL,
+roster_entry_id TEXT NOT NULL,  -- Links to roster_entries
+source_duty_line_id TEXT,       -- Links back to template
+sequence INTEGER NOT NULL,
+start_time REAL NOT NULL,
+end_time REAL NOT NULL,
+duty_type TEXT,
+description TEXT,
+vehicle_id TEXT,
+vehicle_number TEXT,  -- Denormalized for display
+pay_type TEXT DEFAULT 'STD',
+created_at TEXT,
+updated_at TEXT
+```
+
 **rosters**
 ```sql
 id TEXT PRIMARY KEY,
@@ -96,7 +124,9 @@ code TEXT NOT NULL UNIQUE,
 name TEXT NOT NULL,
 start_date TEXT NOT NULL,
 end_date TEXT NOT NULL,
-status TEXT DEFAULT 'draft'  -- draft, published, archived
+status TEXT DEFAULT 'draft',  -- draft, published, archived
+calendar_start_date TEXT,     -- Optional custom calendar range
+calendar_end_date TEXT
 ```
 
 **roster_entries**
@@ -108,10 +138,21 @@ duty_block_id TEXT,
 date TEXT NOT NULL,
 driver_id TEXT,
 start_time REAL,
-end_time REAL
+end_time REAL,
+include_in_dispatch INTEGER DEFAULT 0  -- For unassigned blocks
 ```
 
 ## API Endpoints
+
+### Dispatch (Daily Operations)
+- `GET /api/dispatch/:date` - Full day data (drivers, vehicles, unassigned jobs)
+- `POST /api/dispatch/assign` - Assign driver to roster entry
+- `POST /api/dispatch/transfer` - Transfer between drivers
+- `POST /api/dispatch/unassign` - Remove driver/vehicle assignment
+- `POST /api/dispatch/update-duty-line` - Update duty line (time, type, vehicle, pay)
+
+### Ops Calendar
+- `GET /api/ops-calendar/:year/:month` - Month view with roster spans
 
 ### Roster Containers
 - `GET /api/roster/containers` - List all rosters
@@ -119,31 +160,26 @@ end_time REAL
 - `POST /api/roster/containers` - Create roster
 - `PUT /api/roster/containers/:id` - Update roster
 - `DELETE /api/roster/containers/:id` - Soft delete
+- `POST /api/roster/containers/:id/publish` - Publish roster (visible in Dispatch)
+- `POST /api/roster/containers/:id/unpublish` - Unpublish (back to draft)
 
 ### Roster Day View
-- `GET /api/roster/day/:rosterId/:date` - Get day view with all blocks categorized by driver/unassigned
+- `GET /api/roster/day/:rosterId/:date` - Get day view with all blocks
 
 ### Roster Assignment
-- `POST /api/roster/assign` - Assign block(s) to driver
-  ```json
-  {
-    "shift_template_id": "...",
-    "duty_block_id": "...",
-    "date": "2026-01-19",
-    "driver_id": "..." or null,
-    "include_connected": true/false
-  }
-  ```
+- `POST /api/roster/assign` - Assign block(s) to driver (copies duty lines)
 - `POST /api/roster/unassign` - Remove assignment
-  ```json
-  { "entry_id": "..." }
-  ```
+
+### Dispatch Toggle (for unassigned blocks)
+- `POST /api/roster/toggle-dispatch` - Toggle single block
+- `POST /api/roster/toggle-dispatch-day` - Toggle all blocks for a day
+- `POST /api/roster/toggle-dispatch-all` - Toggle entire roster
 
 ### Shift Templates
 - `GET /api/shifts` - List templates
 - `GET /api/shifts/:id` - Get template with duty blocks and lines
 - `POST /api/shifts` - Create template
-- `PUT /api/shifts/:id` - Update template (replaces all blocks/lines)
+- `PUT /api/shifts/:id` - Update template (smart upsert preserves IDs)
 - `DELETE /api/shifts/:id` - Soft delete
 
 ### Employees
@@ -168,15 +204,51 @@ end_time REAL
 
 | Screen | Status | Description |
 |--------|--------|-------------|
-| Dispatch | 🔲 Placeholder | Daily operations board |
-| Operations Calendar | 🔲 Placeholder | Week/month view |
-| Charters | 🔲 Placeholder | Charter bookings |
-| Customers | 🔲 Placeholder | Customer management |
+| Dispatch | ✅ Complete | Daily operations board with Gantt timeline, driver/vehicle views, inline duty editing |
+| Operations Calendar | ✅ Complete | Month view with roster bars, publish/unpublish, create roster |
 | HRM | ✅ Complete | Employee CRUD with modals |
 | Vehicles | ✅ Complete | Vehicle CRUD with modals |
 | Shift Templates | ✅ Complete | Template builder with duty blocks/lines, visual Gantt preview |
-| Roster | ✅ Complete | Gantt-style drag-drop assignment |
+| Roster | ✅ Complete | Gantt-style drag-drop assignment, dispatch toggle |
+| Charters | 🔲 Placeholder | Charter bookings |
+| Customers | 🔲 Placeholder | Customer management |
 | Maintenance | 🔲 Placeholder | Vehicle maintenance |
+
+## Dispatch Screen Features
+
+### Views
+- **Driver-centric**: Drivers on left, assign vehicles to their duties
+- **Vehicle-centric**: Vehicles on left, assign drivers to their duties
+- **Style variants**: A through E (different visualizations)
+
+### Functionality
+- **Gantt timeline**: Visual blocks 5am-11pm
+- **Sidebar detail panel**: Shows selected driver/vehicle/job duties
+- **Inline duty editing**: Click to edit time, type, description, vehicle, pay type
+- **Drag & drop**: Assign unassigned jobs to drivers/vehicles
+- **Transfer**: Move shifts between drivers
+- **Real/Fake data toggle**: Switch between API data and generated test data
+- **Vehicle assignment strips**: Color-coded vehicle indicators on shifts
+
+### Data Flow
+```
+Published Roster → roster_entries → roster_duty_lines → Dispatch Display
+                                                     ↓
+                                              User Edits
+                                                     ↓
+                                         POST /api/dispatch/update-duty-line
+                                                     ↓
+                                         roster_duty_lines (updated)
+```
+
+## Ops Calendar Features
+
+- **Month grid view**: Shows all days with roster bars spanning date ranges
+- **Roster bars**: Draft (dotted/gray), Published (solid/colored)
+- **Publish/Unpublish**: Click roster bar to toggle status
+- **Create roster**: Click day or use "+ New Roster" button
+- **QLD holidays**: Orange badges on public holidays
+- **Navigate months**: Arrow buttons to move between months
 
 ## Project Structure
 
@@ -192,21 +264,31 @@ dispatch-app/
     │   ├── routes/
     │   │   ├── employees.ts
     │   │   ├── vehicles.ts
-    │   │   ├── shifts.ts   # Shift templates with blocks/lines
-    │   │   ├── roster.ts   # Roster containers + day view + assignments
-    │   │   ├── dispatch.ts
+    │   │   ├── shifts.ts       # Shift templates with blocks/lines
+    │   │   ├── roster.ts       # Rosters + assignments + dispatch toggle
+    │   │   ├── dispatch.ts     # Dispatch day view + duty line edits
+    │   │   ├── ops-calendar.ts # Month view
     │   │   └── config.ts
     │   └── db/
     │       ├── schema.sql
     │       ├── migration_duty_blocks.sql
     │       ├── migration_rosters.sql
+    │       ├── migration_dispatch_toggle.sql
+    │       ├── migration_roster_duty_lines.sql  # NEW
     │       └── various other migrations
     └── (deployed to Cloudflare Workers)
 ```
 
 ## Development Workflow
 
-### Frontend Changes
+### Using deploy.bat (Recommended)
+1. Download files from Claude to Downloads folder
+2. Double-click `deploy.bat`
+3. Script copies files and deploys automatically
+
+### Manual Deployment
+
+**Frontend Changes:**
 ```bash
 cd dispatch-app
 git add .
@@ -215,34 +297,41 @@ git push
 # Auto-deploys to Cloudflare Pages in ~30 seconds
 ```
 
-### Backend Changes
+**Backend Changes:**
 ```bash
 cd dispatch-app/workers
 npx wrangler deploy
 ```
 
-### Database Migrations
+**Database Migrations:**
 ```bash
 cd dispatch-app/workers
-npx wrangler d1 execute dispatch-db --remote --file=src/db/migration_name.sql
+npx wrangler d1 execute dispatch-db --remote --file=migration_name.sql
 ```
 
 ## Key Design Decisions
 
 1. **Single HTML File**: All frontend code in one file for simplicity. CSS at top, HTML in middle, JS at bottom.
 
-2. **Duty Blocks vs Duty Lines**: 
-   - Blocks are the assignable units (what gets dragged to drivers)
+2. **Copy-on-Write for Duty Lines**: 
+   - Templates remain immutable (shift_template_duty_lines)
+   - Dispatch edits go to instance copies (roster_duty_lines)
+   - Prevents template corruption from daily edits
+
+3. **Duty Blocks vs Duty Lines**: 
+   - Blocks are assignable units (what gets dragged to drivers)
    - Lines are time segments within blocks (for detailed scheduling)
 
-3. **Roster Day View**: 
-   - API returns all blocks categorized as `unassigned` or `by_driver`
-   - Frontend groups unassigned by shift (each shift = own row)
-   - Prevents visual overlap of blocks
+4. **Roster Status Flow**:
+   - Draft → visible in Ops Calendar (gray), not in Dispatch
+   - Published → visible in Dispatch, edits persist
+   - Archived → hidden from active views
 
-4. **Soft Deletes**: All deletions set `deleted_at` timestamp, never hard delete.
+5. **Cross-Roster Conflict Detection**: Prevents same driver being assigned overlapping times across ANY roster
 
-5. **Decimal Time**: Times stored as decimal hours (6.5 = 06:30) for easy math.
+6. **Soft Deletes**: All deletions set `deleted_at` timestamp, never hard delete.
+
+7. **Decimal Time**: Times stored as decimal hours (6.5 = 06:30) for easy math.
 
 ## Australian Holidays (QLD)
 
@@ -258,20 +347,21 @@ Hardcoded for 2025-2027:
 
 ## Known Issues / TODO
 
-1. **Dispatch Screen**: Not yet implemented
-2. **Vehicle Assignment**: Currently at entry level, not line level
-3. **Leave/Availability**: Employee daily status not yet integrated
-4. **Real-time Updates**: No WebSocket/polling yet
-5. **Authentication**: Not implemented (open access)
-6. **Mobile**: Not optimized for mobile screens
+1. **Leave/Availability**: Employee daily status not yet integrated
+2. **Real-time Updates**: No WebSocket/polling yet
+3. **Authentication**: Not implemented (open access)
+4. **Mobile**: Not optimized for mobile screens
+5. **Charters Module**: Placeholder only
+6. **Reporting**: No exports yet
 
 ## Next Steps (Suggested)
 
-1. Build Dispatch screen (daily operations view)
-2. Add vehicle assignment at duty line level
-3. Implement employee leave/availability display
-4. Add copy roster week functionality
-5. Build reporting/exports
+1. Add employee leave/availability display in Dispatch
+2. Build Charters module (bookings, customers)
+3. Add reporting/exports (daily sheets, timesheets)
+4. Implement vehicle maintenance scheduling
+5. Add user authentication
+6. Mobile-responsive layout
 
 ## Default Data
 
@@ -282,3 +372,13 @@ Hardcoded for 2025-2027:
 **Pay Types:**
 - Standard (1.0x), Overtime (1.5x), Double Time (2.0x)
 - Penalty Rate (1.25x), Allowance (1.0x), Unpaid (0x)
+
+## Deployment Checklist
+
+When making changes:
+- [ ] Download files from Claude
+- [ ] Copy to project folders (or use deploy.bat)
+- [ ] Run any new migrations first
+- [ ] Deploy backend: `npx wrangler deploy`
+- [ ] Deploy frontend: `git push`
+- [ ] Verify in browser (may take 30-60s to propagate)
