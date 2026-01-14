@@ -414,7 +414,8 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       start: u.start,
       end: u.end,
       driverId: u.driverId,
-      type: 'assigned'
+      type: 'assigned',
+      duties: []  // Empty - vehicle duties derived from driver duties
     }));
 
     // Add maintenance block if in maintenance
@@ -425,7 +426,15 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
         start: 5,
         end: 23,
         driverId: null,
-        type: 'maintenance'
+        type: 'maintenance',
+        duties: [{
+          id: `vd-maint-${veh.id}`,
+          type: 'maintenance',
+          start: 5,
+          end: 23,
+          description: 'Scheduled maintenance',
+          driver: null
+        }]
       });
     }
 

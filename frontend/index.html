@@ -11395,10 +11395,12 @@ Guidelines:
         default_end: shiftEnd,
         notes: document.getElementById('shiftNotes').value || null,
         duty_blocks: shiftDutyBlocks.map((block, blockIdx) => ({
+          id: block.id || null,  // Preserve existing ID for updates
           sequence: blockIdx + 1,
           name: block.name,
           driver_id: block.driver_id || null,
           lines: block.lines.map((line, lineIdx) => ({
+            id: line.id || null,  // Preserve existing ID for updates
             sequence: lineIdx + 1,
             duty_type: line.duty_type,
             start_time: line.start_time,
