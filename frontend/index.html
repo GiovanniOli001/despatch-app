@@ -6587,7 +6587,7 @@
         return `
           <div class="heatmap-row ${selectedItem?.type === 'job' && selectedItem?.index === idx ? 'selected' : ''}"
                onclick="selectItem('job', ${idx})">
-            <div class="row-label"><span class="row-name">${job.id}</span></div>
+            <div class="row-label"><span class="row-name">${job.name}</span></div>
             <div class="row-timeline">
               <div class="time-block unassigned-job" style="left: ${left}%; width: ${width}%;">${job.name}</div>
             </div>

@@ -407,25 +407,56 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       status = 'available';
     }
 
-    // Build vehicle shifts from usage
-    const vehicleShifts = usage.map(u => ({
-      id: `vshift-${veh.id}-${u.shiftId}`,
-      entryId: u.shiftId,
-      start: u.start,
-      end: u.end,
-      driverId: u.driverId,
-      type: 'assigned'
-    }));
+    // Build vehicle shifts from usage - include driver name for display
+    const vehicleShifts = usage.map(u => {
+      // Find driver name
+      let driverName = null;
+      if (u.driverId) {
+        const driverObj = drivers.find(d => d.id === u.driverId);
+        driverName = driverObj?.name || null;
+      }
+      
+      // Find the original shift to get its name
+      let shiftName = 'Shift';
+      const driverShifts = shiftsByDriver.get(u.driverId || '');
+      if (driverShifts) {
+        const originalShift = driverShifts.find(s => s.entryId === u.shiftId);
+        if (originalShift) {
+          shiftName = originalShift.name;
+        }
+      }
+      
+      return {
+        id: `vshift-${veh.id}-${u.shiftId}`,
+        entryId: u.shiftId,
+        name: shiftName,
+        start: u.start,
+        end: u.end,
+        driverId: u.driverId,
+        type: 'assigned',
+        duties: [{
+          id: `vduty-${veh.id}-${u.shiftId}`,
+          type: 'driving',
+          start: u.start,
+          end: u.end,
+          driver: driverName,
+          driverId: u.driverId,
+          vehicle: veh.fleet_number
+        }]
+      };
+    });
 
     // Add maintenance block if in maintenance
     if (veh.daily_status === 'maintenance') {
       vehicleShifts.push({
         id: `vshift-maint-${veh.id}`,
         entryId: '',
+        name: 'Maintenance',
         start: 5,
         end: 23,
         driverId: null,
-        type: 'maintenance'
+        type: 'maintenance',
+        duties: []
       });
     }
 
