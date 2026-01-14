@@ -11958,6 +11958,7 @@ Guidelines:
         await apiRequest('/roster/assign', {
           method: 'POST',
           body: {
+            roster_id: currentRosterId,
             shift_template_id: shiftId,
             duty_block_id: blockId,
             date: formatDateISO(currentRosterDate),
