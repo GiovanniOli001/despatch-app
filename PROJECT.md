@@ -1,174 +1,206 @@
 # Dispatch App
 
-**Version:** 0.2.0  
+**Version:** 0.5.0  
 **Last Updated:** January 15, 2025  
-**Status:** MVP Development - Dispatch Prototype Integrated
+**Status:** MVP Development
 
 ## Overview
 
 A bus/coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch operations.
 
-Built with:
-- **Frontend:** Single-page vanilla JS app (prototype-based), deployed on Cloudflare Pages
+**Tech Stack:**
+- **Frontend:** Single-page vanilla JS app, deployed on Cloudflare Pages
 - **Backend:** Cloudflare Workers (TypeScript)
 - **Database:** Cloudflare D1 (SQLite)
 
-## Live URLs
-
+**Live URLs:**
 - **Frontend:** https://despatch-app.pages.dev/
 - **API:** https://dispatch-api.oliveri-john001.workers.dev
 
-## Current State
+---
 
-The app is built from the dispatch prototype (`despatch_0.0.0.html`) which has been integrated as the main application. The dispatch screen retains all prototype functionality with fake generated data, while HRM and Vehicles screens now connect to the real API.
-
-### What's Working
-
-| Feature | Status | Data Source |
-|---------|--------|-------------|
-| **Dispatch Screen** | ✅ Full prototype | Fake data (104 drivers, 80 vehicles) |
-| **HRM Screen** | ✅ Full CRUD | Real API |
-| **Vehicles Screen** | ✅ Full CRUD | Real API |
-| **Shift Templates** | 🔲 Placeholder | — |
-| **Roster** | 🔲 Placeholder | — |
-| **Other Screens** | 🔲 Placeholder | — |
-
-### Dispatch Screen Features (from prototype)
-
-- Driver/Vehicle Gantt timeline with multiple visual styles (A-E)
-- Horizontal and vertical view modes
-- Driver-centric and vehicle-centric allocation modes
-- Sidebar with full duty management:
-  - Inline time editing (start/end)
-  - Duty type selection
-  - Vehicle assignment per duty
-  - Pay type selection per duty
-  - Hours tracking with shift totals
-  - Insert duty above/below with arrows
-  - Delete duties
-- Transfer shifts between drivers
-- Unassign shifts back to unassigned pool
-- Bulk assign vehicles to all duties
-- Filter/search/sort on all sections
-- Resizable sections
-- Smart suggestions for nearby jobs
-- Batman AI assistant integration
-
-## Architecture
+## Workflow Summary
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Cloudflare    │     │   Cloudflare    │     │   Cloudflare    │
-│     Pages       │────▶│    Workers      │────▶│       D1        │
-│   (Frontend)    │     │   (API)         │     │   (Database)    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+CREATE SHIFTS → ASSIGN TO ROSTER → VIEW IN DISPATCH
+     │                │                    │
+     ▼                ▼                    ▼
+Shift Templates   Roster (date range)   Daily operations
+with Duty Blocks  with shift entries    Gantt view
 ```
 
-## Core Concepts
+---
 
-### Data Flow (Target Architecture)
+## Data Model
+
+### Complete Hierarchy
+
 ```
-Shift Templates    →    Roster Entries    →    Dispatch View
-(What work looks)       (When + Who)           (Daily operations)
+SHIFT TEMPLATE (e.g. "AM-01 Morning Route")
+│   - code, name, type (regular/charter/school)
+│
+├── DUTY BLOCK "City Run" ← Assignable to a Driver
+│   │   - driver_id: Pre-assigned driver (optional)
+│   │
+│   ├── LINE: 06:00-07:00 | Driving | Bus-101 | STD
+│   ├── LINE: 07:00-07:30 | Break   | —       | UNP  
+│   └── LINE: 07:30-09:00 | Driving | Bus-101 | STD
+│
+└── DUTY BLOCK "Suburbs Run"
+    └── ... more lines
+
+ROSTER (e.g. "Week 1 January 2025")
+│   - code, name, start_date, end_date, status
+│
+├── DAY: 2025-01-06 (Monday)
+│   ├── ROSTER ENTRY: "AM-01 - City Run" → Driver A
+│   │   └── Duties (from template lines)
+│   └── ROSTER ENTRY: "AM-01 - Suburbs Run" → Driver B
+│
+├── DAY: 2025-01-07 (Tuesday)
+│   └── ... more entries
+│
+└── ... more days
+
+OPERATIONS CALENDAR
+│   - View rosters across time periods
+│   └── Links to roster details
 ```
 
-- **Shift Template:** Reusable definition of a shift (start time, end time, duties)
-- **Roster Entry:** A shift scheduled on a specific date, optionally assigned to a driver/vehicle
-- **Dispatch:** The daily view showing all roster entries for today
+### Key Concepts
 
-**Note:** Dispatch currently uses fake generated data. Integration with real roster data is next phase.
+| Concept | Description | Level |
+|---------|-------------|-------|
+| **Shift Template** | Reusable work definition | Template |
+| **Duty Block** | Assignable unit within shift | Template |
+| **Duty Line** | Time segment with vehicle/pay | Template |
+| **Roster** | Date range container | Schedule |
+| **Roster Entry** | Shift assigned to a date/driver | Schedule |
+| **Roster Duty** | Instantiated duty line | Schedule |
+
+---
 
 ## Database Schema
 
-### Core Tables
+### Tables
 
-| Table | Purpose |
-|-------|---------|
-| `tenants` | Multi-tenancy support (single tenant for MVP) |
-| `depots` | Operating locations/bases |
-| `employees` | Drivers and staff |
-| `employee_daily_status` | Leave, availability per day |
-| `vehicles` | Fleet vehicles |
-| `vehicle_daily_status` | Maintenance status per day |
-| `customers` | Charter customers |
-| `routes` | Regular service routes |
-| `duty_types` | Configurable duty types (driving, break, etc.) |
-| `pay_types` | Pay categories (standard, overtime, etc.) |
-| `shift_templates` | Reusable shift definitions |
-| `shift_template_duties` | Duties within a template (offset-based) |
-| `roster_entries` | Scheduled shifts on specific dates |
-| `roster_duties` | Actual duties for a roster entry |
-| `locations` | Pickup/dropoff locations |
-| `audit_log` | Change tracking |
+| Table | Purpose | Status |
+|-------|---------|--------|
+| `tenants` | Multi-tenancy | ✅ |
+| `depots` | Operating locations | ✅ |
+| `employees` | Drivers and staff | ✅ Full CRUD |
+| `vehicles` | Fleet vehicles | ✅ Full CRUD |
+| `duty_types` | Driving, break, etc. | ✅ Seeded |
+| `pay_types` | STD, OT, DT, etc. | ✅ Seeded |
+| `shift_templates` | Shift definitions | ✅ Full CRUD |
+| `shift_template_duty_blocks` | Duty blocks | ✅ |
+| `shift_template_duty_lines` | Time segments | ✅ |
+| `rosters` | Date range containers | ✅ NEW |
+| `roster_entries` | Shifts on dates | ✅ |
+| `roster_duties` | Instantiated duties | ✅ |
+
+### Duty Blocks Schema
+
+```sql
+shift_template_duty_blocks (
+  id, shift_template_id, sequence, name, driver_id
+)
+
+shift_template_duty_lines (
+  id, duty_block_id, sequence, start_time, end_time,
+  duty_type, description, vehicle_id, pay_type
+)
+```
+
+### Rosters Schema
+
+```sql
+rosters (
+  id, tenant_id, code, name, start_date, end_date, status, notes
+)
+
+roster_entries (
+  id, tenant_id, roster_id, shift_template_id, date, name,
+  start_time, end_time, driver_id, vehicle_id, status
+)
+```
+
+---
 
 ## API Endpoints
 
-### Health
-- `GET /api/health` - API status check
+### Employees ✅
+```
+GET/POST   /api/employees
+GET/PUT/DELETE /api/employees/:id
+```
 
-### Employees ✅ Connected to UI
-- `GET /api/employees` - List (with search, status, role filters)
-- `GET /api/employees/:id` - Get single employee
-- `POST /api/employees` - Create employee
-- `PUT /api/employees/:id` - Update employee
-- `DELETE /api/employees/:id` - Soft delete
+### Vehicles ✅
+```
+GET/POST   /api/vehicles
+GET/PUT/DELETE /api/vehicles/:id
+```
 
-### Vehicles ✅ Connected to UI
-- `GET /api/vehicles` - List (with search, capacity filters)
-- `GET /api/vehicles/:id` - Get single vehicle
-- `POST /api/vehicles` - Create vehicle
-- `PUT /api/vehicles/:id` - Update vehicle
-- `DELETE /api/vehicles/:id` - Soft delete
+### Shift Templates ✅
+```
+GET    /api/shifts                    - List
+GET    /api/shifts/:id                - Get with duty_blocks
+POST   /api/shifts                    - Create with duty_blocks
+PUT    /api/shifts/:id                - Update
+DELETE /api/shifts/:id                - Soft delete
+POST   /api/shifts/:id/duplicate      - Copy
+```
 
-### Shift Templates (API ready, UI placeholder)
-- `GET /api/shifts` - List templates
-- `GET /api/shifts/:id` - Get template with duties
-- `POST /api/shifts` - Create template
-- `PUT /api/shifts/:id` - Update template
-- `DELETE /api/shifts/:id` - Soft delete
+### Rosters ✅ NEW
+```
+GET    /api/roster/containers         - List rosters
+GET    /api/roster/containers/:id     - Get roster with entries
+POST   /api/roster/containers         - Create roster
+PUT    /api/roster/containers/:id     - Update roster
+DELETE /api/roster/containers/:id     - Soft delete
+POST   /api/roster/containers/:id/add-shift - Add shift to roster day
+```
 
-### Roster (API ready, UI placeholder)
-- `GET /api/roster` - List entries
-- `GET /api/roster/date/:date` - Get single day with all duties
-- `POST /api/roster` - Create entry
-- `PUT /api/roster/:id` - Update entry
-- `DELETE /api/roster/:id` - Remove entry
+### Roster Entries
+```
+GET    /api/roster                    - List entries
+GET    /api/roster/date/:date         - Get day
+GET    /api/roster/week/:date         - Get week
+POST   /api/roster                    - Create entry
+PUT    /api/roster/:id                - Update
+DELETE /api/roster/:id                - Remove
+```
 
-### Dispatch (API ready, UI uses fake data)
-- `GET /api/dispatch/:date` - Full day data for dispatch view
-
-### Config
-- `GET /api/config/duty-types` - List duty types
-- `GET /api/config/pay-types` - List pay types
+---
 
 ## Frontend Screens
 
 | Screen | Status | Description |
 |--------|--------|-------------|
-| Dispatch | ✅ Full prototype | Gantt timeline, sidebar duty management (fake data) |
-| HRM | ✅ Full CRUD | Employee list, search/filter, add/edit/delete modals |
-| Vehicles | ✅ Full CRUD | Vehicle list, search/filter, add/edit/delete modals |
-| Operations Calendar | 🔲 Placeholder | Week/month view |
-| Charters | 🔲 Placeholder | Charter bookings |
-| Customers | 🔲 Placeholder | Customer management |
-| Shift Templates | 🔲 Placeholder | Template builder |
-| Roster | 🔲 Placeholder | Schedule management |
-| Maintenance | 🔲 Placeholder | Vehicle maintenance |
+| **Dispatch** | ✅ Prototype | Gantt timeline (fake data) |
+| **HRM** | ✅ Full CRUD | Employee management |
+| **Vehicles** | ✅ Full CRUD | Fleet management |
+| **Shift Templates** | ✅ Full CRUD | Duty block editor with driver/vehicle |
+| **Roster** | 🔲 In Progress | Gantt-style shift assignment |
+| **Operations Calendar** | 🔲 Planned | Roster overview |
+
+---
 
 ## Project Structure
 
 ```
-dispatch-app/
-├── PROJECT.md              # This file
+despatch-app/
+├── PROJECT.md
 ├── frontend/
-│   └── index.html          # Single-page app (all HTML/CSS/JS inline, ~9500 lines)
+│   └── index.html
 └── workers/
-    ├── package.json
-    ├── wrangler.toml       # Cloudflare config
+    ├── wrangler.toml
     └── src/
-        ├── index.ts        # Main router
+        ├── index.ts
         ├── db/
-        │   └── schema.sql  # Database schema
+        │   ├── schema.sql
+        │   ├── migration_duty_blocks.sql
+        │   └── migration_rosters.sql
         └── routes/
             ├── employees.ts
             ├── vehicles.ts
@@ -178,59 +210,89 @@ dispatch-app/
             └── config.ts
 ```
 
-**Note:** The frontend is a single `index.html` file containing all HTML, CSS, and JavaScript inline (~9500 lines). This was ported from the dispatch prototype.
+---
 
-## Development Workflow
+## Development Commands
 
-### Making Changes
-
-1. Edit files locally or on GitHub
-2. Push to GitHub:
-   ```
-   git add .
-   git commit -m "description"
-   git push
-   ```
-3. Cloudflare auto-deploys (~30 seconds)
-
-### Database Changes
-
-```bash
-cd workers
-npx wrangler d1 execute dispatch-db --remote --file=src/db/schema.sql
+### Local Repository
 ```
+C:\Users\Giovanni\Downloads\despatch-app
+```
+
+### Deploy API
+```bash
+cd C:\Users\Giovanni\Downloads\despatch-app\workers
+npx wrangler deploy
+```
+
+### Run Migrations
+```bash
+cd C:\Users\Giovanni\Downloads\despatch-app\workers
+npx wrangler d1 execute dispatch-db --remote --file=C:\Users\Giovanni\Downloads\despatch-app\workers\src\db\migration_duty_blocks.sql
+npx wrangler d1 execute dispatch-db --remote --file=C:\Users\Giovanni\Downloads\despatch-app\workers\src\db\migration_rosters.sql
+```
+
+### Push to GitHub
+```bash
+cd C:\Users\Giovanni\Downloads\despatch-app
+git add .
+git commit -m "message"
+git push
+```
+
+---
 
 ## Roadmap
 
-### Phase 1: Core Infrastructure ✅ Complete
-- [x] Cloudflare Workers API deployed
-- [x] D1 database with full schema
-- [x] All API endpoints implemented
-- [x] Dispatch prototype integrated as main app
-- [x] HRM screen with full CRUD
-- [x] Vehicles screen with full CRUD
+### ✅ Phase 1: Core Infrastructure
+- [x] API deployed
+- [x] Database schema
+- [x] Employee CRUD
+- [x] Vehicle CRUD
 
-### Phase 2: Shift Templates & Roster (Next)
-- [ ] Shift Templates screen - create/edit templates with duties
-- [ ] Roster screen - week view with assignments
-- [ ] Create roster entries from templates
+### ✅ Phase 2: Shift Templates
+- [x] Shift template CRUD
+- [x] Duty block structure
+- [x] Driver assignment per block
+- [x] Vehicle/pay per line
 
-### Phase 3: Connect Dispatch to Real Data
-- [ ] Replace fake data generation with API calls
-- [ ] Persist duty changes to database
-- [ ] Real driver/vehicle assignment
+### 🔲 Phase 3: Roster (In Progress)
+- [x] Roster container API
+- [x] Add shift to roster API
+- [ ] Roster list UI
+- [ ] Roster Gantt view
+- [ ] Drag-and-drop assignment
+- [ ] Overlap prevention
+- [ ] Leave placeholder
+- [ ] Public holidays awareness
 
-### Phase 4: Polish & Advanced
-- [ ] Authentication
-- [ ] Charters module
-- [ ] Reporting
+### 🔲 Phase 4: Operations Calendar
+- [ ] Calendar view
+- [ ] Roster assignment to periods
+- [ ] Summary view with links
 
-## Default Data
+### 🔲 Phase 5: Connect Dispatch
+- [ ] Replace fake data with roster data
+- [ ] Real-time editing
 
-The schema seeds these defaults:
+---
 
-**Duty Types:** Driving, Out of Vehicle, Meal Break, Waiting, Charter, Dead Running
+## Architecture Notes
 
-**Pay Types:** Standard (1.0x), Overtime (1.5x), Double Time (2.0x), Penalty Rate (1.25x), Allowance (1.0x), Unpaid (0x)
+### Decimal Time Format
+Times stored as decimal hours: 6.5 = 06:30, 14.25 = 14:15
 
-**Depot:** Main Depot (default)
+### Shift → Roster Flow
+When adding a shift to a roster:
+1. Each duty block becomes a roster_entry
+2. Each duty line becomes a roster_duty
+3. Driver/vehicle assignments carry over or can be overridden
+
+### Overlap Prevention
+API checks for driver conflicts when assigning shifts to roster dates.
+
+---
+
+## Contact
+
+Repository: https://github.com/GiovanniOli001/despatch-app

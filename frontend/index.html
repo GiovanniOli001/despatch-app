@@ -2960,6 +2960,183 @@
       color: var(--text-muted);
     }
     
+    /* Roster Gantt styles */
+    .roster-gantt {
+      min-width: 1200px;
+    }
+    
+    .roster-gantt-header {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    
+    .roster-gantt-driver-col {
+      width: 180px;
+      min-width: 180px;
+      padding: 10px 12px;
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      border-right: 1px solid var(--border);
+    }
+    
+    .roster-gantt-timeline {
+      flex: 1;
+      display: flex;
+      position: relative;
+    }
+    
+    .roster-gantt-hour {
+      flex: 1;
+      text-align: center;
+      padding: 10px 0;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-right: 1px solid var(--border-light);
+    }
+    
+    .roster-gantt-hour:last-child {
+      border-right: none;
+    }
+    
+    .roster-gantt-row {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      min-height: 50px;
+    }
+    
+    .roster-gantt-row:hover {
+      background: var(--bg-secondary);
+    }
+    
+    .roster-gantt-row.on-leave {
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(239, 68, 68, 0.05) 10px,
+        rgba(239, 68, 68, 0.05) 20px
+      );
+    }
+    
+    .roster-gantt-driver {
+      width: 180px;
+      min-width: 180px;
+      padding: 10px 12px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    
+    .roster-gantt-driver-name {
+      font-weight: 500;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    
+    .roster-gantt-driver-id {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    .roster-gantt-driver-leave {
+      font-size: 10px;
+      color: var(--accent-red);
+      margin-top: 2px;
+    }
+    
+    .roster-gantt-blocks {
+      flex: 1;
+      position: relative;
+      min-height: 50px;
+    }
+    
+    .roster-gantt-block {
+      position: absolute;
+      top: 6px;
+      bottom: 6px;
+      background: var(--accent-blue);
+      border-radius: 4px;
+      padding: 4px 8px;
+      color: white;
+      font-size: 11px;
+      cursor: pointer;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      transition: transform 0.1s, box-shadow 0.1s;
+      z-index: 1;
+    }
+    
+    .roster-gantt-block:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      z-index: 5;
+    }
+    
+    .roster-gantt-block.dragging {
+      opacity: 0.7;
+      z-index: 100;
+    }
+    
+    .roster-gantt-block-name {
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .roster-gantt-block-time {
+      font-size: 10px;
+      opacity: 0.9;
+    }
+    
+    .roster-gantt-block-vehicle {
+      font-size: 10px;
+      opacity: 0.8;
+    }
+    
+    .roster-gantt-grid-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--border-light);
+      pointer-events: none;
+    }
+    
+    .roster-gantt-drop-zone {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: transparent;
+      transition: background 0.2s;
+    }
+    
+    .roster-gantt-drop-zone.drag-over {
+      background: rgba(59, 130, 246, 0.1);
+    }
+    
+    /* Roster status badges */
+    .roster-status {
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .roster-status.draft { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .roster-status.published { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+    .roster-status.archived { background: rgba(107, 114, 128, 0.2); color: #6b7280; }
+    
     textarea.form-input {
       resize: vertical;
       min-height: 60px;
@@ -3648,33 +3825,65 @@
       
       <!-- Roster Screen -->
       <div class="screen" id="screen-roster" style="display: none;">
-        <div class="screen-header-bar">
-          <h2>Roster</h2>
-          <div style="display: flex; gap: 8px;">
-            <button class="btn-secondary" onclick="changeRosterWeek(-1)">← Prev Week</button>
-            <span id="rosterWeekLabel" style="padding: 8px 16px; color: var(--text-primary);">Week of Jan 13, 2025</span>
-            <button class="btn-secondary" onclick="changeRosterWeek(1)">Next Week →</button>
-            <button class="btn-primary" onclick="showAddRosterEntryModal()">+ Add Entry</button>
+        <!-- Roster List View -->
+        <div id="rosterListView">
+          <div class="screen-header-bar">
+            <h2>Rosters</h2>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="rosterSearchInput" placeholder="Search rosters..." class="search-input" style="width: 200px;" onkeyup="filterRosters()">
+              <button class="btn-primary" onclick="showAddRosterModal()">+ New Roster</button>
+            </div>
+          </div>
+          <div class="screen-table-container">
+            <table class="screen-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Date Range</th>
+                  <th>Status</th>
+                  <th>Entries</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rosterListTableBody">
+                <tr><td colspan="6" class="loading-cell">Loading rosters...</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
-        <div class="screen-table-container">
-          <table class="screen-table">
-            <thead>
-              <tr>
-                <th>Shift</th>
-                <th>Mon</th>
-                <th>Tue</th>
-                <th>Wed</th>
-                <th>Thu</th>
-                <th>Fri</th>
-                <th>Sat</th>
-                <th>Sun</th>
-              </tr>
-            </thead>
-            <tbody id="rosterTableBody">
-              <tr><td colspan="8" class="loading-cell">Loading roster...</td></tr>
-            </tbody>
-          </table>
+        
+        <!-- Roster Detail/Gantt View -->
+        <div id="rosterDetailView" style="display: none;">
+          <div class="screen-header-bar">
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <button class="btn-secondary" onclick="backToRosterList()">← Back</button>
+              <h2 id="rosterDetailTitle">Roster Detail</h2>
+              <span id="rosterDetailDates" style="color: var(--text-muted); font-size: 13px;"></span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn-secondary" onclick="changeRosterDay(-1)">← Prev Day</button>
+              <input type="date" id="rosterDayPicker" onchange="goToRosterDay(this.value)" style="background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 10px; border-radius: 4px;">
+              <button class="btn-secondary" onclick="changeRosterDay(1)">Next Day →</button>
+              <button class="btn-primary" onclick="showAddShiftToRosterModal()">+ Add Shift</button>
+            </div>
+          </div>
+          
+          <!-- Day Info Bar -->
+          <div id="rosterDayInfoBar" style="padding: 12px 20px; background: var(--bg-secondary); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <span id="rosterDayLabel" style="font-size: 16px; font-weight: 600; color: var(--text-primary);"></span>
+              <span id="rosterDayHoliday" style="margin-left: 12px; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: var(--accent-orange); color: white; display: none;"></span>
+            </div>
+            <div id="rosterDayStats" style="font-size: 12px; color: var(--text-muted);"></div>
+          </div>
+          
+          <!-- Gantt Container -->
+          <div id="rosterGanttContainer" style="flex: 1; overflow: auto; padding: 16px;">
+            <div id="rosterGantt" class="roster-gantt">
+              <!-- Gantt content rendered here -->
+            </div>
+          </div>
         </div>
       </div>
       
@@ -10620,69 +10829,524 @@ Guidelines:
       return date.toISOString().split('T')[0];
     }
     
-    async function loadRoster() {
-      const tbody = document.getElementById('rosterTableBody');
-      const weekLabel = document.getElementById('rosterWeekLabel');
-      
-      weekLabel.textContent = `Week of ${formatDateShort(rosterWeekStart)}`;
-      tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading roster...</td></tr>';
+    // ============================================
+    // ROSTER CRUD
+    // ============================================
+    let rostersData = [];
+    let currentRoster = null;
+    let currentRosterDate = null;
+    let rosterDrivers = [];
+    let rosterShifts = [];
+    let rosterEntries = [];
+    let australianHolidays = {};
+    
+    // Gantt config
+    const GANTT_START_HOUR = 4;  // 4 AM
+    const GANTT_END_HOUR = 24;   // Midnight
+    const GANTT_HOURS = GANTT_END_HOUR - GANTT_START_HOUR;
+    
+    async function loadRosters() {
+      const tbody = document.getElementById('rosterListTableBody');
+      tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Loading rosters...</td></tr>';
       
       try {
-        const result = await apiRequest(`/roster/week/${formatDateISO(rosterWeekStart)}`);
-        rosterData = result.data || [];
-        renderRosterTable();
+        const result = await apiRequest('/roster/containers');
+        rostersData = result.data || [];
+        renderRosterList();
       } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${err.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" class="loading-cell">Error: ${err.message}</td></tr>`;
       }
     }
     
-    function renderRosterTable() {
-      const tbody = document.getElementById('rosterTableBody');
+    function renderRosterList() {
+      const tbody = document.getElementById('rosterListTableBody');
+      const search = (document.getElementById('rosterSearchInput')?.value || '').toLowerCase();
       
-      if (!rosterData || rosterData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">No roster entries for this week. Click "+ Add Entry" to create one.</td></tr>';
+      let filtered = rostersData;
+      if (search) {
+        filtered = rostersData.filter(r => 
+          r.code.toLowerCase().includes(search) || 
+          r.name.toLowerCase().includes(search)
+        );
+      }
+      
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No rosters found. Click "+ New Roster" to create one.</td></tr>';
         return;
       }
       
-      // Group entries by shift template
-      const byShift = new Map();
-      rosterData.forEach(entry => {
-        const key = entry.shift_template_id || entry.name || 'Ad-hoc';
-        if (!byShift.has(key)) {
-          byShift.set(key, { name: entry.name, entries: {} });
-        }
-        const dayOfWeek = new Date(entry.date).getDay();
-        const dayIdx = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Mon=0, Sun=6
-        byShift.get(key).entries[dayIdx] = entry;
-      });
+      tbody.innerHTML = filtered.map(r => `
+        <tr>
+          <td><strong>${r.code}</strong></td>
+          <td>${r.name}</td>
+          <td>${formatDateShort(new Date(r.start_date))} - ${formatDateShort(new Date(r.end_date))}</td>
+          <td><span class="roster-status ${r.status}">${r.status}</span></td>
+          <td>${r.entry_count || 0}</td>
+          <td>
+            <button class="action-btn" onclick="openRoster('${r.id}')" title="View">📋</button>
+            <button class="action-btn" onclick="editRoster('${r.id}')" title="Edit">✏️</button>
+            <button class="action-btn" onclick="deleteRoster('${r.id}')" title="Delete">🗑️</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+    
+    function filterRosters() {
+      renderRosterList();
+    }
+    
+    async function openRoster(id) {
+      try {
+        const result = await apiRequest(`/roster/containers/${id}`);
+        currentRoster = result.data;
+        rosterDrivers = currentRoster.drivers || [];
+        rosterEntries = currentRoster.entries || [];
+        
+        // Load shifts for the add shift modal
+        const shiftsResult = await apiRequest('/shifts');
+        rosterShifts = shiftsResult.data || [];
+        
+        // Load Australian holidays
+        await loadAustralianHolidays();
+        
+        // Set initial date to roster start
+        currentRosterDate = new Date(currentRoster.start_date);
+        
+        // Update UI
+        document.getElementById('rosterDetailTitle').textContent = `${currentRoster.code} - ${currentRoster.name}`;
+        document.getElementById('rosterDetailDates').textContent = 
+          `${formatDateShort(new Date(currentRoster.start_date))} to ${formatDateShort(new Date(currentRoster.end_date))}`;
+        
+        // Show detail view
+        document.getElementById('rosterListView').style.display = 'none';
+        document.getElementById('rosterDetailView').style.display = 'flex';
+        document.getElementById('rosterDetailView').style.flexDirection = 'column';
+        document.getElementById('rosterDetailView').style.height = '100%';
+        
+        renderRosterGantt();
+      } catch (err) {
+        showToast(err.message || 'Failed to load roster', 'error');
+      }
+    }
+    
+    function backToRosterList() {
+      document.getElementById('rosterDetailView').style.display = 'none';
+      document.getElementById('rosterListView').style.display = 'block';
+      currentRoster = null;
+      loadRosters();
+    }
+    
+    async function loadAustralianHolidays() {
+      // Australian public holidays for current year
+      // TODO: Use API for dynamic holidays based on user location
+      const year = new Date().getFullYear();
+      australianHolidays = {
+        [`${year}-01-01`]: "New Year's Day",
+        [`${year}-01-26`]: "Australia Day",
+        [`${year}-04-18`]: "Good Friday",
+        [`${year}-04-21`]: "Easter Monday",
+        [`${year}-04-25`]: "ANZAC Day",
+        [`${year}-06-09`]: "Queen's Birthday (QLD)",
+        [`${year}-12-25`]: "Christmas Day",
+        [`${year}-12-26`]: "Boxing Day",
+      };
+      // Add 2025 dates
+      australianHolidays['2025-01-01'] = "New Year's Day";
+      australianHolidays['2025-01-27'] = "Australia Day";
+      australianHolidays['2025-04-18'] = "Good Friday";
+      australianHolidays['2025-04-21'] = "Easter Monday";
+      australianHolidays['2025-04-25'] = "ANZAC Day";
+      australianHolidays['2025-06-09'] = "Queen's Birthday (QLD)";
+      australianHolidays['2025-12-25'] = "Christmas Day";
+      australianHolidays['2025-12-26'] = "Boxing Day";
+    }
+    
+    function changeRosterDay(delta) {
+      currentRosterDate.setDate(currentRosterDate.getDate() + delta);
       
-      tbody.innerHTML = Array.from(byShift.values()).map(shift => {
-        let cells = `<td>${shift.name}</td>`;
-        for (let i = 0; i < 7; i++) {
-          const entry = shift.entries[i];
-          if (entry) {
-            const driver = entry.driver_name || '—';
-            const vehicle = entry.vehicle_number || '—';
-            cells += `<td class="roster-cell filled">
-              <div class="roster-cell-time">${formatDecimalTime(entry.start_time)}-${formatDecimalTime(entry.end_time)}</div>
-              <div class="roster-cell-driver">${driver}</div>
-              <div class="roster-cell-vehicle">${vehicle}</div>
-            </td>`;
-          } else {
-            cells += `<td class="roster-cell empty">—</td>`;
-          }
+      // Clamp to roster range
+      const start = new Date(currentRoster.start_date);
+      const end = new Date(currentRoster.end_date);
+      if (currentRosterDate < start) currentRosterDate = start;
+      if (currentRosterDate > end) currentRosterDate = end;
+      
+      renderRosterGantt();
+    }
+    
+    function goToRosterDay(dateStr) {
+      currentRosterDate = new Date(dateStr);
+      renderRosterGantt();
+    }
+    
+    function renderRosterGantt() {
+      const container = document.getElementById('rosterGantt');
+      const dateStr = formatDateISO(currentRosterDate);
+      
+      // Update date picker
+      document.getElementById('rosterDayPicker').value = dateStr;
+      
+      // Update day label
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const dayLabel = document.getElementById('rosterDayLabel');
+      dayLabel.textContent = `${dayNames[currentRosterDate.getDay()]}, ${formatDateShort(currentRosterDate)}`;
+      
+      // Check for holiday
+      const holidayBadge = document.getElementById('rosterDayHoliday');
+      const holiday = australianHolidays[dateStr];
+      if (holiday) {
+        holidayBadge.textContent = holiday;
+        holidayBadge.style.display = 'inline';
+      } else {
+        holidayBadge.style.display = 'none';
+      }
+      
+      // Get entries for this date
+      const dayEntries = rosterEntries.filter(e => e.date === dateStr);
+      
+      // Stats
+      const statsEl = document.getElementById('rosterDayStats');
+      statsEl.textContent = `${dayEntries.length} shifts assigned | ${rosterDrivers.length} drivers`;
+      
+      // Build Gantt header
+      let headerHtml = '<div class="roster-gantt-header">';
+      headerHtml += '<div class="roster-gantt-driver-col">Driver</div>';
+      headerHtml += '<div class="roster-gantt-timeline">';
+      for (let h = GANTT_START_HOUR; h < GANTT_END_HOUR; h++) {
+        const label = h < 10 ? `0${h}:00` : `${h}:00`;
+        headerHtml += `<div class="roster-gantt-hour">${label}</div>`;
+      }
+      headerHtml += '</div></div>';
+      
+      // Build rows for each driver
+      let rowsHtml = '';
+      for (const driver of rosterDrivers) {
+        const driverEntries = dayEntries.filter(e => e.driver_id === driver.id);
+        const isOnLeave = false; // TODO: Check employee_daily_status
+        
+        rowsHtml += `<div class="roster-gantt-row ${isOnLeave ? 'on-leave' : ''}" data-driver-id="${driver.id}">`;
+        rowsHtml += `<div class="roster-gantt-driver">`;
+        rowsHtml += `<div class="roster-gantt-driver-name">${driver.first_name} ${driver.last_name}</div>`;
+        rowsHtml += `<div class="roster-gantt-driver-id">${driver.employee_number}</div>`;
+        if (isOnLeave) {
+          rowsHtml += `<div class="roster-gantt-driver-leave">ON LEAVE</div>`;
         }
-        return `<tr>${cells}</tr>`;
-      }).join('');
+        rowsHtml += `</div>`;
+        
+        rowsHtml += `<div class="roster-gantt-blocks" data-driver-id="${driver.id}">`;
+        
+        // Grid lines for each hour
+        for (let h = 0; h < GANTT_HOURS; h++) {
+          const leftPct = (h / GANTT_HOURS) * 100;
+          rowsHtml += `<div class="roster-gantt-grid-line" style="left: ${leftPct}%;"></div>`;
+        }
+        
+        // Render blocks for this driver
+        for (const entry of driverEntries) {
+          const startPct = ((entry.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
+          const widthPct = ((entry.end_time - entry.start_time) / GANTT_HOURS) * 100;
+          
+          // Clamp to visible range
+          if (startPct < 0 || startPct >= 100) continue;
+          
+          const color = getShiftColor(entry.shift_type || 'regular');
+          
+          rowsHtml += `<div class="roster-gantt-block" 
+            style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: ${color};"
+            draggable="true"
+            data-entry-id="${entry.id}"
+            onclick="showRosterEntryDetail('${entry.id}')"
+            ondragstart="onRosterBlockDragStart(event, '${entry.id}')"
+          >`;
+          rowsHtml += `<div class="roster-gantt-block-name">${entry.shift_code || entry.name}</div>`;
+          rowsHtml += `<div class="roster-gantt-block-time">${formatDecimalTime(entry.start_time)} - ${formatDecimalTime(entry.end_time)}</div>`;
+          if (entry.vehicle_number) {
+            rowsHtml += `<div class="roster-gantt-block-vehicle">${entry.vehicle_number}</div>`;
+          }
+          rowsHtml += `</div>`;
+        }
+        
+        rowsHtml += `</div></div>`;
+      }
+      
+      // Add unassigned row
+      const unassignedEntries = dayEntries.filter(e => !e.driver_id);
+      if (unassignedEntries.length > 0 || true) { // Always show unassigned row
+        rowsHtml += `<div class="roster-gantt-row" data-driver-id="">`;
+        rowsHtml += `<div class="roster-gantt-driver" style="background: var(--bg-tertiary);">`;
+        rowsHtml += `<div class="roster-gantt-driver-name" style="color: var(--text-muted);">Unassigned</div>`;
+        rowsHtml += `<div class="roster-gantt-driver-id">${unassignedEntries.length} shifts</div>`;
+        rowsHtml += `</div>`;
+        rowsHtml += `<div class="roster-gantt-blocks" data-driver-id="">`;
+        
+        for (let h = 0; h < GANTT_HOURS; h++) {
+          const leftPct = (h / GANTT_HOURS) * 100;
+          rowsHtml += `<div class="roster-gantt-grid-line" style="left: ${leftPct}%;"></div>`;
+        }
+        
+        for (const entry of unassignedEntries) {
+          const startPct = ((entry.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
+          const widthPct = ((entry.end_time - entry.start_time) / GANTT_HOURS) * 100;
+          if (startPct < 0 || startPct >= 100) continue;
+          
+          rowsHtml += `<div class="roster-gantt-block" 
+            style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: #6b7280;"
+            draggable="true"
+            data-entry-id="${entry.id}"
+            onclick="showRosterEntryDetail('${entry.id}')"
+            ondragstart="onRosterBlockDragStart(event, '${entry.id}')"
+          >`;
+          rowsHtml += `<div class="roster-gantt-block-name">${entry.shift_code || entry.name}</div>`;
+          rowsHtml += `<div class="roster-gantt-block-time">${formatDecimalTime(entry.start_time)} - ${formatDecimalTime(entry.end_time)}</div>`;
+          rowsHtml += `</div>`;
+        }
+        
+        rowsHtml += `</div></div>`;
+      }
+      
+      container.innerHTML = headerHtml + rowsHtml;
+      
+      // Setup drop zones
+      setupRosterDragDrop();
+    }
+    
+    function getShiftColor(shiftType) {
+      const colors = {
+        regular: '#3b82f6',
+        charter: '#a855f7',
+        school: '#22c55e',
+      };
+      return colors[shiftType] || '#3b82f6';
+    }
+    
+    function setupRosterDragDrop() {
+      const blockContainers = document.querySelectorAll('.roster-gantt-blocks');
+      
+      blockContainers.forEach(container => {
+        container.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          container.classList.add('drag-over');
+        });
+        
+        container.addEventListener('dragleave', () => {
+          container.classList.remove('drag-over');
+        });
+        
+        container.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          container.classList.remove('drag-over');
+          
+          const entryId = e.dataTransfer.getData('text/plain');
+          const newDriverId = container.dataset.driverId || null;
+          
+          // Find the entry
+          const entry = rosterEntries.find(en => en.id === entryId);
+          if (!entry) return;
+          
+          // Check for overlap if assigning to a driver
+          if (newDriverId) {
+            const driverEntries = rosterEntries.filter(en => 
+              en.driver_id === newDriverId && 
+              en.id !== entryId && 
+              en.date === entry.date
+            );
+            
+            const hasOverlap = driverEntries.some(other => {
+              return entry.start_time < other.end_time && entry.end_time > other.start_time;
+            });
+            
+            if (hasOverlap) {
+              showToast('Cannot assign - overlaps with existing shift', 'error');
+              return;
+            }
+          }
+          
+          // Update via API
+          try {
+            await apiRequest(`/roster/${entryId}/assign`, 'PUT', {
+              driver_id: newDriverId
+            });
+            
+            // Update local data
+            entry.driver_id = newDriverId;
+            const driver = rosterDrivers.find(d => d.id === newDriverId);
+            entry.driver_name = driver ? `${driver.first_name} ${driver.last_name}` : null;
+            
+            renderRosterGantt();
+            showToast('Shift reassigned');
+          } catch (err) {
+            showToast(err.message || 'Failed to reassign', 'error');
+          }
+        });
+      });
+    }
+    
+    function onRosterBlockDragStart(e, entryId) {
+      e.dataTransfer.setData('text/plain', entryId);
+      e.target.classList.add('dragging');
+      
+      setTimeout(() => {
+        e.target.classList.remove('dragging');
+      }, 100);
+    }
+    
+    function showRosterEntryDetail(entryId) {
+      const entry = rosterEntries.find(e => e.id === entryId);
+      if (!entry) return;
+      
+      // For now, show a toast with info. Later: open detail modal
+      showToast(`${entry.name}: ${formatDecimalTime(entry.start_time)}-${formatDecimalTime(entry.end_time)}`);
+    }
+    
+    // ============================================
+    // ROSTER MODALS
+    // ============================================
+    
+    function showAddRosterModal() {
+      document.getElementById('rosterModalTitle').textContent = 'New Roster';
+      document.getElementById('rosterForm').reset();
+      
+      // Default dates: next Monday to Sunday
+      const today = new Date();
+      const daysUntilMonday = (8 - today.getDay()) % 7 || 7;
+      const nextMonday = new Date(today);
+      nextMonday.setDate(today.getDate() + daysUntilMonday);
+      const nextSunday = new Date(nextMonday);
+      nextSunday.setDate(nextMonday.getDate() + 6);
+      
+      document.getElementById('rosterStartDate').value = formatDateISO(nextMonday);
+      document.getElementById('rosterEndDate').value = formatDateISO(nextSunday);
+      
+      editingRosterId = null;
+      document.getElementById('rosterModalOverlay').classList.add('show');
+    }
+    
+    async function editRoster(id) {
+      const roster = rostersData.find(r => r.id === id);
+      if (!roster) return;
+      
+      document.getElementById('rosterModalTitle').textContent = 'Edit Roster';
+      document.getElementById('rosterCode').value = roster.code;
+      document.getElementById('rosterName').value = roster.name;
+      document.getElementById('rosterStartDate').value = roster.start_date;
+      document.getElementById('rosterEndDate').value = roster.end_date;
+      document.getElementById('rosterStatus').value = roster.status || 'draft';
+      document.getElementById('rosterNotes').value = roster.notes || '';
+      
+      editingRosterId = id;
+      document.getElementById('rosterModalOverlay').classList.add('show');
+    }
+    
+    function closeRosterModal() {
+      document.getElementById('rosterModalOverlay').classList.remove('show');
+      editingRosterId = null;
+    }
+    
+    async function saveRoster() {
+      const data = {
+        code: document.getElementById('rosterCode').value,
+        name: document.getElementById('rosterName').value,
+        start_date: document.getElementById('rosterStartDate').value,
+        end_date: document.getElementById('rosterEndDate').value,
+        status: document.getElementById('rosterStatus').value,
+        notes: document.getElementById('rosterNotes').value || null,
+      };
+      
+      if (!data.code || !data.name || !data.start_date || !data.end_date) {
+        showToast('Please fill in all required fields', 'error');
+        return;
+      }
+      
+      try {
+        if (editingRosterId) {
+          await apiRequest(`/roster/containers/${editingRosterId}`, 'PUT', data);
+          showToast('Roster updated');
+        } else {
+          await apiRequest('/roster/containers', 'POST', data);
+          showToast('Roster created');
+        }
+        closeRosterModal();
+        loadRosters();
+      } catch (err) {
+        showToast(err.message || 'Failed to save roster', 'error');
+      }
+    }
+    
+    async function deleteRoster(id) {
+      if (!confirm('Delete this roster and all its entries?')) return;
+      
+      try {
+        await apiRequest(`/roster/containers/${id}`, 'DELETE');
+        showToast('Roster deleted');
+        loadRosters();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    }
+    
+    // Add Shift to Roster Modal
+    function showAddShiftToRosterModal() {
+      const select = document.getElementById('addShiftSelect');
+      select.innerHTML = '<option value="">Select a shift template...</option>' +
+        rosterShifts.map(s => `<option value="${s.id}">${s.code} - ${s.name}</option>`).join('');
+      
+      document.getElementById('addShiftDate').value = formatDateISO(currentRosterDate);
+      
+      // Populate driver override dropdown
+      const driverSelect = document.getElementById('addShiftDriver');
+      driverSelect.innerHTML = '<option value="">— Use template defaults —</option>' +
+        rosterDrivers.map(d => `<option value="${d.id}">${d.first_name} ${d.last_name}</option>`).join('');
+      
+      document.getElementById('addShiftModalOverlay').classList.add('show');
+    }
+    
+    function closeAddShiftModal() {
+      document.getElementById('addShiftModalOverlay').classList.remove('show');
+    }
+    
+    async function addShiftToRoster() {
+      const shiftId = document.getElementById('addShiftSelect').value;
+      const date = document.getElementById('addShiftDate').value;
+      const driverId = document.getElementById('addShiftDriver').value || null;
+      
+      if (!shiftId) {
+        showToast('Please select a shift template', 'error');
+        return;
+      }
+      
+      try {
+        const result = await apiRequest(`/roster/containers/${currentRoster.id}/add-shift`, 'POST', {
+          shift_template_id: shiftId,
+          date: date,
+          driver_id: driverId
+        });
+        
+        showToast(`Added ${result.data.entries_created} duty block(s) to roster`);
+        closeAddShiftModal();
+        
+        // Reload roster data
+        await openRoster(currentRoster.id);
+      } catch (err) {
+        showToast(err.message || 'Failed to add shift', 'error');
+      }
+    }
+    
+    let editingRosterId = null;
+    
+    // Legacy function redirects
+    async function loadRoster() {
+      await loadRosters();
+    }
+    
+    function renderRosterTable() {
+      renderRosterList();
     }
     
     function changeRosterWeek(delta) {
-      rosterWeekStart.setDate(rosterWeekStart.getDate() + (delta * 7));
-      loadRoster();
+      // Legacy - now handled by day navigation
     }
     
     function showAddRosterEntryModal() {
-      showToast('Roster entry creation coming soon');
+      showAddRosterModal();
     }
     
     // ============================================
@@ -10876,6 +11540,93 @@ Guidelines:
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeShiftModal()">Cancel</button>
         <button class="btn-primary" onclick="saveShift()">Save</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Roster Modal -->
+  <div class="crud-modal-overlay" id="rosterModalOverlay">
+    <div class="crud-modal">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="rosterModalTitle">New Roster</span>
+        <button class="crud-modal-close" onclick="closeRosterModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="rosterForm" onsubmit="event.preventDefault(); saveRoster();">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Code *</label>
+              <input type="text" id="rosterCode" class="form-input" required placeholder="e.g. WK01-JAN25">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Name *</label>
+              <input type="text" id="rosterName" class="form-input" required placeholder="e.g. Week 1 January 2025">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Start Date *</label>
+              <input type="date" id="rosterStartDate" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">End Date *</label>
+              <input type="date" id="rosterEndDate" class="form-input" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="rosterStatus" class="form-input">
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <textarea id="rosterNotes" class="form-input" rows="2" placeholder="Optional notes..."></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closeRosterModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveRoster()">Save Roster</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Add Shift to Roster Modal -->
+  <div class="crud-modal-overlay" id="addShiftModalOverlay">
+    <div class="crud-modal">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title">Add Shift to Roster</span>
+        <button class="crud-modal-close" onclick="closeAddShiftModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="addShiftForm" onsubmit="event.preventDefault(); addShiftToRoster();">
+          <div class="form-group">
+            <label class="form-label">Shift Template *</label>
+            <select id="addShiftSelect" class="form-input" required>
+              <option value="">Select a shift template...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date *</label>
+            <input type="date" id="addShiftDate" class="form-input" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Driver Override</label>
+            <select id="addShiftDriver" class="form-input">
+              <option value="">— Use template defaults —</option>
+            </select>
+            <small style="color: var(--text-muted); font-size: 11px;">Override the driver from the template, or leave blank to use template assignments</small>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closeAddShiftModal()">Cancel</button>
+        <button class="btn-primary" onclick="addShiftToRoster()">Add to Roster</button>
       </div>
     </div>
   </div>

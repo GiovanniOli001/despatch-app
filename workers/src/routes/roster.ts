@@ -2,15 +2,34 @@
  * Roster API Routes
  * /api/roster/*
  * 
- * Core roster functionality:
- * - Schedule shifts to dates
- * - Assign drivers/vehicles
- * - Copy roster entries (day, week, pattern)
+ * Two levels:
+ * 1. Rosters (containers with date ranges)
+ * 2. Roster Entries (shifts assigned to dates within a roster)
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
 
+// ============================================
+// INTERFACES
+// ============================================
+
+interface RosterInput {
+  code: string;
+  name: string;
+  start_date: string;         // YYYY-MM-DD
+  end_date: string;           // YYYY-MM-DD
+  status?: string;            // 'draft', 'published', 'archived'
+  notes?: string;
+}
+
+interface AddShiftToRosterInput {
+  shift_template_id: string;
+  date: string;               // YYYY-MM-DD
+  driver_id?: string;         // Override template driver
+}
+
 interface RosterEntryInput {
+  roster_id?: string;
   shift_template_id?: string;
   date: string;
   name: string;
@@ -41,12 +60,12 @@ interface RosterDutyInput {
 interface CopyRosterInput {
   source_date: string;
   target_date: string;
-  include_assignments?: boolean; // Copy driver/vehicle assignments
+  include_assignments?: boolean;
 }
 
 interface CopyWeekInput {
-  source_week_start: string; // Monday of source week
-  target_week_start: string; // Monday of target week
+  source_week_start: string;
+  target_week_start: string;
   include_assignments?: boolean;
 }
 
@@ -65,6 +84,50 @@ export async function handleRoster(
   const firstSegment = segments[0];
   const secondSegment = segments[1];
   const thirdSegment = segments[2];
+
+  // ============================================
+  // ROSTER CONTAINER ROUTES
+  // ============================================
+
+  // GET /api/roster/containers - List all rosters
+  if (method === 'GET' && firstSegment === 'containers') {
+    return listRosters(env, new URL(request.url).searchParams);
+  }
+
+  // GET /api/roster/containers/:id - Get roster with all entries
+  if (method === 'GET' && firstSegment === 'containers' && secondSegment) {
+    return getRoster(env, secondSegment);
+  }
+
+  // POST /api/roster/containers - Create roster
+  if (method === 'POST' && firstSegment === 'containers' && !secondSegment) {
+    const body = await parseBody<RosterInput>(request);
+    if (!body) return error('Invalid request body');
+    return createRoster(env, body);
+  }
+
+  // PUT /api/roster/containers/:id - Update roster
+  if (method === 'PUT' && firstSegment === 'containers' && secondSegment) {
+    const body = await parseBody<Partial<RosterInput>>(request);
+    if (!body) return error('Invalid request body');
+    return updateRoster(env, secondSegment, body);
+  }
+
+  // DELETE /api/roster/containers/:id - Delete roster
+  if (method === 'DELETE' && firstSegment === 'containers' && secondSegment) {
+    return deleteRoster(env, secondSegment);
+  }
+
+  // POST /api/roster/containers/:id/add-shift - Add shift template to roster
+  if (method === 'POST' && firstSegment === 'containers' && secondSegment && thirdSegment === 'add-shift') {
+    const body = await parseBody<AddShiftToRosterInput>(request);
+    if (!body) return error('Invalid request body');
+    return addShiftToRoster(env, secondSegment, body);
+  }
+
+  // ============================================
+  // ROSTER ENTRY ROUTES (existing)
+  // ============================================
 
   // GET /api/roster?date=YYYY-MM-DD or date_from & date_to
   if (method === 'GET' && !firstSegment) {
@@ -158,6 +221,305 @@ export async function handleRoster(
   }
 
   return error('Method not allowed', 405);
+}
+
+// ============================================
+// ROSTER CONTAINER FUNCTIONS
+// ============================================
+
+async function listRosters(env: Env, params: URLSearchParams): Promise<Response> {
+  const status = params.get('status');
+  const search = params.get('search');
+  
+  let query = `SELECT r.*, 
+    (SELECT COUNT(*) FROM roster_entries WHERE roster_id = r.id AND deleted_at IS NULL) as entry_count
+    FROM rosters r
+    WHERE r.tenant_id = ? AND r.deleted_at IS NULL`;
+  const bindings: (string | number)[] = [TENANT_ID];
+  
+  if (status) {
+    query += ` AND r.status = ?`;
+    bindings.push(status);
+  }
+  
+  if (search) {
+    query += ` AND (r.code LIKE ? OR r.name LIKE ?)`;
+    const searchPattern = `%${search}%`;
+    bindings.push(searchPattern, searchPattern);
+  }
+  
+  query += ` ORDER BY r.start_date DESC`;
+  
+  const result = await env.DB.prepare(query).bind(...bindings).all();
+  return json({ data: result.results });
+}
+
+async function getRoster(env: Env, id: string): Promise<Response> {
+  const roster = await env.DB.prepare(`
+    SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(id, TENANT_ID).first();
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  // Get all entries for this roster grouped by date
+  const entries = await env.DB.prepare(`
+    SELECT re.*, 
+      e.first_name || ' ' || e.last_name as driver_name,
+      e.employee_number as driver_number,
+      v.fleet_number as vehicle_number,
+      st.code as shift_code,
+      st.name as shift_name
+    FROM roster_entries re
+    LEFT JOIN employees e ON re.driver_id = e.id
+    LEFT JOIN vehicles v ON re.vehicle_id = v.id
+    LEFT JOIN shift_templates st ON re.shift_template_id = st.id
+    WHERE re.roster_id = ? AND re.deleted_at IS NULL
+    ORDER BY re.date, re.start_time
+  `).bind(id).all();
+  
+  // Get duties for all entries
+  const entryIds = entries.results.map((e: Record<string, unknown>) => e.id);
+  let dutiesByEntry = new Map<string, unknown[]>();
+  
+  if (entryIds.length > 0) {
+    const placeholders = entryIds.map(() => '?').join(',');
+    const duties = await env.DB.prepare(`
+      SELECT rd.*
+      FROM roster_duties rd
+      WHERE rd.roster_entry_id IN (${placeholders})
+      ORDER BY rd.roster_entry_id, rd.sequence
+    `).bind(...entryIds).all();
+    
+    for (const duty of duties.results) {
+      const entryId = (duty as Record<string, unknown>).roster_entry_id as string;
+      if (!dutiesByEntry.has(entryId)) {
+        dutiesByEntry.set(entryId, []);
+      }
+      dutiesByEntry.get(entryId)!.push(duty);
+    }
+  }
+  
+  // Attach duties to entries
+  const entriesWithDuties = entries.results.map((entry: Record<string, unknown>) => ({
+    ...entry,
+    duties: dutiesByEntry.get(entry.id as string) || [],
+  }));
+  
+  // Group entries by date
+  const entriesByDate: Record<string, unknown[]> = {};
+  for (const entry of entriesWithDuties) {
+    const date = entry.date as string;
+    if (!entriesByDate[date]) {
+      entriesByDate[date] = [];
+    }
+    entriesByDate[date].push(entry);
+  }
+  
+  // Get all drivers for this roster period (for the Gantt view)
+  const drivers = await env.DB.prepare(`
+    SELECT DISTINCT e.id, e.employee_number, e.first_name, e.last_name
+    FROM employees e
+    WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.status = 'active'
+    ORDER BY e.first_name, e.last_name
+  `).bind(TENANT_ID).all();
+  
+  return json({
+    data: {
+      ...roster,
+      entries_by_date: entriesByDate,
+      entries: entriesWithDuties,
+      drivers: drivers.results,
+    },
+  });
+}
+
+async function createRoster(env: Env, input: RosterInput): Promise<Response> {
+  if (!input.code || !input.name || !input.start_date || !input.end_date) {
+    return error('code, name, start_date, and end_date are required');
+  }
+  
+  // Validate dates
+  const startDate = new Date(input.start_date);
+  const endDate = new Date(input.end_date);
+  if (endDate < startDate) {
+    return error('end_date must be after start_date');
+  }
+  
+  // Check duplicate code
+  const existing = await env.DB.prepare(`
+    SELECT id FROM rosters WHERE tenant_id = ? AND code = ? AND deleted_at IS NULL
+  `).bind(TENANT_ID, input.code).first();
+  
+  if (existing) return error('Roster code already exists');
+  
+  const id = uuid();
+  const now = new Date().toISOString();
+  
+  await env.DB.prepare(`
+    INSERT INTO rosters (
+      id, tenant_id, code, name, start_date, end_date, status, notes, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id, TENANT_ID, input.code, input.name, input.start_date, input.end_date,
+    input.status || 'draft', input.notes || null, now, now
+  ).run();
+  
+  return getRoster(env, id);
+}
+
+async function updateRoster(env: Env, id: string, input: Partial<RosterInput>): Promise<Response> {
+  const existing = await env.DB.prepare(`
+    SELECT id FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(id, TENANT_ID).first();
+  
+  if (!existing) return error('Roster not found', 404);
+  
+  const updates: string[] = [];
+  const bindings: (string | null)[] = [];
+  
+  if (input.code !== undefined) { updates.push('code = ?'); bindings.push(input.code); }
+  if (input.name !== undefined) { updates.push('name = ?'); bindings.push(input.name); }
+  if (input.start_date !== undefined) { updates.push('start_date = ?'); bindings.push(input.start_date); }
+  if (input.end_date !== undefined) { updates.push('end_date = ?'); bindings.push(input.end_date); }
+  if (input.status !== undefined) { updates.push('status = ?'); bindings.push(input.status); }
+  if (input.notes !== undefined) { updates.push('notes = ?'); bindings.push(input.notes || null); }
+  
+  if (updates.length === 0) return error('No fields to update');
+  
+  updates.push('updated_at = ?');
+  bindings.push(new Date().toISOString());
+  bindings.push(id, TENANT_ID);
+  
+  await env.DB.prepare(`
+    UPDATE rosters SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?
+  `).bind(...bindings).run();
+  
+  return getRoster(env, id);
+}
+
+async function deleteRoster(env: Env, id: string): Promise<Response> {
+  const result = await env.DB.prepare(`
+    UPDATE rosters SET deleted_at = ?, updated_at = ?
+    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(new Date().toISOString(), new Date().toISOString(), id, TENANT_ID).run();
+  
+  if (result.meta.changes === 0) return error('Roster not found', 404);
+  return json({ success: true });
+}
+
+async function addShiftToRoster(env: Env, rosterId: string, input: AddShiftToRosterInput): Promise<Response> {
+  // Verify roster exists
+  const roster = await env.DB.prepare(`
+    SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(rosterId, TENANT_ID).first<Record<string, unknown>>();
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  // Verify date is within roster range
+  if (input.date < (roster.start_date as string) || input.date > (roster.end_date as string)) {
+    return error('Date is outside roster range');
+  }
+  
+  // Get shift template with duty blocks and lines
+  const template = await env.DB.prepare(`
+    SELECT * FROM shift_templates WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(input.shift_template_id, TENANT_ID).first<Record<string, unknown>>();
+  
+  if (!template) return error('Shift template not found', 404);
+  
+  // Get duty blocks
+  const blocks = await env.DB.prepare(`
+    SELECT * FROM shift_template_duty_blocks WHERE shift_template_id = ? ORDER BY sequence
+  `).bind(input.shift_template_id).all();
+  
+  const now = new Date().toISOString();
+  const createdEntryIds: string[] = [];
+  
+  // Create a roster entry for each duty block
+  for (const block of blocks.results as Record<string, unknown>[]) {
+    // Get lines for this block
+    const lines = await env.DB.prepare(`
+      SELECT * FROM shift_template_duty_lines WHERE duty_block_id = ? ORDER BY sequence
+    `).bind(block.id).all();
+    
+    if (lines.results.length === 0) continue;
+    
+    // Calculate start/end from lines
+    const lineData = lines.results as Record<string, unknown>[];
+    const startTime = Math.min(...lineData.map(l => l.start_time as number));
+    const endTime = Math.max(...lineData.map(l => l.end_time as number));
+    
+    // Use driver from input override or from block template
+    const driverId = input.driver_id || (block.driver_id as string) || null;
+    
+    // Check for driver overlap on this date
+    if (driverId) {
+      const overlap = await env.DB.prepare(`
+        SELECT id, name, start_time, end_time FROM roster_entries 
+        WHERE tenant_id = ? AND date = ? AND driver_id = ? AND deleted_at IS NULL
+        AND ((start_time < ? AND end_time > ?) OR (start_time < ? AND end_time > ?) OR (start_time >= ? AND end_time <= ?))
+      `).bind(
+        TENANT_ID, input.date, driverId,
+        endTime, startTime,
+        endTime, startTime,
+        startTime, endTime
+      ).first();
+      
+      if (overlap) {
+        return error(`Driver already assigned to "${(overlap as Record<string, unknown>).name}" at overlapping time`);
+      }
+    }
+    
+    const entryId = uuid();
+    
+    // Create roster entry
+    await env.DB.prepare(`
+      INSERT INTO roster_entries (
+        id, tenant_id, roster_id, shift_template_id, date, name, shift_type,
+        start_time, end_time, driver_id, vehicle_id, status, source, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 'template', ?, ?)
+    `).bind(
+      entryId, TENANT_ID, rosterId, input.shift_template_id, input.date,
+      `${template.code} - ${block.name}`,
+      template.shift_type,
+      startTime, endTime,
+      driverId,
+      null, // vehicle assigned at line level
+      now, now
+    ).run();
+    
+    // Create roster duties from lines
+    for (const line of lineData) {
+      await env.DB.prepare(`
+        INSERT INTO roster_duties (
+          id, roster_entry_id, duty_type_id, sequence, start_time, end_time,
+          description, vehicle_id, driver_id, pay_type_id, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)
+      `).bind(
+        uuid(), entryId,
+        line.duty_type, // This is the duty type code, need to map to ID
+        line.sequence,
+        line.start_time, line.end_time,
+        line.description || null,
+        line.vehicle_id || null,
+        driverId,
+        line.pay_type || 'pt-std',
+        now, now
+      ).run();
+    }
+    
+    createdEntryIds.push(entryId);
+  }
+  
+  return json({
+    data: {
+      roster_id: rosterId,
+      shift_template_id: input.shift_template_id,
+      date: input.date,
+      entries_created: createdEntryIds.length,
+      entry_ids: createdEntryIds,
+    },
+  });
 }
 
 // ============================================
