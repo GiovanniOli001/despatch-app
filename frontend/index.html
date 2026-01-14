@@ -3059,6 +3059,33 @@
       border-color: var(--accent-blue);
     }
     
+    .duty-block-driver {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .duty-block-driver-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    
+    .duty-block-driver select {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      min-width: 140px;
+    }
+    
+    .duty-block-driver select:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+    }
+    
     .duty-block-delete {
       background: none;
       border: none;
@@ -10090,7 +10117,9 @@ Guidelines:
     let shiftsData = [];
     let shiftFiltersState = { search: '', type: '' };
     let editingShiftId = null;
-    let shiftDutyBlocks = []; // Array of duty blocks, each with name and lines
+    let shiftDutyBlocks = []; // Array of duty blocks, each with name, driver_id, and lines
+    let shiftEmployees = []; // Employees for driver dropdown
+    let shiftVehicles = []; // Vehicles for vehicle dropdown
     
     const SHIFT_DUTY_TYPES = [
       { code: 'driving', name: 'Driving' },
@@ -10108,6 +10137,20 @@ Guidelines:
       { code: 'PEN', name: 'Penalty' },
       { code: 'UNP', name: 'Unpaid' }
     ];
+    
+    async function loadShiftFormData() {
+      // Load employees and vehicles for dropdowns
+      try {
+        const [empResult, vehResult] = await Promise.all([
+          apiRequest('/employees?status=active&limit=500'),
+          apiRequest('/vehicles?status=active&limit=500')
+        ]);
+        shiftEmployees = empResult.data || [];
+        shiftVehicles = vehResult.data || [];
+      } catch (err) {
+        console.error('Failed to load form data:', err);
+      }
+    }
     
     async function loadShifts() {
       const tbody = document.getElementById('shiftsTableBody');
@@ -10190,11 +10233,12 @@ Guidelines:
       loadShifts();
     }
     
-    function showAddShiftModal() {
+    async function showAddShiftModal() {
       editingShiftId = null;
       shiftDutyBlocks = [];
       document.getElementById('shiftModalTitle').textContent = 'Add Shift Template';
       document.getElementById('shiftForm').reset();
+      await loadShiftFormData();
       renderShiftDutyBlocks();
       document.getElementById('shiftModalOverlay').classList.add('show');
     }
@@ -10202,6 +10246,7 @@ Guidelines:
     async function editShift(id) {
       // Fetch full shift data with duty blocks
       try {
+        await loadShiftFormData();
         const result = await apiRequest(`/shifts/${id}`);
         const shift = result.data;
         if (!shift) {
@@ -10250,6 +10295,7 @@ Guidelines:
       shiftDutyBlocks.push({
         id: 'new_' + Date.now(),
         name: `Duty ${dutyNum}`,
+        driver_id: null,
         lines: [{
           id: 'line_' + Date.now(),
           start_time: startTime,
@@ -10274,6 +10320,11 @@ Guidelines:
     // Update duty block name
     function updateDutyBlockName(blockIdx, name) {
       shiftDutyBlocks[blockIdx].name = name;
+    }
+    
+    // Update duty block driver
+    function updateDutyBlockDriver(blockIdx, driverId) {
+      shiftDutyBlocks[blockIdx].driver_id = driverId || null;
     }
     
     // Add a line to a duty block (above or below)
@@ -10351,7 +10402,13 @@ Guidelines:
         return;
       }
       
-      const vehicleOptions = '<option value="">—</option>';
+      // Build driver options
+      const driverOptions = '<option value="">— No Driver —</option>' + 
+        shiftEmployees.map(e => `<option value="${e.id}">${e.first_name} ${e.last_name}</option>`).join('');
+      
+      // Build vehicle options
+      const vehicleOptions = '<option value="">—</option>' +
+        shiftVehicles.map(v => `<option value="${v.id}">${v.fleet_number}</option>`).join('');
       
       container.innerHTML = shiftDutyBlocks.map((block, blockIdx) => {
         const linesHtml = block.lines.map((line, lineIdx) => {
@@ -10387,7 +10444,7 @@ Guidelines:
               </div>
               <div class="duty-col-vehicle">
                 <select onchange="updateDutyLine(${blockIdx}, ${lineIdx}, 'vehicle_id', this.value)">
-                  ${vehicleOptions}
+                  ${vehicleOptions.replace(`value="${line.vehicle_id}"`, `value="${line.vehicle_id}" selected`)}
                 </select>
               </div>
               <div class="duty-col-pay">
@@ -10403,12 +10460,24 @@ Guidelines:
           `;
         }).join('');
         
+        // Build driver select with correct selected value
+        const driverSelectHtml = driverOptions.replace(
+          `value="${block.driver_id}"`, 
+          `value="${block.driver_id}" selected`
+        );
+        
         return `
           <div class="duty-block">
             <div class="duty-block-header">
               <input type="text" class="duty-block-name" value="${block.name}" 
                 onchange="updateDutyBlockName(${blockIdx}, this.value)" 
                 placeholder="Duty name...">
+              <div class="duty-block-driver">
+                <span class="duty-block-driver-label">Driver:</span>
+                <select onchange="updateDutyBlockDriver(${blockIdx}, this.value)">
+                  ${driverSelectHtml}
+                </select>
+              </div>
               <button type="button" class="duty-block-delete" onclick="removeShiftDutyBlock(${blockIdx})" title="Delete duty">✕</button>
             </div>
             <div class="duty-block-lines">
@@ -10486,6 +10555,7 @@ Guidelines:
         duty_blocks: shiftDutyBlocks.map((block, blockIdx) => ({
           sequence: blockIdx + 1,
           name: block.name,
+          driver_id: block.driver_id || null,
           lines: block.lines.map((line, lineIdx) => ({
             sequence: lineIdx + 1,
             duty_type: line.duty_type,

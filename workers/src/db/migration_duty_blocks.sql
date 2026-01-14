@@ -5,6 +5,8 @@
 
 -- Drop old table if exists (no production data yet)
 DROP TABLE IF EXISTS shift_template_duties;
+DROP TABLE IF EXISTS shift_template_duty_lines;
+DROP TABLE IF EXISTS shift_template_duty_blocks;
 
 -- ============================================
 -- DUTY BLOCKS (assignable units within a shift)
@@ -14,6 +16,7 @@ CREATE TABLE IF NOT EXISTS shift_template_duty_blocks (
   shift_template_id TEXT NOT NULL REFERENCES shift_templates(id) ON DELETE CASCADE,
   sequence INTEGER NOT NULL,
   name TEXT NOT NULL,
+  driver_id TEXT REFERENCES employees(id),
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
 );

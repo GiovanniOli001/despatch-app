@@ -23,6 +23,7 @@ interface DutyLineInput {
 interface DutyBlockInput {
   sequence: number;
   name: string;
+  driver_id?: string;
   lines: DutyLineInput[];
 }
 
@@ -252,13 +253,13 @@ async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInp
   for (const block of blocks) {
     const blockId = uuid();
 
-    // Insert duty block
+    // Insert duty block with driver_id
     await env.DB.prepare(`
       INSERT INTO shift_template_duty_blocks (
-        id, shift_template_id, sequence, name, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
+        id, shift_template_id, sequence, name, driver_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      blockId, templateId, block.sequence, block.name, now, now
+      blockId, templateId, block.sequence, block.name, block.driver_id || null, now, now
     ).run();
 
     // Insert duty lines
@@ -332,9 +333,9 @@ async function duplicateShiftTemplate(env: Env, sourceId: string): Promise<Respo
 
     await env.DB.prepare(`
       INSERT INTO shift_template_duty_blocks (
-        id, shift_template_id, sequence, name, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).bind(newBlockId, newId, block.sequence, block.name, now, now).run();
+        id, shift_template_id, sequence, name, driver_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).bind(newBlockId, newId, block.sequence, block.name, block.driver_id || null, now, now).run();
 
     // Copy lines for this block
     const lines = await env.DB.prepare(`
