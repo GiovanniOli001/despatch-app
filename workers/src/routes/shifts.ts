@@ -1,28 +1,39 @@
 /**
  * Shift Templates API Routes
  * /api/shifts/*
+ * 
+ * Structure:
+ * - Shift Template: Container for duties
+ *   - Duty Block: Assignable unit (shows as one block in dispatch)
+ *     - Duty Line: Time segment within a block
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
 
+interface DutyLineInput {
+  sequence: number;
+  start_time: number;      // Decimal hours (6.5 = 06:30)
+  end_time: number;
+  duty_type: string;       // 'driving', 'break', etc.
+  description?: string;
+  vehicle_id?: string;
+  pay_type?: string;       // 'STD', 'OT', 'DT', 'PEN', 'UNP'
+}
+
+interface DutyBlockInput {
+  sequence: number;
+  name: string;
+  lines: DutyLineInput[];
+}
+
 interface ShiftTemplateInput {
   code: string;
   name: string;
-  shift_type?: string;
-  route_id?: string;
-  default_start: number;
-  default_end: number;
-  default_vehicle_id?: string;
+  shift_type?: string;     // 'regular', 'charter', 'school'
+  default_start?: number;
+  default_end?: number;
   notes?: string;
-}
-
-interface ShiftDutyInput {
-  duty_type_id: string;
-  sequence: number;
-  start_offset: number;
-  duration: number;
-  description_template?: string;
-  default_vehicle?: boolean;
+  duty_blocks?: DutyBlockInput[];
 }
 
 const TENANT_ID = 'default';
@@ -35,14 +46,13 @@ export async function handleShifts(
   const method = request.method;
   const id = segments[0];
   const subResource = segments[1];
-  const dutyId = segments[2];
 
   // GET /api/shifts - List templates
   if (method === 'GET' && !id) {
     return listShiftTemplates(env, new URL(request.url).searchParams);
   }
 
-  // GET /api/shifts/:id - Get template with duties
+  // GET /api/shifts/:id - Get template with duty blocks
   if (method === 'GET' && id && !subResource) {
     return getShiftTemplate(env, id);
   }
@@ -56,7 +66,7 @@ export async function handleShifts(
 
   // PUT /api/shifts/:id - Update template
   if (method === 'PUT' && id && !subResource) {
-    const body = await parseBody<Partial<ShiftTemplateInput>>(request);
+    const body = await parseBody<ShiftTemplateInput>(request);
     if (!body) return error('Invalid request body');
     return updateShiftTemplate(env, id, body);
   }
@@ -64,25 +74,6 @@ export async function handleShifts(
   // DELETE /api/shifts/:id - Delete template
   if (method === 'DELETE' && id && !subResource) {
     return deleteShiftTemplate(env, id);
-  }
-
-  // POST /api/shifts/:id/duties - Add duty to template
-  if (method === 'POST' && id && subResource === 'duties') {
-    const body = await parseBody<ShiftDutyInput>(request);
-    if (!body) return error('Invalid request body');
-    return addShiftDuty(env, id, body);
-  }
-
-  // PUT /api/shifts/:id/duties/:dutyId - Update duty
-  if (method === 'PUT' && id && subResource === 'duties' && dutyId) {
-    const body = await parseBody<Partial<ShiftDutyInput>>(request);
-    if (!body) return error('Invalid request body');
-    return updateShiftDuty(env, id, dutyId, body);
-  }
-
-  // DELETE /api/shifts/:id/duties/:dutyId - Remove duty
-  if (method === 'DELETE' && id && subResource === 'duties' && dutyId) {
-    return deleteShiftDuty(env, id, dutyId);
   }
 
   // POST /api/shifts/:id/duplicate - Copy template
@@ -100,26 +91,29 @@ async function listShiftTemplates(env: Env, params: URLSearchParams): Promise<Re
   const limit = Math.min(parseInt(params.get('limit') || '100'), 500);
   const offset = parseInt(params.get('offset') || '0');
 
-  let query = `SELECT * FROM shift_templates WHERE tenant_id = ? AND deleted_at IS NULL`;
+  let query = `SELECT st.*, 
+    (SELECT COUNT(*) FROM shift_template_duty_blocks WHERE shift_template_id = st.id) as duty_count
+    FROM shift_templates st 
+    WHERE st.tenant_id = ? AND st.deleted_at IS NULL`;
   const bindings: (string | number)[] = [TENANT_ID];
 
   if (active !== null) {
-    query += ` AND is_active = ?`;
+    query += ` AND st.is_active = ?`;
     bindings.push(active === 'true' ? 1 : 0);
   }
 
   if (shiftType) {
-    query += ` AND shift_type = ?`;
+    query += ` AND st.shift_type = ?`;
     bindings.push(shiftType);
   }
 
   if (search) {
-    query += ` AND (code LIKE ? OR name LIKE ?)`;
+    query += ` AND (st.code LIKE ? OR st.name LIKE ?)`;
     const searchPattern = `%${search}%`;
     bindings.push(searchPattern, searchPattern);
   }
 
-  query += ` ORDER BY code LIMIT ? OFFSET ?`;
+  query += ` ORDER BY st.code LIMIT ? OFFSET ?`;
   bindings.push(limit, offset);
 
   const result = await env.DB.prepare(query).bind(...bindings).all();
@@ -137,30 +131,38 @@ async function getShiftTemplate(env: Env, id: string): Promise<Response> {
 
   if (!template) return error('Shift template not found', 404);
 
-  // Get duties
-  const duties = await env.DB.prepare(`
-    SELECT 
-      std.*,
-      dt.code as duty_type_code,
-      dt.name as duty_type_name,
-      dt.color as duty_type_color
-    FROM shift_template_duties std
-    JOIN duty_types dt ON std.duty_type_id = dt.id
-    WHERE std.shift_template_id = ?
-    ORDER BY std.sequence
+  // Get duty blocks with their lines
+  const blocks = await env.DB.prepare(`
+    SELECT * FROM shift_template_duty_blocks 
+    WHERE shift_template_id = ?
+    ORDER BY sequence
   `).bind(id).all();
+
+  const dutyBlocks = [];
+  for (const block of blocks.results as Record<string, unknown>[]) {
+    const lines = await env.DB.prepare(`
+      SELECT * FROM shift_template_duty_lines 
+      WHERE duty_block_id = ?
+      ORDER BY sequence
+    `).bind(block.id).all();
+
+    dutyBlocks.push({
+      ...block,
+      lines: lines.results,
+    });
+  }
 
   return json({
     data: {
       ...template,
-      duties: duties.results,
+      duty_blocks: dutyBlocks,
     },
   });
 }
 
 async function createShiftTemplate(env: Env, input: ShiftTemplateInput): Promise<Response> {
-  if (!input.code || !input.name || input.default_start === undefined || input.default_end === undefined) {
-    return error('code, name, default_start, and default_end are required');
+  if (!input.code || !input.name) {
+    return error('code and name are required');
   }
 
   // Check duplicate code
@@ -170,59 +172,116 @@ async function createShiftTemplate(env: Env, input: ShiftTemplateInput): Promise
 
   if (existing) return error('Shift template code already exists');
 
-  const id = uuid();
+  const templateId = uuid();
   const now = new Date().toISOString();
 
+  // Create the shift template
   await env.DB.prepare(`
     INSERT INTO shift_templates (
-      id, tenant_id, code, name, shift_type, route_id, 
-      default_start, default_end, default_vehicle_id, notes, 
+      id, tenant_id, code, name, shift_type,
+      default_start, default_end, notes, 
       is_active, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).bind(
-    id, TENANT_ID, input.code, input.name,
+    templateId, TENANT_ID, input.code, input.name,
     input.shift_type || 'regular',
-    input.route_id || null,
-    input.default_start, input.default_end,
-    input.default_vehicle_id || null,
+    input.default_start ?? 6.0,
+    input.default_end ?? 14.0,
     input.notes || null,
     now, now
   ).run();
 
-  return getShiftTemplate(env, id);
+  // Create duty blocks and lines if provided
+  if (input.duty_blocks && input.duty_blocks.length > 0) {
+    await saveDutyBlocks(env, templateId, input.duty_blocks);
+  }
+
+  return getShiftTemplate(env, templateId);
 }
 
-async function updateShiftTemplate(env: Env, id: string, input: Partial<ShiftTemplateInput>): Promise<Response> {
+async function updateShiftTemplate(env: Env, id: string, input: ShiftTemplateInput): Promise<Response> {
   const existing = await env.DB.prepare(`
     SELECT id FROM shift_templates WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
   `).bind(id, TENANT_ID).first();
 
   if (!existing) return error('Shift template not found', 404);
 
-  const updates: string[] = [];
-  const bindings: (string | number | null)[] = [];
+  const now = new Date().toISOString();
 
-  const fields: (keyof ShiftTemplateInput)[] = [
-    'code', 'name', 'shift_type', 'route_id', 'default_start', 'default_end', 'default_vehicle_id', 'notes'
-  ];
+  // Update template fields
+  await env.DB.prepare(`
+    UPDATE shift_templates SET
+      code = COALESCE(?, code),
+      name = COALESCE(?, name),
+      shift_type = COALESCE(?, shift_type),
+      default_start = COALESCE(?, default_start),
+      default_end = COALESCE(?, default_end),
+      notes = ?,
+      updated_at = ?
+    WHERE id = ? AND tenant_id = ?
+  `).bind(
+    input.code || null,
+    input.name || null,
+    input.shift_type || null,
+    input.default_start ?? null,
+    input.default_end ?? null,
+    input.notes || null,
+    now,
+    id, TENANT_ID
+  ).run();
 
-  for (const field of fields) {
-    if (field in input) {
-      updates.push(`${field} = ?`);
-      bindings.push(input[field] ?? null);
+  // Replace duty blocks if provided
+  if (input.duty_blocks !== undefined) {
+    // Delete existing blocks (cascade deletes lines)
+    await env.DB.prepare(`
+      DELETE FROM shift_template_duty_blocks WHERE shift_template_id = ?
+    `).bind(id).run();
+
+    // Create new blocks and lines
+    if (input.duty_blocks.length > 0) {
+      await saveDutyBlocks(env, id, input.duty_blocks);
     }
   }
 
-  if (updates.length === 0) return error('No fields to update');
-
-  updates.push('updated_at = ?');
-  bindings.push(new Date().toISOString(), id, TENANT_ID);
-
-  await env.DB.prepare(`
-    UPDATE shift_templates SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?
-  `).bind(...bindings).run();
-
   return getShiftTemplate(env, id);
+}
+
+async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInput[]): Promise<void> {
+  const now = new Date().toISOString();
+
+  for (const block of blocks) {
+    const blockId = uuid();
+
+    // Insert duty block
+    await env.DB.prepare(`
+      INSERT INTO shift_template_duty_blocks (
+        id, shift_template_id, sequence, name, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(
+      blockId, templateId, block.sequence, block.name, now, now
+    ).run();
+
+    // Insert duty lines
+    if (block.lines && block.lines.length > 0) {
+      for (const line of block.lines) {
+        await env.DB.prepare(`
+          INSERT INTO shift_template_duty_lines (
+            id, duty_block_id, sequence, start_time, end_time,
+            duty_type, description, vehicle_id, pay_type,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          uuid(), blockId, line.sequence,
+          line.start_time, line.end_time,
+          line.duty_type || 'driving',
+          line.description || null,
+          line.vehicle_id || null,
+          line.pay_type || 'STD',
+          now, now
+        ).run();
+      }
+    }
+  }
 }
 
 async function deleteShiftTemplate(env: Env, id: string): Promise<Response> {
@@ -233,72 +292,6 @@ async function deleteShiftTemplate(env: Env, id: string): Promise<Response> {
 
   if (result.meta.changes === 0) return error('Shift template not found', 404);
   return json({ success: true });
-}
-
-async function addShiftDuty(env: Env, templateId: string, input: ShiftDutyInput): Promise<Response> {
-  // Verify template exists
-  const template = await env.DB.prepare(`
-    SELECT id FROM shift_templates WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(templateId, TENANT_ID).first();
-
-  if (!template) return error('Shift template not found', 404);
-
-  if (!input.duty_type_id || input.sequence === undefined || input.start_offset === undefined || !input.duration) {
-    return error('duty_type_id, sequence, start_offset, and duration are required');
-  }
-
-  const id = uuid();
-  const now = new Date().toISOString();
-
-  await env.DB.prepare(`
-    INSERT INTO shift_template_duties (
-      id, shift_template_id, duty_type_id, sequence, start_offset, duration, 
-      description_template, default_vehicle, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    id, templateId, input.duty_type_id, input.sequence, input.start_offset, input.duration,
-    input.description_template || null, input.default_vehicle ? 1 : 0, now, now
-  ).run();
-
-  return getShiftTemplate(env, templateId);
-}
-
-async function updateShiftDuty(env: Env, templateId: string, dutyId: string, input: Partial<ShiftDutyInput>): Promise<Response> {
-  const existing = await env.DB.prepare(`
-    SELECT id FROM shift_template_duties WHERE id = ? AND shift_template_id = ?
-  `).bind(dutyId, templateId).first();
-
-  if (!existing) return error('Duty not found', 404);
-
-  const updates: string[] = [];
-  const bindings: (string | number | null)[] = [];
-
-  if ('duty_type_id' in input) { updates.push('duty_type_id = ?'); bindings.push(input.duty_type_id!); }
-  if ('sequence' in input) { updates.push('sequence = ?'); bindings.push(input.sequence!); }
-  if ('start_offset' in input) { updates.push('start_offset = ?'); bindings.push(input.start_offset!); }
-  if ('duration' in input) { updates.push('duration = ?'); bindings.push(input.duration!); }
-  if ('description_template' in input) { updates.push('description_template = ?'); bindings.push(input.description_template || null); }
-  if ('default_vehicle' in input) { updates.push('default_vehicle = ?'); bindings.push(input.default_vehicle ? 1 : 0); }
-
-  if (updates.length === 0) return error('No fields to update');
-
-  updates.push('updated_at = ?');
-  bindings.push(new Date().toISOString(), dutyId);
-
-  await env.DB.prepare(`
-    UPDATE shift_template_duties SET ${updates.join(', ')} WHERE id = ?
-  `).bind(...bindings).run();
-
-  return getShiftTemplate(env, templateId);
-}
-
-async function deleteShiftDuty(env: Env, templateId: string, dutyId: string): Promise<Response> {
-  const result = await env.DB.prepare(`
-    DELETE FROM shift_template_duties WHERE id = ? AND shift_template_id = ?
-  `).bind(dutyId, templateId).run();
-
-  if (result.meta.changes === 0) return error('Duty not found', 404);
-  return getShiftTemplate(env, templateId);
 }
 
 async function duplicateShiftTemplate(env: Env, sourceId: string): Promise<Response> {
@@ -317,33 +310,51 @@ async function duplicateShiftTemplate(env: Env, sourceId: string): Promise<Respo
   // Copy template
   await env.DB.prepare(`
     INSERT INTO shift_templates (
-      id, tenant_id, code, name, shift_type, route_id,
-      default_start, default_end, default_vehicle_id, notes,
+      id, tenant_id, code, name, shift_type,
+      default_start, default_end, notes,
       is_active, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).bind(
     newId, TENANT_ID, newCode, `${source.name} (Copy)`,
-    source.shift_type, source.route_id,
+    source.shift_type,
     source.default_start, source.default_end,
-    source.default_vehicle_id, source.notes,
-    1, now, now
+    source.notes,
+    now, now
   ).run();
 
-  // Copy duties
-  const duties = await env.DB.prepare(`
-    SELECT * FROM shift_template_duties WHERE shift_template_id = ?
+  // Copy duty blocks
+  const blocks = await env.DB.prepare(`
+    SELECT * FROM shift_template_duty_blocks WHERE shift_template_id = ?
   `).bind(sourceId).all();
 
-  for (const duty of duties.results as Record<string, unknown>[]) {
+  for (const block of blocks.results as Record<string, unknown>[]) {
+    const newBlockId = uuid();
+
     await env.DB.prepare(`
-      INSERT INTO shift_template_duties (
-        id, shift_template_id, duty_type_id, sequence, start_offset, duration,
-        description_template, default_vehicle, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      uuid(), newId, duty.duty_type_id, duty.sequence, duty.start_offset, duty.duration,
-      duty.description_template, duty.default_vehicle, now, now
-    ).run();
+      INSERT INTO shift_template_duty_blocks (
+        id, shift_template_id, sequence, name, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).bind(newBlockId, newId, block.sequence, block.name, now, now).run();
+
+    // Copy lines for this block
+    const lines = await env.DB.prepare(`
+      SELECT * FROM shift_template_duty_lines WHERE duty_block_id = ?
+    `).bind(block.id).all();
+
+    for (const line of lines.results as Record<string, unknown>[]) {
+      await env.DB.prepare(`
+        INSERT INTO shift_template_duty_lines (
+          id, duty_block_id, sequence, start_time, end_time,
+          duty_type, description, vehicle_id, pay_type,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        uuid(), newBlockId, line.sequence,
+        line.start_time, line.end_time,
+        line.duty_type, line.description, line.vehicle_id, line.pay_type,
+        now, now
+      ).run();
+    }
   }
 
   return getShiftTemplate(env, newId);
