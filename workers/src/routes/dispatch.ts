@@ -172,6 +172,9 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
 
   // ========================================
   // 3. GET ROSTER ENTRIES FROM PUBLISHED ROSTERS
+  // This includes:
+  // - Assigned entries (driver_id IS NOT NULL)
+  // - Unassigned entries marked for dispatch (driver_id IS NULL AND include_in_dispatch = 1)
   // ========================================
   const entriesResult = await env.DB.prepare(`
     SELECT 
@@ -184,6 +187,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       re.start_time,
       re.end_time,
       re.status as entry_status,
+      re.include_in_dispatch,
       r.code as roster_code,
       r.name as roster_name,
       st.code as shift_code,
@@ -199,6 +203,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       AND re.deleted_at IS NULL
       AND r.status = 'published'
       AND r.deleted_at IS NULL
+      AND (re.driver_id IS NOT NULL OR re.include_in_dispatch = 1)
     ORDER BY re.start_time, st.code
   `).bind(date).all();
 

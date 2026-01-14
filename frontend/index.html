@@ -3467,6 +3467,116 @@
       background: rgba(107, 114, 128, 0.05);
     }
     
+    /* Dispatch Toggle Header */
+    .unassigned-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-light);
+      gap: 12px;
+    }
+    
+    .unassigned-header-title {
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .unassigned-header-stats {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    
+    .unassigned-header-stats .included {
+      color: var(--accent-green);
+    }
+    
+    .unassigned-header-stats .omitted {
+      color: var(--text-muted);
+    }
+    
+    .unassigned-header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    
+    .toggle-group {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+    
+    .toggle-group-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-right: 4px;
+    }
+    
+    .btn-toggle-include, .btn-toggle-omit {
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 4px;
+      border: 1px solid var(--border-light);
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .btn-toggle-include:hover {
+      background: rgba(34, 197, 94, 0.1);
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+    
+    .btn-toggle-omit:hover {
+      background: rgba(107, 114, 128, 0.1);
+      border-color: var(--text-muted);
+    }
+    
+    /* Block dispatch indicator */
+    .dispatch-toggle-btn {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 3px;
+      border: none;
+      font-size: 10px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.7;
+      transition: all 0.2s;
+      z-index: 5;
+    }
+    
+    .dispatch-toggle-btn:hover {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    
+    .dispatch-toggle-btn.included {
+      background: rgba(34, 197, 94, 0.9);
+      color: white;
+    }
+    
+    .dispatch-toggle-btn.omitted {
+      background: rgba(107, 114, 128, 0.5);
+      color: white;
+    }
+    
+    .roster-gantt-block:hover .dispatch-toggle-btn {
+      opacity: 1;
+    }
+    
     .roster-gantt-grid-line {
       position: absolute;
       top: 0;
@@ -11906,6 +12016,32 @@ Guidelines:
         unassignedByShift[shiftId].blocks.push(block);
       }
       
+      // Unassigned header with toggle buttons
+      const includedCount = unassigned.filter(b => b.include_in_dispatch === 1).length;
+      const omittedCount = unassigned.filter(b => b.include_in_dispatch !== 1).length;
+      
+      html += `<div class="unassigned-header">`;
+      html += `<div class="unassigned-header-title">`;
+      html += `UNASSIGNED`;
+      html += `<span class="unassigned-header-stats">`;
+      html += `<span class="included">✓ ${includedCount} in dispatch</span>`;
+      html += ` / <span class="omitted">${omittedCount} omitted</span>`;
+      html += `</span>`;
+      html += `</div>`;
+      html += `<div class="unassigned-header-actions">`;
+      html += `<div class="toggle-group">`;
+      html += `<span class="toggle-group-label">This Day:</span>`;
+      html += `<button class="btn-toggle-include" onclick="toggleDayDispatch(true)" title="Include all unassigned for this day in dispatch">✓ Include All</button>`;
+      html += `<button class="btn-toggle-omit" onclick="toggleDayDispatch(false)" title="Omit all unassigned for this day from dispatch">✗ Omit All</button>`;
+      html += `</div>`;
+      html += `<div class="toggle-group">`;
+      html += `<span class="toggle-group-label">Entire Roster:</span>`;
+      html += `<button class="btn-toggle-include" onclick="toggleRosterDispatch(true)" title="Include all unassigned for entire roster period">✓ Include All</button>`;
+      html += `<button class="btn-toggle-omit" onclick="toggleRosterDispatch(false)" title="Omit all unassigned for entire roster">✗ Omit All</button>`;
+      html += `</div>`;
+      html += `</div>`;
+      html += `</div>`;
+      
       // Render each shift as its own unassigned row
       for (const shiftId of Object.keys(unassignedByShift)) {
         const shift = unassignedByShift[shiftId];
@@ -11958,6 +12094,7 @@ Guidelines:
         const color = getShiftColor(block.shift_type);
         const hasMultiple = block.blocks_in_shift > 1;
         const hasDefault = block.default_driver_id && !block.assigned_driver_id;
+        const isIncluded = block.include_in_dispatch === 1;
         
         html += `<div class="roster-gantt-block" 
           style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: ${color};"
@@ -11969,6 +12106,15 @@ Guidelines:
           ondragstart="onBlockDragStart(event)"
           onclick="showBlockInfo('${block.id}')"
         >`;
+        
+        // Dispatch toggle button
+        const toggleClass = isIncluded ? 'included' : 'omitted';
+        const toggleIcon = isIncluded ? '✓' : '○';
+        const toggleTitle = isIncluded ? 'Included in dispatch - click to omit' : 'Omitted from dispatch - click to include';
+        html += `<button class="dispatch-toggle-btn ${toggleClass}" 
+          onclick="event.stopPropagation(); toggleBlockDispatch('${block.id}', '${block.shift_template_id}', ${!isIncluded})" 
+          title="${toggleTitle}">${toggleIcon}</button>`;
+        
         html += `<div class="roster-gantt-block-name">${block.shift_code} / ${block.block_name}</div>`;
         html += `<div class="roster-gantt-block-time">${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}</div>`;
         
@@ -12128,6 +12274,86 @@ Guidelines:
         showConnectedModal();
       } else {
         await doAssign(blockId, shiftId, defaultDriverId, false);
+      }
+    }
+    
+    // ============================================
+    // DISPATCH TOGGLE FUNCTIONS
+    // ============================================
+    
+    async function toggleBlockDispatch(blockId, shiftId, include) {
+      try {
+        const result = await apiRequest('/roster/toggle-dispatch', {
+          method: 'POST',
+          body: {
+            roster_id: currentRosterId,
+            duty_block_id: blockId,
+            shift_template_id: shiftId,
+            date: formatDateISO(currentRosterDate),
+            include: include
+          }
+        });
+        
+        if (result.error) {
+          showToast(result.error, 'error');
+          return;
+        }
+        
+        showToast(include ? 'Block included in dispatch' : 'Block omitted from dispatch');
+        await loadDayView();
+      } catch (err) {
+        showToast(err.message || 'Toggle failed', 'error');
+      }
+    }
+    
+    async function toggleDayDispatch(include) {
+      try {
+        const result = await apiRequest('/roster/toggle-dispatch-day', {
+          method: 'POST',
+          body: {
+            roster_id: currentRosterId,
+            date: formatDateISO(currentRosterDate),
+            include: include
+          }
+        });
+        
+        if (result.error) {
+          showToast(result.error, 'error');
+          return;
+        }
+        
+        showToast(result.message || (include ? 'All included' : 'All omitted'));
+        await loadDayView();
+      } catch (err) {
+        showToast(err.message || 'Toggle failed', 'error');
+      }
+    }
+    
+    async function toggleRosterDispatch(include) {
+      if (!confirm(`This will ${include ? 'include' : 'omit'} ALL unassigned blocks for the ENTIRE roster period. Continue?`)) {
+        return;
+      }
+      
+      try {
+        showToast('Processing...', 'info');
+        
+        const result = await apiRequest('/roster/toggle-dispatch-all', {
+          method: 'POST',
+          body: {
+            roster_id: currentRosterId,
+            include: include
+          }
+        });
+        
+        if (result.error) {
+          showToast(result.error, 'error');
+          return;
+        }
+        
+        showToast(result.message || (include ? 'All included' : 'All omitted'), 'success');
+        await loadDayView();
+      } catch (err) {
+        showToast(err.message || 'Toggle failed', 'error');
       }
     }
     

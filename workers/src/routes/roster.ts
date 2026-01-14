@@ -13,6 +13,11 @@
  * - calendar_start_date / calendar_end_date define when roster appears on calendar
  * - Must be within roster's valid date range (start_date to end_date)
  * 
+ * Dispatch Toggle:
+ * - Unassigned blocks can be toggled to include/omit from dispatch
+ * - include_in_dispatch = 1 means show as unassigned in dispatch
+ * - include_in_dispatch = 0 means don't show in dispatch (default)
+ * 
  * Status Flow:
  * - draft: Visible in Ops Calendar (when scheduled), NOT in Dispatch
  * - published: Visible in both Ops Calendar AND Dispatch
@@ -48,6 +53,25 @@ interface AssignInput {
 interface ScheduleInput {
   calendar_start_date: string;
   calendar_end_date: string;
+}
+
+interface ToggleDispatchInput {
+  roster_id: string;
+  duty_block_id: string;
+  shift_template_id: string;
+  date: string;
+  include: boolean;  // true = include in dispatch, false = omit
+}
+
+interface ToggleDispatchDayInput {
+  roster_id: string;
+  date: string;
+  include: boolean;
+}
+
+interface ToggleDispatchAllInput {
+  roster_id: string;
+  include: boolean;
 }
 
 // ============================================
@@ -127,6 +151,28 @@ export async function handleRoster(
       return unassignBlock(env, body.entry_id);
     }
 
+    // DISPATCH TOGGLE ENDPOINTS
+    // POST /api/roster/toggle-dispatch - Toggle single block for a date
+    if (method === 'POST' && seg1 === 'toggle-dispatch' && !seg2) {
+      const body = await parseBody<ToggleDispatchInput>(request);
+      if (!body) return error('Invalid request body');
+      return toggleDispatch(env, body);
+    }
+    
+    // POST /api/roster/toggle-dispatch-day - Toggle all blocks for a day
+    if (method === 'POST' && seg1 === 'toggle-dispatch-day') {
+      const body = await parseBody<ToggleDispatchDayInput>(request);
+      if (!body) return error('Invalid request body');
+      return toggleDispatchDay(env, body);
+    }
+    
+    // POST /api/roster/toggle-dispatch-all - Toggle all blocks for entire roster
+    if (method === 'POST' && seg1 === 'toggle-dispatch-all') {
+      const body = await parseBody<ToggleDispatchAllInput>(request);
+      if (!body) return error('Invalid request body');
+      return toggleDispatchAll(env, body);
+    }
+
     return error('Not found', 404);
   } catch (err) {
     console.error('Roster API error:', err);
@@ -170,10 +216,21 @@ async function getRoster(env: Env, id: string): Promise<Response> {
     ORDER BY first_name, last_name
   `).bind(TENANT_ID).all();
   
+  // Get entry counts
+  const stats = await env.DB.prepare(`
+    SELECT 
+      COUNT(*) as total_entries,
+      SUM(CASE WHEN driver_id IS NOT NULL THEN 1 ELSE 0 END) as assigned_entries
+    FROM roster_entries
+    WHERE roster_id = ? AND deleted_at IS NULL
+  `).bind(id).first();
+  
   return json({
     data: {
       ...roster,
       drivers: drivers.results,
+      entry_count: (stats as any)?.total_entries || 0,
+      assigned_count: (stats as any)?.assigned_entries || 0,
     }
   });
 }
@@ -218,29 +275,35 @@ async function createRoster(env: Env, input: RosterInput): Promise<Response> {
 }
 
 async function updateRoster(env: Env, id: string, input: Partial<RosterInput>): Promise<Response> {
-  const now = new Date().toISOString();
+  const updates: string[] = [];
+  const bindings: any[] = [];
+  
+  if (input.code !== undefined) { updates.push('code = ?'); bindings.push(input.code); }
+  if (input.name !== undefined) { updates.push('name = ?'); bindings.push(input.name); }
+  if (input.start_date !== undefined) { updates.push('start_date = ?'); bindings.push(input.start_date); }
+  if (input.end_date !== undefined) { updates.push('end_date = ?'); bindings.push(input.end_date); }
+  if (input.status !== undefined) { updates.push('status = ?'); bindings.push(input.status); }
+  if (input.notes !== undefined) { updates.push('notes = ?'); bindings.push(input.notes); }
+  
+  if (updates.length === 0) return error('No fields to update');
+  
+  updates.push('updated_at = ?');
+  bindings.push(new Date().toISOString());
+  bindings.push(id, TENANT_ID);
   
   await env.DB.prepare(`
-    UPDATE rosters SET
-      code = COALESCE(?, code),
-      name = COALESCE(?, name),
-      start_date = COALESCE(?, start_date),
-      end_date = COALESCE(?, end_date),
-      status = COALESCE(?, status),
-      notes = COALESCE(?, notes),
-      updated_at = ?
-    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(input.code || null, input.name || null, input.start_date || null,
-    input.end_date || null, input.status || null, input.notes || null, now, id, TENANT_ID).run();
+    UPDATE rosters SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?
+  `).bind(...bindings).run();
   
-  return json({ data: { id, ...input } });
+  return getRoster(env, id);
 }
 
 async function deleteRoster(env: Env, id: string): Promise<Response> {
   const now = new Date().toISOString();
-  await env.DB.prepare(`UPDATE rosters SET deleted_at = ? WHERE id = ?`).bind(now, id).run();
-  await env.DB.prepare(`UPDATE roster_entries SET deleted_at = ? WHERE roster_id = ?`).bind(now, id).run();
-  return json({ data: { deleted: true } });
+  await env.DB.prepare(`
+    UPDATE rosters SET deleted_at = ? WHERE id = ? AND tenant_id = ?
+  `).bind(now, id, TENANT_ID).run();
+  return json({ success: true });
 }
 
 // ============================================
@@ -254,179 +317,138 @@ async function scheduleRoster(env: Env, id: string, input: ScheduleInput): Promi
     return error('calendar_start_date and calendar_end_date are required');
   }
   
-  // Get roster to validate dates
+  // Verify roster exists
   const roster = await env.DB.prepare(`
     SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
   `).bind(id, TENANT_ID).first();
   
   if (!roster) return error('Roster not found', 404);
   
-  const r = roster as any;
-  
-  // Validate calendar dates are within roster's valid range
-  if (calendar_start_date < r.start_date) {
-    return error(`Calendar start date cannot be before roster start date (${r.start_date})`);
-  }
-  if (calendar_end_date > r.end_date) {
-    return error(`Calendar end date cannot be after roster end date (${r.end_date})`);
-  }
-  if (calendar_start_date > calendar_end_date) {
-    return error('Calendar start date cannot be after end date');
+  // Validate dates are within roster's valid range
+  const rosterData = roster as any;
+  if (calendar_start_date < rosterData.start_date || calendar_end_date > rosterData.end_date) {
+    return error(`Calendar dates must be within roster's valid range (${rosterData.start_date} to ${rosterData.end_date})`);
   }
   
   // Update roster with calendar dates
-  const now = new Date().toISOString();
   await env.DB.prepare(`
-    UPDATE rosters SET
-      calendar_start_date = ?,
-      calendar_end_date = ?,
-      updated_at = ?
-    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(calendar_start_date, calendar_end_date, now, id, TENANT_ID).run();
+    UPDATE rosters SET calendar_start_date = ?, calendar_end_date = ?, updated_at = ?
+    WHERE id = ?
+  `).bind(calendar_start_date, calendar_end_date, new Date().toISOString(), id).run();
   
-  return json({ 
-    data: { 
-      id,
-      calendar_start_date,
-      calendar_end_date,
-      scheduled: true 
-    } 
-  });
+  return json({ success: true, message: 'Roster scheduled to calendar' });
 }
 
 async function unscheduleRoster(env: Env, id: string): Promise<Response> {
-  // Get roster first
+  // Verify roster exists
   const roster = await env.DB.prepare(`
     SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
   `).bind(id, TENANT_ID).first();
   
   if (!roster) return error('Roster not found', 404);
   
-  const r = roster as any;
-  
-  // Can't unschedule a published roster - must unpublish first
-  if (r.status === 'published') {
-    return error('Cannot remove a published roster from calendar. Unpublish it first.');
+  // Can't unschedule if published
+  if ((roster as any).status === 'published') {
+    return error('Cannot unschedule a published roster. Unpublish it first.');
   }
   
   // Clear calendar dates
-  const now = new Date().toISOString();
   await env.DB.prepare(`
-    UPDATE rosters SET
-      calendar_start_date = NULL,
-      calendar_end_date = NULL,
-      updated_at = ?
-    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(now, id, TENANT_ID).run();
+    UPDATE rosters SET calendar_start_date = NULL, calendar_end_date = NULL, updated_at = ?
+    WHERE id = ?
+  `).bind(new Date().toISOString(), id).run();
   
-  return json({ data: { id, unscheduled: true } });
+  return json({ success: true, message: 'Roster removed from calendar' });
 }
 
-// ============================================
-// PUBLISH / UNPUBLISH
-// ============================================
-
 async function publishRoster(env: Env, id: string): Promise<Response> {
-  // Get roster
+  // Verify roster exists and is scheduled
   const roster = await env.DB.prepare(`
     SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
   `).bind(id, TENANT_ID).first();
   
   if (!roster) return error('Roster not found', 404);
   
-  const r = roster as any;
+  const rosterData = roster as any;
   
-  // Must be scheduled first
-  if (!r.calendar_start_date || !r.calendar_end_date) {
-    return error('Roster must be added to calendar before publishing');
+  if (!rosterData.calendar_start_date || !rosterData.calendar_end_date) {
+    return error('Roster must be scheduled to calendar before publishing');
   }
   
-  // Check for TIME-LEVEL conflicts with other published rosters
-  // Get all entries in this roster's calendar date range
+  // Check for conflicts with other published rosters (time-level)
   const entries = await env.DB.prepare(`
-    SELECT re.id, re.date, re.start_time, re.end_time, re.driver_id,
-           e.first_name || ' ' || e.last_name as driver_name,
-           db.name as block_name, st.code as shift_code
+    SELECT 
+      re.id, re.date, re.driver_id, re.start_time, re.end_time, re.duty_block_id,
+      db.name as block_name,
+      st.code as shift_code
     FROM roster_entries re
-    JOIN employees e ON re.driver_id = e.id
     JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
     JOIN shift_templates st ON re.shift_template_id = st.id
-    WHERE re.roster_id = ? 
-      AND re.deleted_at IS NULL 
-      AND re.driver_id IS NOT NULL
-      AND re.date >= ?
-      AND re.date <= ?
-  `).bind(id, r.calendar_start_date, r.calendar_end_date).all();
+    WHERE re.roster_id = ? AND re.deleted_at IS NULL AND re.driver_id IS NOT NULL
+  `).bind(id).all();
   
-  // For each entry, check if there's a time conflict with another published roster
   for (const entry of entries.results as any[]) {
-    const startTime = entry.start_time || 6;
-    const endTime = entry.end_time || 18;
-    
+    // Check for time overlaps with published rosters
     const conflict = await env.DB.prepare(`
-      SELECT re.date, re.start_time, re.end_time,
-             ros.code as roster_code, ros.name as roster_name,
-             db.name as block_name, st.code as shift_code
+      SELECT 
+        re.id, re.start_time, re.end_time,
+        db.name as block_name,
+        st.code as shift_code,
+        r.code as roster_code
       FROM roster_entries re
-      JOIN rosters ros ON re.roster_id = ros.id
       JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
       JOIN shift_templates st ON re.shift_template_id = st.id
-      WHERE re.driver_id = ?
-        AND re.date = ?
+      JOIN rosters r ON re.roster_id = r.id
+      WHERE re.date = ? 
+        AND re.driver_id = ? 
         AND re.deleted_at IS NULL
-        AND ros.id != ?
-        AND ros.status = 'published'
-        AND ros.deleted_at IS NULL
+        AND r.status = 'published'
+        AND r.id != ?
         AND (
           (re.start_time < ? AND re.end_time > ?) OR
           (re.start_time >= ? AND re.start_time < ?) OR
           (re.end_time > ? AND re.end_time <= ?)
         )
       LIMIT 1
-    `).bind(entry.driver_id, entry.date, id, endTime, startTime, startTime, endTime, startTime, endTime).first();
+    `).bind(
+      entry.date, entry.driver_id, id,
+      entry.end_time, entry.start_time,
+      entry.start_time, entry.end_time,
+      entry.start_time, entry.end_time
+    ).first();
     
     if (conflict) {
       const c = conflict as any;
-      return json({
-        error: 'Time conflict detected',
-        conflict: {
-          driverId: entry.driver_id,
-          driverName: entry.driver_name,
-          date: entry.date,
-          thisShift: `${entry.shift_code} - ${entry.block_name}`,
-          conflictingRoster: c.roster_code,
-          conflictingShift: `${c.shift_code} - ${c.block_name}`
-        }
-      }, 409);
+      return error(`Conflict: Driver already assigned to ${c.shift_code} - ${c.block_name} (${c.start_time}-${c.end_time}) in roster "${c.roster_code}" on ${entry.date}. Your shift: ${entry.shift_code} - ${entry.block_name} (${entry.start_time}-${entry.end_time})`);
     }
   }
   
-  // Update status to published
-  const now = new Date().toISOString();
+  // No conflicts, publish
   await env.DB.prepare(`
     UPDATE rosters SET status = 'published', updated_at = ? WHERE id = ?
-  `).bind(now, id).run();
+  `).bind(new Date().toISOString(), id).run();
   
-  return json({ data: { id, status: 'published' } });
+  return json({ success: true, message: 'Roster published' });
 }
 
 async function unpublishRoster(env: Env, id: string): Promise<Response> {
+  // Verify roster exists
   const roster = await env.DB.prepare(`
     SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
   `).bind(id, TENANT_ID).first();
   
   if (!roster) return error('Roster not found', 404);
   
-  const now = new Date().toISOString();
+  // Revert to draft
   await env.DB.prepare(`
     UPDATE rosters SET status = 'draft', updated_at = ? WHERE id = ?
-  `).bind(now, id).run();
+  `).bind(new Date().toISOString(), id).run();
   
-  return json({ data: { id, status: 'draft' } });
+  return json({ success: true, message: 'Roster unpublished (reverted to draft)' });
 }
 
 // ============================================
-// DAY VIEW - Core of new design
+// DAY VIEW
 // ============================================
 
 async function getDayView(env: Env, rosterId: string, date: string): Promise<Response> {
@@ -460,81 +482,93 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
       ORDER BY st.code, db.sequence
     `).bind(TENANT_ID).all();
   
-  // Get existing assignments for this date
-  const assignments = await env.DB.prepare(`
-    SELECT 
-      re.id as entry_id,
-      re.duty_block_id,
-      re.driver_id,
-      e.first_name || ' ' || e.last_name as driver_name,
-      e.employee_number as driver_number
-    FROM roster_entries re
-    LEFT JOIN employees e ON re.driver_id = e.id
-    WHERE re.roster_id = ? AND re.date = ? AND re.deleted_at IS NULL
-  `).bind(rosterId, date).all();
-  
-  // Map assignments by block ID
-  const assignmentMap: Record<string, any> = {};
-  for (const a of assignments.results as any[]) {
-    if (a.duty_block_id) {
-      assignmentMap[a.duty_block_id] = a;
-    }
-  }
-  
-  // Get drivers
-  const drivers = await env.DB.prepare(`
-    SELECT id, employee_number, first_name, last_name
-    FROM employees
-    WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active'
-    ORDER BY first_name, last_name
-  `).bind(TENANT_ID).all();
-  
-  // Build response
-  const unassigned: any[] = [];
-  const byDriver: Record<string, any[]> = {};
-  
-  for (const d of drivers.results as any[]) {
-    byDriver[d.id] = [];
-  }
-  
-  for (const block of blocks.results as any[]) {
-    const assignment = assignmentMap[block.id];
+    // Get existing entries for this date (includes both assigned and dispatch-toggled)
+    const entries = await env.DB.prepare(`
+      SELECT 
+        re.id as entry_id,
+        re.duty_block_id,
+        re.driver_id,
+        re.include_in_dispatch,
+        e.first_name || ' ' || e.last_name as driver_name,
+        e.employee_number as driver_number
+      FROM roster_entries re
+      LEFT JOIN employees e ON re.driver_id = e.id
+      WHERE re.roster_id = ? AND re.date = ? AND re.deleted_at IS NULL
+    `).bind(rosterId, date).all();
     
-    const blockData = {
-      id: block.id,
-      shift_template_id: block.shift_template_id,
-      shift_code: block.shift_code,
-      shift_name: block.shift_name,
-      shift_type: block.shift_type,
-      block_name: block.block_name,
-      start_time: block.start_time || 6,
-      end_time: block.end_time || 18,
-      default_driver_id: block.default_driver_id,
-      default_driver_name: block.default_driver_name,
-      blocks_in_shift: block.blocks_in_shift,
-      // Assignment info
-      entry_id: assignment?.entry_id || null,
-      assigned_driver_id: assignment?.driver_id || null,
-      assigned_driver_name: assignment?.driver_name || null,
-    };
+    // Map entries by block ID
+    const entryMap: Record<string, any> = {};
+    for (const entry of entries.results as any[]) {
+      if (entry.duty_block_id) {
+        entryMap[entry.duty_block_id] = entry;
+      }
+    }
     
-    if (assignment?.driver_id && byDriver[assignment.driver_id]) {
-      byDriver[assignment.driver_id].push(blockData);
-    } else {
-      unassigned.push(blockData);
+    // Get drivers
+    const drivers = await env.DB.prepare(`
+      SELECT id, employee_number, first_name, last_name
+      FROM employees
+      WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active'
+      ORDER BY first_name, last_name
+    `).bind(TENANT_ID).all();
+    
+    // Build response
+    const unassigned: any[] = [];
+    const byDriver: Record<string, any[]> = {};
+    
+    for (const d of drivers.results as any[]) {
+      byDriver[d.id] = [];
     }
-  }
-  
-  return json({
-    data: {
-      roster_id: rosterId,
-      roster_status: (roster as any).status,
-      date,
-      drivers: drivers.results,
-      unassigned,
-      by_driver: byDriver,
+    
+    for (const block of blocks.results as any[]) {
+      const entry = entryMap[block.id];
+      
+      const blockData = {
+        id: block.id,
+        shift_template_id: block.shift_template_id,
+        shift_code: block.shift_code,
+        shift_name: block.shift_name,
+        shift_type: block.shift_type,
+        block_name: block.block_name,
+        start_time: block.start_time || 6,
+        end_time: block.end_time || 18,
+        default_driver_id: block.default_driver_id,
+        default_driver_name: block.default_driver_name,
+        blocks_in_shift: block.blocks_in_shift,
+        // Entry info
+        entry_id: entry?.entry_id || null,
+        assigned_driver_id: entry?.driver_id || null,
+        assigned_driver_name: entry?.driver_name || null,
+        // Dispatch toggle info (for unassigned blocks)
+        include_in_dispatch: entry?.include_in_dispatch || 0,
+      };
+      
+      if (entry?.driver_id && byDriver[entry.driver_id]) {
+        byDriver[entry.driver_id].push(blockData);
+      } else {
+        unassigned.push(blockData);
+      }
     }
-  });
+    
+    // Calculate counts for the header
+    const includedCount = unassigned.filter(b => b.include_in_dispatch === 1).length;
+    const omittedCount = unassigned.filter(b => b.include_in_dispatch === 0).length;
+    
+    return json({
+      data: {
+        roster_id: rosterId,
+        roster_status: (roster as any).status,
+        date,
+        drivers: drivers.results,
+        unassigned,
+        by_driver: byDriver,
+        dispatch_stats: {
+          included: includedCount,
+          omitted: omittedCount,
+          total: unassigned.length
+        }
+      }
+    });
   } catch (err) {
     console.error('getDayView error:', err);
     return error(err instanceof Error ? err.message : 'Failed to load day view', 500);
@@ -641,8 +675,8 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
       await env.DB.prepare(`
         INSERT INTO roster_entries (
           id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
-          name, start_time, end_time, driver_id, status, source, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'Assigned Block', ?, ?, ?, 'scheduled', 'manual', ?, ?)
+          name, start_time, end_time, driver_id, status, source, include_in_dispatch, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'Assigned Block', ?, ?, ?, 'scheduled', 'manual', 0, ?, ?)
       `).bind(id, TENANT_ID, rosterId, shift_template_id, block.id, date,
         block.start_time || 6, block.end_time || 18, driver_id, now, now).run();
       createdIds.push(id);
@@ -661,4 +695,174 @@ async function unassignBlock(env: Env, entryId: string): Promise<Response> {
   `).bind(now, entryId).run();
   
   return json({ data: { unassigned: true } });
+}
+
+// ============================================
+// DISPATCH TOGGLE
+// ============================================
+
+async function toggleDispatch(env: Env, input: ToggleDispatchInput): Promise<Response> {
+  const { roster_id, duty_block_id, shift_template_id, date, include } = input;
+  
+  if (!roster_id || !duty_block_id || !shift_template_id || !date) {
+    return error('roster_id, duty_block_id, shift_template_id, and date are required');
+  }
+  
+  const now = new Date().toISOString();
+  const includeValue = include ? 1 : 0;
+  
+  // Check if entry exists
+  const existing = await env.DB.prepare(`
+    SELECT id, driver_id FROM roster_entries 
+    WHERE roster_id = ? AND duty_block_id = ? AND date = ? AND deleted_at IS NULL
+  `).bind(roster_id, duty_block_id, date).first();
+  
+  if (existing) {
+    // Update existing entry
+    await env.DB.prepare(`
+      UPDATE roster_entries SET include_in_dispatch = ?, updated_at = ? WHERE id = ?
+    `).bind(includeValue, now, (existing as any).id).run();
+  } else {
+    // Create new entry with no driver (unassigned but toggled for dispatch)
+    const block = await env.DB.prepare(`
+      SELECT 
+        (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = ?) as start_time,
+        (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = ?) as end_time
+    `).bind(duty_block_id, duty_block_id).first();
+    
+    const id = uuid();
+    await env.DB.prepare(`
+      INSERT INTO roster_entries (
+        id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
+        name, start_time, end_time, driver_id, status, source, include_in_dispatch, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 'Unassigned Block', ?, ?, NULL, 'scheduled', 'manual', ?, ?, ?)
+    `).bind(
+      id, TENANT_ID, roster_id, shift_template_id, duty_block_id, date,
+      (block as any)?.start_time || 6, (block as any)?.end_time || 18,
+      includeValue, now, now
+    ).run();
+  }
+  
+  return json({ 
+    success: true, 
+    message: include ? 'Block will appear as unassigned in dispatch' : 'Block omitted from dispatch'
+  });
+}
+
+async function toggleDispatchDay(env: Env, input: ToggleDispatchDayInput): Promise<Response> {
+  const { roster_id, date, include } = input;
+  
+  if (!roster_id || !date) {
+    return error('roster_id and date are required');
+  }
+  
+  // Verify roster exists
+  const roster = await env.DB.prepare(`
+    SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(roster_id, TENANT_ID).first();
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  const now = new Date().toISOString();
+  const includeValue = include ? 1 : 0;
+  
+  // Get all duty blocks
+  const blocks = await env.DB.prepare(`
+    SELECT 
+      db.id as duty_block_id,
+      db.shift_template_id,
+      (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as start_time,
+      (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as end_time
+    FROM shift_template_duty_blocks db
+    JOIN shift_templates st ON db.shift_template_id = st.id
+    WHERE st.tenant_id = ? AND st.deleted_at IS NULL AND st.is_active = 1
+  `).bind(TENANT_ID).all();
+  
+  let updatedCount = 0;
+  let createdCount = 0;
+  
+  for (const block of blocks.results as any[]) {
+    // Check if entry exists (might be assigned to a driver)
+    const existing = await env.DB.prepare(`
+      SELECT id, driver_id FROM roster_entries 
+      WHERE roster_id = ? AND duty_block_id = ? AND date = ? AND deleted_at IS NULL
+    `).bind(roster_id, block.duty_block_id, date).first();
+    
+    if (existing) {
+      // Only update unassigned entries
+      if (!(existing as any).driver_id) {
+        await env.DB.prepare(`
+          UPDATE roster_entries SET include_in_dispatch = ?, updated_at = ? WHERE id = ?
+        `).bind(includeValue, now, (existing as any).id).run();
+        updatedCount++;
+      }
+    } else {
+      // Create new entry
+      const id = uuid();
+      await env.DB.prepare(`
+        INSERT INTO roster_entries (
+          id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
+          name, start_time, end_time, driver_id, status, source, include_in_dispatch, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, 'Unassigned Block', ?, ?, NULL, 'scheduled', 'manual', ?, ?, ?)
+      `).bind(
+        id, TENANT_ID, roster_id, block.shift_template_id, block.duty_block_id, date,
+        block.start_time || 6, block.end_time || 18,
+        includeValue, now, now
+      ).run();
+      createdCount++;
+    }
+  }
+  
+  return json({ 
+    success: true, 
+    message: `Day ${date}: ${updatedCount} updated, ${createdCount} created`,
+    updated: updatedCount,
+    created: createdCount
+  });
+}
+
+async function toggleDispatchAll(env: Env, input: ToggleDispatchAllInput): Promise<Response> {
+  const { roster_id, include } = input;
+  
+  if (!roster_id) {
+    return error('roster_id is required');
+  }
+  
+  // Verify roster exists and get date range
+  const roster = await env.DB.prepare(`
+    SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(roster_id, TENANT_ID).first();
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  const rosterData = roster as any;
+  const startDate = new Date(rosterData.start_date);
+  const endDate = new Date(rosterData.end_date);
+  
+  // Generate all dates in the roster period
+  const dates: string[] = [];
+  const current = new Date(startDate);
+  while (current <= endDate) {
+    dates.push(current.toISOString().split('T')[0]);
+    current.setDate(current.getDate() + 1);
+  }
+  
+  let totalUpdated = 0;
+  let totalCreated = 0;
+  
+  // Toggle each day
+  for (const date of dates) {
+    const result = await toggleDispatchDay(env, { roster_id, date, include });
+    const body = await result.json() as any;
+    totalUpdated += body.updated || 0;
+    totalCreated += body.created || 0;
+  }
+  
+  return json({ 
+    success: true, 
+    message: `Entire roster (${dates.length} days): ${totalUpdated} updated, ${totalCreated} created`,
+    days: dates.length,
+    updated: totalUpdated,
+    created: totalCreated
+  });
 }
