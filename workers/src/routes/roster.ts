@@ -597,6 +597,8 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
       const startTime = block.start_time || 6;
       const endTime = block.end_time || 18;
       
+      // Only exclude if same roster AND same block (we're updating an existing entry)
+      // Different rosters with same block SHOULD conflict
       const overlap = await env.DB.prepare(`
         SELECT re.id, db.name as block_name, st.code as shift_code, r.code as roster_code
         FROM roster_entries re
@@ -604,14 +606,14 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
         JOIN shift_templates st ON re.shift_template_id = st.id
         JOIN rosters r ON re.roster_id = r.id
         WHERE re.date = ? AND re.driver_id = ? AND re.deleted_at IS NULL
-        AND re.duty_block_id != ?
+        AND NOT (re.roster_id = ? AND re.duty_block_id = ?)
         AND (
           (re.start_time < ? AND re.end_time > ?) OR
           (re.start_time >= ? AND re.start_time < ?) OR
           (re.end_time > ? AND re.end_time <= ?)
         )
         LIMIT 1
-      `).bind(date, driver_id, block.id, endTime, startTime, startTime, endTime, startTime, endTime).first();
+      `).bind(date, driver_id, rosterId, block.id, endTime, startTime, startTime, endTime, startTime, endTime).first();
       
       if (overlap) {
         const o = overlap as any;
@@ -624,10 +626,10 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
   const createdIds: string[] = [];
   
   for (const block of blocksToAssign) {
-    // Check existing
+    // Check existing - must match roster_id too!
     const existing = await env.DB.prepare(`
-      SELECT id FROM roster_entries WHERE duty_block_id = ? AND date = ? AND deleted_at IS NULL
-    `).bind(block.id, date).first();
+      SELECT id FROM roster_entries WHERE roster_id = ? AND duty_block_id = ? AND date = ? AND deleted_at IS NULL
+    `).bind(rosterId, block.id, date).first();
     
     if (existing) {
       await env.DB.prepare(`

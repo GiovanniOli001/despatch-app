@@ -3816,6 +3816,13 @@
         <button onclick="changeDate(1)">▶</button>
       </div>
       <div class="style-toggle">
+        <span class="style-toggle-label">Data:</span>
+        <select class="style-select" id="dataSourceSelect" onchange="changeDataSource()">
+          <option value="fake">🎭 Fake Data</option>
+          <option value="real">🔌 Real API</option>
+        </select>
+      </div>
+      <div class="style-toggle">
         <span class="style-toggle-label">Style:</span>
         <select class="style-select" id="styleSelect" onchange="changeStyle()">
           <option value="style-a">A: Original (Fragmented)</option>
@@ -4617,13 +4624,15 @@
     let vehicles = [];
     let unassignedJobs = [];
     let selectedItem = null;
-    let currentDate = new Date(2025, 6, 14);
+    let currentDate = new Date();  // Start with today for real data
     let expandedSection = null;
     let editingDuty = null;
     let formErrors = {};
     let currentStyle = 'style-b';
     let allocationMode = 'driver'; // 'driver' or 'vehicle'
     let viewMode = 'horizontal'; // 'horizontal' or 'vertical'
+    let dataSource = 'fake'; // 'fake' or 'real'
+    let dispatchMeta = null; // Metadata from real API
     
     // Filter state
     let driverFilters = { search: '', status: 'all', sort: 'status' };
@@ -4661,6 +4670,157 @@
       });
       
       renderAll();
+    }
+
+    // ============================================
+    // DATA SOURCE MANAGEMENT
+    // ============================================
+    
+    async function changeDataSource() {
+      dataSource = document.getElementById('dataSourceSelect').value;
+      selectedItem = null;
+      editingDuty = null;
+      formErrors = {};
+      
+      if (dataSource === 'real') {
+        // Reset to today when switching to real data
+        currentDate = new Date();
+        await loadDispatchData();
+      } else {
+        // Generate fake data
+        currentDate = new Date(2025, 6, 14); // Reset to fake date
+        loadFakeData();
+        syncAllVehicleAssignments();
+        renderAll();
+      }
+      
+      document.getElementById('currentDate').textContent = formatDate(currentDate);
+    }
+    
+    async function loadDispatchData() {
+      if (dataSource === 'fake') {
+        loadFakeData();
+        syncAllVehicleAssignments();
+        renderAll();
+        return;
+      }
+      
+      // Show loading state
+      const driverRows = document.getElementById('driverRows');
+      const vehicleRows = document.getElementById('vehicleRows');
+      const unassignedRows = document.getElementById('unassignedRows');
+      
+      if (driverRows) driverRows.innerHTML = '<div style="padding: 20px; color: var(--text-secondary);">Loading dispatch data...</div>';
+      if (vehicleRows) vehicleRows.innerHTML = '<div style="padding: 20px; color: var(--text-secondary);">Loading...</div>';
+      if (unassignedRows) unassignedRows.innerHTML = '<div style="padding: 20px; color: var(--text-secondary);">Loading...</div>';
+      
+      try {
+        const dateStr = formatDateISO(currentDate);
+        const result = await apiRequest(`/dispatch/${dateStr}`);
+        
+        if (result.data) {
+          const data = result.data;
+          
+          // Map API response to frontend format
+          drivers = data.drivers || [];
+          vehicles = data.vehicles || [];
+          unassignedJobs = data.unassigned || [];
+          dispatchMeta = data._meta || null;
+          
+          // Update stats
+          if (data.stats) {
+            updateDispatchStats(data.stats);
+          }
+          
+          // Show TODOs/warnings if any
+          if (dispatchMeta && dispatchMeta.todos && dispatchMeta.todos.length > 0) {
+            console.warn('Dispatch TODOs:', dispatchMeta.todos);
+          }
+          
+          renderAll();
+          
+          // Show success toast with source info
+          const rosterInfo = dispatchMeta?.publishedRosters?.length 
+            ? `from ${dispatchMeta.publishedRosters.length} published roster(s)` 
+            : 'no published rosters';
+          showToast(`Loaded real data - ${rosterInfo}`, 'success');
+        }
+      } catch (err) {
+        console.error('Failed to load dispatch data:', err);
+        showToast(`Failed to load: ${err.message}`, 'error');
+        
+        // Show error in UI
+        if (driverRows) driverRows.innerHTML = `<div style="padding: 20px; color: var(--accent-red);">Error: ${err.message}</div>`;
+      }
+    }
+    
+    function updateDispatchStats(stats) {
+      const statElements = {
+        'statDriversAvail': stats.drivers_available,
+        'statDriversWork': stats.drivers_working,
+        'statDriversLeave': stats.drivers_leave,
+        'statVehiclesAvail': stats.vehicles_available,
+        'statVehiclesMaint': stats.vehicles_maintenance,
+        'statUnassigned': stats.unassigned_count,
+        'driverAvail': stats.drivers_available,
+        'driverLeave': stats.drivers_leave,
+        'vehicleAvail': stats.vehicles_available,
+        'vehicleMaint': stats.vehicles_maintenance,
+        'driverCount': stats.drivers_working + stats.drivers_available + stats.drivers_leave,
+        'vehicleCount': stats.vehicles_in_use + stats.vehicles_available + stats.vehicles_maintenance,
+        'unassignedCount': stats.unassigned_count
+      };
+      
+      for (const [id, value] of Object.entries(statElements)) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      }
+    }
+    
+    function loadFakeData() {
+      vehicleBookings.clear();
+      vehicles = generateVehicles(80);
+      drivers = generateDrivers(104);
+      unassignedJobs = generateUnassignedJobs(12);
+      
+      // Add test charters
+      const testCharters = [
+        { pickup: 'glenelg', dropoff: 'oval', start: 10, customer: 'Beach Wedding' },
+        { pickup: 'airport', dropoff: 'convention', start: 11, customer: 'Conference Group' },
+        { pickup: 'barossa', dropoff: 'cbd', start: 12, customer: 'Wine Tour' },
+        { pickup: 'hahndorf', dropoff: 'marion', start: 13, customer: 'German Club' },
+        { pickup: 'victor', dropoff: 'fmc', start: 14, customer: 'Medical Transfer' },
+        { pickup: 'zoo', dropoff: 'flinders', start: 15, customer: 'School Excursion' },
+        { pickup: 'henley', dropoff: 'modbury', start: 16, customer: 'Sports Team' },
+        { pickup: 'norwood', dropoff: 'airport', start: 17, customer: 'Airport Shuttle' },
+      ];
+      
+      testCharters.forEach((tc, i) => {
+        const pickupLoc = LOCATIONS.find(l => l.id === tc.pickup);
+        const dropoffLoc = LOCATIONS.find(l => l.id === tc.dropoff);
+        const duration = 2 + Math.floor(Math.random() * 2);
+        const end = tc.start + duration;
+        
+        unassignedJobs.push({
+          id: `CHT-T${String(i + 1).padStart(2, '0')}`,
+          name: `Charter #${200 + i}`,
+          type: 'charter',
+          start: tc.start,
+          end: end,
+          depot: DEPOT,
+          customer: tc.customer,
+          pickupLocation: pickupLoc,
+          dropoffLocation: dropoffLoc,
+          duties: generateJobDuties(tc.start, end, true, pickupLoc, dropoffLoc)
+        });
+      });
+      
+      drivers.sort((a, b) => ({ leave: 0, working: 1, available: 2 }[a.status] - { leave: 0, working: 1, available: 2 }[b.status]));
+      dispatchMeta = null;
+    }
+    
+    function formatDateISO(date) {
+      return date.toISOString().split('T')[0];
     }
 
     // Vertical view rendering
@@ -5456,45 +5616,7 @@
       return true;
     }
     
-    // Clear vehicle bookings before generating fresh data
-    vehicleBookings.clear();
-    
-    vehicles = generateVehicles(80);
-    drivers = generateDrivers(104);
-    unassignedJobs = generateUnassignedJobs(12); // More jobs for better suggestions
-    
-    // Add some specific charter jobs for testing the suggestion system
-    const testCharters = [
-      { pickup: 'glenelg', dropoff: 'oval', start: 10, customer: 'Beach Wedding' },
-      { pickup: 'airport', dropoff: 'convention', start: 11, customer: 'Conference Group' },
-      { pickup: 'barossa', dropoff: 'cbd', start: 12, customer: 'Wine Tour' },
-      { pickup: 'hahndorf', dropoff: 'marion', start: 13, customer: 'German Club' },
-      { pickup: 'victor', dropoff: 'fmc', start: 14, customer: 'Medical Transfer' },
-      { pickup: 'zoo', dropoff: 'flinders', start: 15, customer: 'School Excursion' },
-      { pickup: 'henley', dropoff: 'modbury', start: 16, customer: 'Sports Team' },
-      { pickup: 'norwood', dropoff: 'airport', start: 17, customer: 'Airport Shuttle' },
-    ];
-    
-    testCharters.forEach((tc, i) => {
-      const pickupLoc = LOCATIONS.find(l => l.id === tc.pickup);
-      const dropoffLoc = LOCATIONS.find(l => l.id === tc.dropoff);
-      const duration = 2 + Math.floor(Math.random() * 2);
-      const end = tc.start + duration;
-      
-      unassignedJobs.push({
-        id: `CHT-T${String(i + 1).padStart(2, '0')}`,
-        name: `Charter #${200 + i}`,
-        type: 'charter',
-        start: tc.start,
-        end: end,
-        depot: DEPOT,
-        customer: tc.customer,
-        pickupLocation: pickupLoc,
-        dropoffLocation: dropoffLoc,
-        duties: generateJobDuties(tc.start, end, true, pickupLoc, dropoffLoc)
-      });
-    });
-    drivers.sort((a, b) => ({ leave: 0, working: 1, available: 2 }[a.status] - { leave: 0, working: 1, available: 2 }[b.status]));
+    // Initial data load will happen in init() - calling loadFakeData()
 
     function formatDate(date) {
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -5502,9 +5624,17 @@
       return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
     }
 
-    function changeDate(delta) {
+    async function changeDate(delta) {
       currentDate.setDate(currentDate.getDate() + delta);
       document.getElementById('currentDate').textContent = formatDate(currentDate);
+      
+      // Reload data when changing date
+      if (dataSource === 'real') {
+        await loadDispatchData();
+      } else {
+        // For fake data, just re-render (data doesn't change by date in fake mode)
+        renderAll();
+      }
     }
 
     function formatTime(hour) {
@@ -10417,6 +10547,10 @@ Guidelines:
       // Initialize navigation
       initNavigation();
       
+      // Load initial fake data
+      loadFakeData();
+      
+      // Set initial date display
       document.getElementById('currentDate').textContent = formatDate(currentDate);
       renderTimelineHeader('driverTimelineHeader');
       renderTimelineHeader('vehicleTimelineHeader');

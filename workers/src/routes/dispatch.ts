@@ -2,48 +2,76 @@
  * Dispatch API Routes
  * /api/dispatch/*
  * 
- * Read/write interface for the dispatch board.
- * Essentially a day-view of the roster with additional
- * operational actions (assign, transfer, unassign).
+ * Real-time operations view pulling from:
+ * - Published rosters → shifts
+ * - Employees → drivers  
+ * - Vehicles → fleet
+ * - Duty lines → individual duties
  * 
- * IMPORTANT: Only shows entries from PUBLISHED rosters.
+ * IMPORTANT: Only shows entries from PUBLISHED rosters
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
 
-interface AssignInput {
-  roster_entry_id: string;
-  driver_id?: string;
-  vehicle_id?: string;
-}
-
-interface TransferInput {
-  roster_entry_id: string;
-  to_driver_id?: string;
-  to_vehicle_id?: string;
-}
-
-interface DutyUpdateInput {
-  duty_type_id?: string;
-  start_time?: number;
-  end_time?: number;
-  description?: string;
-  vehicle_id?: string | null;
-  driver_id?: string | null;
-  pay_type_id?: string;
-}
-
-interface AdHocDutyInput {
-  roster_entry_id: string;
-  duty_type_id: string;
-  start_time: number;
-  end_time: number;
-  description?: string;
-  vehicle_id?: string;
-  pay_type_id?: string;
-}
-
 const TENANT_ID = 'default';
+
+// ============================================
+// INTERFACES
+// ============================================
+
+interface DispatchDuty {
+  id: string;
+  type: string;  // 'driving', 'oov', 'break', 'waiting', 'dead', 'charter'
+  start: number;
+  end: number;
+  description: string;
+  vehicle: string | null;
+  vehicleId: string | null;
+  locationId: string | null;
+  fromLocationId: string | null;
+  toLocationId: string | null;
+  payType: string;
+}
+
+interface DispatchShift {
+  id: string;
+  entryId: string;
+  name: string;
+  type: string;  // 'shift', 'charter'
+  start: number;
+  end: number;
+  rosterId: string;
+  rosterCode: string;
+  blockId: string;
+  blockName: string;
+  duties: DispatchDuty[];
+  pickupLocation: any | null;
+  dropoffLocation: any | null;
+}
+
+interface DispatchDriver {
+  id: string;
+  name: string;
+  fullName: string;
+  phone: string | null;
+  licence: string | null;
+  depot: any;
+  status: string;  // 'working', 'available', 'leave'
+  shifts: DispatchShift[];
+}
+
+interface DispatchVehicle {
+  id: string;
+  rego: string;
+  capacity: number;
+  depot: any;
+  status: string;  // 'available', 'in_use', 'maintenance'
+  shifts: any[];
+}
+
+// ============================================
+// ROUTER
+// ============================================
 
 export async function handleDispatch(
   request: Request,
@@ -51,229 +79,429 @@ export async function handleDispatch(
   segments: string[]
 ): Promise<Response> {
   const method = request.method;
-  const firstSegment = segments[0];
-  const secondSegment = segments[1];
+  const seg1 = segments[0];
+  const seg2 = segments[1];
 
-  // GET /api/dispatch/:date - Full day data for dispatch view
-  if (method === 'GET' && firstSegment && !secondSegment) {
-    return getDispatchDay(env, firstSegment);
+  try {
+    // GET /api/dispatch/:date - Full day data
+    if (method === 'GET' && seg1 && !seg2) {
+      return getDispatchDay(env, seg1);
+    }
+
+    // POST /api/dispatch/assign - Assign driver/vehicle to entry
+    if (method === 'POST' && seg1 === 'assign') {
+      const body = await parseBody<{ roster_entry_id: string; driver_id?: string; vehicle_id?: string }>(request);
+      if (!body) return error('Invalid request body');
+      return assignToEntry(env, body);
+    }
+
+    // POST /api/dispatch/transfer - Transfer between drivers
+    if (method === 'POST' && seg1 === 'transfer') {
+      const body = await parseBody<{ roster_entry_id: string; to_driver_id?: string; to_vehicle_id?: string }>(request);
+      if (!body) return error('Invalid request body');
+      return transferEntry(env, body);
+    }
+
+    // POST /api/dispatch/unassign - Remove assignment
+    if (method === 'POST' && seg1 === 'unassign') {
+      const body = await parseBody<{ roster_entry_id: string; unassign: 'driver' | 'vehicle' | 'both' }>(request);
+      if (!body) return error('Invalid request body');
+      return unassignEntry(env, body);
+    }
+
+    return error('Not found', 404);
+  } catch (err) {
+    console.error('Dispatch API error:', err);
+    return error(err instanceof Error ? err.message : 'Internal error', 500);
   }
-
-  // POST /api/dispatch/assign - Assign driver/vehicle to roster entry
-  if (method === 'POST' && firstSegment === 'assign') {
-    const body = await parseBody<AssignInput>(request);
-    if (!body) return error('Invalid request body');
-    return assignToEntry(env, body);
-  }
-
-  // POST /api/dispatch/transfer - Transfer shift between drivers/vehicles
-  if (method === 'POST' && firstSegment === 'transfer') {
-    const body = await parseBody<TransferInput>(request);
-    if (!body) return error('Invalid request body');
-    return transferEntry(env, body);
-  }
-
-  // POST /api/dispatch/unassign - Remove assignment (back to unassigned)
-  if (method === 'POST' && firstSegment === 'unassign') {
-    const body = await parseBody<{ roster_entry_id: string; unassign: 'driver' | 'vehicle' | 'both' }>(request);
-    if (!body) return error('Invalid request body');
-    return unassignEntry(env, body);
-  }
-
-  // PUT /api/dispatch/duty/:id - Update a duty
-  if (method === 'PUT' && firstSegment === 'duty' && secondSegment) {
-    const body = await parseBody<DutyUpdateInput>(request);
-    if (!body) return error('Invalid request body');
-    return updateDuty(env, secondSegment, body);
-  }
-
-  // POST /api/dispatch/duty - Add ad-hoc duty
-  if (method === 'POST' && firstSegment === 'duty' && !secondSegment) {
-    const body = await parseBody<AdHocDutyInput>(request);
-    if (!body) return error('Invalid request body');
-    return addAdHocDuty(env, body);
-  }
-
-  // DELETE /api/dispatch/duty/:id - Delete a duty
-  if (method === 'DELETE' && firstSegment === 'duty' && secondSegment) {
-    return deleteDuty(env, secondSegment);
-  }
-
-  return error('Method not allowed', 405);
 }
 
 // ============================================
-// GET FULL DAY DATA
+// MAIN DISPATCH DAY VIEW
 // ============================================
 
 async function getDispatchDay(env: Env, date: string): Promise<Response> {
-  // Get all employees with their daily status
-  const employees = await env.DB.prepare(`
+  // Get default depot (TODO: support multi-depot)
+  const depot = await env.DB.prepare(`
+    SELECT id, name, code, lat, lng FROM depots 
+    WHERE tenant_id = ? AND is_primary = 1 AND deleted_at IS NULL
+    LIMIT 1
+  `).bind(TENANT_ID).first() || { id: 'TODO', name: '[NO DEPOT CONFIGURED]', code: 'NONE', lat: 0, lng: 0 };
+
+  // ========================================
+  // 1. GET ALL EMPLOYEES (DRIVERS)
+  // ========================================
+  const employeesResult = await env.DB.prepare(`
     SELECT 
-      e.*,
+      e.id,
+      e.employee_number,
+      e.first_name,
+      e.last_name,
+      e.phone,
+      e.licence_number,
+      e.depot_id,
+      e.status as emp_status,
       COALESCE(eds.status, 'available') as daily_status,
       eds.leave_type
     FROM employees e
     LEFT JOIN employee_daily_status eds ON e.id = eds.employee_id AND eds.date = ?
-    WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.status = 'active'
+    WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.role = 'driver'
     ORDER BY e.last_name, e.first_name
   `).bind(date, TENANT_ID).all();
 
-  // Get all vehicles with their daily status
-  const vehicles = await env.DB.prepare(`
+  // ========================================
+  // 2. GET ALL VEHICLES
+  // ========================================
+  const vehiclesResult = await env.DB.prepare(`
     SELECT 
-      v.*,
+      v.id,
+      v.fleet_number,
+      v.rego,
+      v.capacity,
+      v.make,
+      v.model,
+      v.depot_id,
+      v.status as veh_status,
       COALESCE(vds.status, 'available') as daily_status,
-      vds.reason as status_reason
+      vds.reason as daily_reason
     FROM vehicles v
     LEFT JOIN vehicle_daily_status vds ON v.id = vds.vehicle_id AND vds.date = ?
-    WHERE v.tenant_id = ? AND v.deleted_at IS NULL AND v.status = 'active'
+    WHERE v.tenant_id = ? AND v.deleted_at IS NULL
     ORDER BY v.fleet_number
   `).bind(date, TENANT_ID).all();
 
-  // Get roster entries for the date - ONLY FROM PUBLISHED ROSTERS
-  const rosterEntries = await env.DB.prepare(`
+  // ========================================
+  // 3. GET ROSTER ENTRIES FROM PUBLISHED ROSTERS
+  // ========================================
+  const entriesResult = await env.DB.prepare(`
     SELECT 
-      r.*,
-      e.employee_number as driver_number,
-      e.first_name as driver_first_name,
-      e.last_name as driver_last_name,
-      v.fleet_number as vehicle_number,
-      v.rego as vehicle_rego,
-      v.capacity as vehicle_capacity,
-      rt.code as route_code,
-      c.name as customer_name,
-      ros.code as roster_code,
-      ros.name as roster_name
-    FROM roster_entries r
-    JOIN rosters ros ON r.roster_id = ros.id
-    LEFT JOIN employees e ON r.driver_id = e.id
-    LEFT JOIN vehicles v ON r.vehicle_id = v.id
-    LEFT JOIN routes rt ON r.route_id = rt.id
-    LEFT JOIN customers c ON r.customer_id = c.id
-    WHERE r.tenant_id = ? 
-      AND r.date = ? 
+      re.id as entry_id,
+      re.roster_id,
+      re.shift_template_id,
+      re.duty_block_id,
+      re.date,
+      re.driver_id,
+      re.start_time,
+      re.end_time,
+      re.status as entry_status,
+      r.code as roster_code,
+      r.name as roster_name,
+      st.code as shift_code,
+      st.name as shift_name,
+      st.shift_type,
+      db.name as block_name,
+      db.sequence as block_sequence
+    FROM roster_entries re
+    JOIN rosters r ON re.roster_id = r.id
+    JOIN shift_templates st ON re.shift_template_id = st.id
+    JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
+    WHERE re.date = ?
+      AND re.deleted_at IS NULL
+      AND r.status = 'published'
       AND r.deleted_at IS NULL
-      AND ros.status = 'published'
-      AND ros.deleted_at IS NULL
-    ORDER BY r.start_time
-  `).bind(TENANT_ID, date).all();
+    ORDER BY re.start_time, st.code
+  `).bind(date).all();
 
-  // Get all duties for the roster entries
-  const entryIds = rosterEntries.results.map((e: Record<string, unknown>) => e.id);
-  let dutiesByEntry = new Map<string, unknown[]>();
-
-  if (entryIds.length > 0) {
-    const placeholders = entryIds.map(() => '?').join(',');
-    const duties = await env.DB.prepare(`
+  // ========================================
+  // 4. GET DUTY LINES FOR ALL BLOCKS
+  // ========================================
+  // Get all duty block IDs from entries
+  const blockIds = [...new Set((entriesResult.results as any[]).map(e => e.duty_block_id))];
+  
+  // Build duty lines map
+  const dutyLinesByBlock = new Map<string, any[]>();
+  
+  if (blockIds.length > 0) {
+    const placeholders = blockIds.map(() => '?').join(',');
+    const linesResult = await env.DB.prepare(`
       SELECT 
-        rd.*,
+        dl.id,
+        dl.duty_block_id,
+        dl.sequence,
+        dl.start_time,
+        dl.end_time,
+        dl.duty_type,
+        dl.vehicle_id,
+        dl.pay_type,
+        dl.description,
         dt.code as duty_type_code,
         dt.name as duty_type_name,
         dt.color as duty_type_color,
-        dt.requires_vehicle,
-        pt.code as pay_type_code,
         v.fleet_number as vehicle_number
-      FROM roster_duties rd
-      JOIN duty_types dt ON rd.duty_type_id = dt.id
-      LEFT JOIN pay_types pt ON rd.pay_type_id = pt.id
-      LEFT JOIN vehicles v ON rd.vehicle_id = v.id
-      WHERE rd.roster_entry_id IN (${placeholders})
-      ORDER BY rd.roster_entry_id, rd.sequence
-    `).bind(...entryIds).all();
+      FROM shift_template_duty_lines dl
+      LEFT JOIN duty_types dt ON dl.duty_type = dt.code OR dl.duty_type = dt.id
+      LEFT JOIN vehicles v ON dl.vehicle_id = v.id
+      WHERE dl.duty_block_id IN (${placeholders})
+      ORDER BY dl.duty_block_id, dl.sequence
+    `).bind(...blockIds).all();
 
-    for (const duty of duties.results) {
-      const entryId = (duty as Record<string, unknown>).roster_entry_id as string;
-      if (!dutiesByEntry.has(entryId)) {
-        dutiesByEntry.set(entryId, []);
+    for (const line of linesResult.results as any[]) {
+      if (!dutyLinesByBlock.has(line.duty_block_id)) {
+        dutyLinesByBlock.set(line.duty_block_id, []);
       }
-      dutiesByEntry.get(entryId)!.push(duty);
+      dutyLinesByBlock.get(line.duty_block_id)!.push(line);
     }
   }
 
-  // Build the response structure matching what dispatch UI expects
-  // Group entries by assignment status
-  const assignedEntries: unknown[] = [];
-  const unassignedEntries: unknown[] = [];
+  // ========================================
+  // 5. MAP DUTY TYPE CODES TO FRONTEND TYPES
+  // ========================================
+  const dutyTypeMap: Record<string, string> = {
+    'DRIVE': 'driving',
+    'driving': 'driving',
+    'OOV': 'oov',
+    'oov': 'oov',
+    'out_of_vehicle': 'oov',
+    'BREAK': 'break',
+    'break': 'break',
+    'meal_break': 'break',
+    'WAIT': 'waiting',
+    'waiting': 'waiting',
+    'DEAD': 'dead',
+    'dead': 'dead',
+    'dead_running': 'dead',
+    'CHARTER': 'charter',
+    'charter': 'charter',
+    // Fallback
+    'default': 'driving'
+  };
 
-  for (const entry of rosterEntries.results as Record<string, unknown>[]) {
-    const enriched = {
-      ...entry,
-      duties: dutiesByEntry.get(entry.id as string) || [],
+  function mapDutyType(code: string | null): string {
+    if (!code) return 'driving';
+    return dutyTypeMap[code] || dutyTypeMap[code.toLowerCase()] || 'driving';
+  }
+
+  // ========================================
+  // 6. BUILD SHIFTS FROM ENTRIES + DUTY LINES
+  // ========================================
+  const shiftsByDriver = new Map<string, DispatchShift[]>();
+  const unassignedShifts: DispatchShift[] = [];
+  const vehicleUsage = new Map<string, { shiftId: string; start: number; end: number; driverId: string | null }[]>();
+
+  for (const entry of entriesResult.results as any[]) {
+    const dutyLines = dutyLinesByBlock.get(entry.duty_block_id) || [];
+    
+    // Convert duty lines to frontend format
+    const duties: DispatchDuty[] = dutyLines.map((line: any) => ({
+      id: line.id,
+      type: mapDutyType(line.duty_type || line.duty_type_code),
+      start: line.start_time,
+      end: line.end_time,
+      description: line.description || `${line.duty_type_name || line.duty_type || 'Duty'}`,
+      vehicle: line.vehicle_number || null,
+      vehicleId: line.vehicle_id || null,
+      locationId: null,  // TODO: Add location support
+      fromLocationId: null,
+      toLocationId: null,
+      payType: line.pay_type || 'STD'
+    }));
+
+    // If no duty lines, create a placeholder
+    if (duties.length === 0) {
+      duties.push({
+        id: `placeholder-${entry.entry_id}`,
+        type: 'driving',
+        start: entry.start_time,
+        end: entry.end_time,
+        description: '[TODO: No duty lines defined for this block]',
+        vehicle: null,
+        vehicleId: null,
+        locationId: null,
+        fromLocationId: null,
+        toLocationId: null,
+        payType: 'STD'
+      });
+    }
+
+    // Track vehicle usage
+    for (const duty of duties) {
+      if (duty.vehicleId) {
+        if (!vehicleUsage.has(duty.vehicleId)) {
+          vehicleUsage.set(duty.vehicleId, []);
+        }
+        vehicleUsage.get(duty.vehicleId)!.push({
+          shiftId: entry.entry_id,
+          start: duty.start,
+          end: duty.end,
+          driverId: entry.driver_id
+        });
+      }
+    }
+
+    const shift: DispatchShift = {
+      id: `shift-${entry.entry_id}`,
+      entryId: entry.entry_id,
+      name: `${entry.shift_code} - ${entry.block_name}`,
+      type: entry.shift_type === 'charter' ? 'charter' : 'shift',
+      start: entry.start_time,
+      end: entry.end_time,
+      rosterId: entry.roster_id,
+      rosterCode: entry.roster_code,
+      blockId: entry.duty_block_id,
+      blockName: entry.block_name,
+      duties,
+      pickupLocation: null,  // TODO: Add from locations table
+      dropoffLocation: null
     };
 
     if (entry.driver_id) {
-      assignedEntries.push(enriched);
-    } else {
-      unassignedEntries.push(enriched);
-    }
-  }
-
-  // Build driver schedules (entries grouped by driver)
-  const driverSchedules = new Map<string, unknown[]>();
-  for (const entry of assignedEntries as Record<string, unknown>[]) {
-    const driverId = entry.driver_id as string;
-    if (!driverSchedules.has(driverId)) {
-      driverSchedules.set(driverId, []);
-    }
-    driverSchedules.get(driverId)!.push(entry);
-  }
-
-  // Build vehicle schedules
-  const vehicleSchedules = new Map<string, unknown[]>();
-  for (const entry of rosterEntries.results as Record<string, unknown>[]) {
-    if (entry.vehicle_id) {
-      const vehicleId = entry.vehicle_id as string;
-      if (!vehicleSchedules.has(vehicleId)) {
-        vehicleSchedules.set(vehicleId, []);
+      if (!shiftsByDriver.has(entry.driver_id)) {
+        shiftsByDriver.set(entry.driver_id, []);
       }
-      vehicleSchedules.get(vehicleId)!.push({
-        ...entry,
-        duties: dutiesByEntry.get(entry.id as string) || [],
+      shiftsByDriver.get(entry.driver_id)!.push(shift);
+    } else {
+      unassignedShifts.push(shift);
+    }
+  }
+
+  // ========================================
+  // 7. BUILD DRIVER OBJECTS
+  // ========================================
+  const drivers: DispatchDriver[] = (employeesResult.results as any[]).map(emp => {
+    const shifts = shiftsByDriver.get(emp.id) || [];
+    
+    // Determine driver status
+    let status: string;
+    if (emp.daily_status === 'leave' || emp.daily_status === 'sick') {
+      status = 'leave';
+    } else if (shifts.length > 0) {
+      status = 'working';
+    } else {
+      status = 'available';
+    }
+
+    return {
+      id: emp.id,
+      name: `${emp.last_name}, ${emp.first_name.charAt(0)}`,
+      fullName: `${emp.first_name} ${emp.last_name}`,
+      phone: emp.phone,
+      licence: emp.licence_number,
+      depot: depot,
+      status,
+      shifts
+    };
+  });
+
+  // Sort drivers: leave first, then working, then available
+  const statusOrder: Record<string, number> = { leave: 0, working: 1, available: 2 };
+  drivers.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+  // ========================================
+  // 8. BUILD VEHICLE OBJECTS
+  // ========================================
+  const vehicles: DispatchVehicle[] = (vehiclesResult.results as any[]).map(veh => {
+    const usage = vehicleUsage.get(veh.id) || [];
+    
+    // Determine vehicle status
+    let status: string;
+    if (veh.daily_status === 'maintenance') {
+      status = 'maintenance';
+    } else if (usage.length > 0) {
+      status = 'in_use';
+    } else {
+      status = 'available';
+    }
+
+    // Build vehicle shifts from usage
+    const vehicleShifts = usage.map(u => ({
+      id: `vshift-${veh.id}-${u.shiftId}`,
+      entryId: u.shiftId,
+      start: u.start,
+      end: u.end,
+      driverId: u.driverId,
+      type: 'assigned'
+    }));
+
+    // Add maintenance block if in maintenance
+    if (veh.daily_status === 'maintenance') {
+      vehicleShifts.push({
+        id: `vshift-maint-${veh.id}`,
+        entryId: '',
+        start: 5,
+        end: 23,
+        driverId: null,
+        type: 'maintenance'
       });
     }
+
+    return {
+      id: veh.fleet_number,  // Frontend uses fleet_number as ID
+      rego: veh.rego,
+      capacity: veh.capacity,
+      depot: depot,
+      status,
+      shifts: vehicleShifts
+    };
+  });
+
+  // Sort vehicles: maintenance first, then in_use, then available
+  const vehStatusOrder: Record<string, number> = { maintenance: 0, in_use: 1, available: 2 };
+  vehicles.sort((a, b) => vehStatusOrder[a.status] - vehStatusOrder[b.status]);
+
+  // ========================================
+  // 9. BUILD UNASSIGNED JOBS
+  // ========================================
+  const unassignedJobs = unassignedShifts.map(shift => ({
+    id: shift.id,
+    entryId: shift.entryId,
+    name: shift.name,
+    type: shift.type,
+    start: shift.start,
+    end: shift.end,
+    depot: depot,
+    customer: null,  // TODO: Pull from customers table for charters
+    pickupLocation: shift.pickupLocation,
+    dropoffLocation: shift.dropoffLocation,
+    duties: shift.duties,
+    rosterId: shift.rosterId,
+    rosterCode: shift.rosterCode
+  }));
+
+  // ========================================
+  // 10. CALCULATE STATS
+  // ========================================
+  const stats = {
+    drivers_available: drivers.filter(d => d.status === 'available').length,
+    drivers_working: drivers.filter(d => d.status === 'working').length,
+    drivers_leave: drivers.filter(d => d.status === 'leave').length,
+    vehicles_available: vehicles.filter(v => v.status === 'available').length,
+    vehicles_in_use: vehicles.filter(v => v.status === 'in_use').length,
+    vehicles_maintenance: vehicles.filter(v => v.status === 'maintenance').length,
+    unassigned_count: unassignedJobs.length,
+    total_shifts: entriesResult.results.length
+  };
+
+  // ========================================
+  // 11. BUILD TODO/PLACEHOLDER LIST
+  // ========================================
+  const todos: string[] = [];
+  
+  if ((depot as any).id === 'TODO') {
+    todos.push('No depot configured - add a depot in the database');
+  }
+  
+  // Check for missing duty lines
+  const blocksWithoutLines = blockIds.filter(id => !dutyLinesByBlock.has(id) || dutyLinesByBlock.get(id)!.length === 0);
+  if (blocksWithoutLines.length > 0) {
+    todos.push(`${blocksWithoutLines.length} duty block(s) have no duty lines defined`);
   }
 
-  // Enrich employees with their shifts
-  const driversWithShifts = employees.results.map((emp: Record<string, unknown>) => ({
-    ...emp,
-    shifts: driverSchedules.get(emp.id as string) || [],
-  }));
-
-  // Enrich vehicles with their shifts
-  const vehiclesWithShifts = vehicles.results.map((veh: Record<string, unknown>) => ({
-    ...veh,
-    shifts: vehicleSchedules.get(veh.id as string) || [],
-  }));
-
-  // Calculate stats
-  const stats = {
-    drivers_available: employees.results.filter((e: Record<string, unknown>) => 
-      e.daily_status === 'available' && !driverSchedules.has(e.id as string)
-    ).length,
-    drivers_working: driverSchedules.size,
-    drivers_leave: employees.results.filter((e: Record<string, unknown>) => 
-      e.daily_status === 'leave' || e.daily_status === 'sick'
-    ).length,
-    vehicles_available: vehicles.results.filter((v: Record<string, unknown>) => 
-      v.daily_status === 'available' && !vehicleSchedules.has(v.id as string)
-    ).length,
-    vehicles_in_use: vehicleSchedules.size,
-    vehicles_maintenance: vehicles.results.filter((v: Record<string, unknown>) => 
-      v.daily_status === 'maintenance'
-    ).length,
-    unassigned_count: unassignedEntries.length,
-    total_shifts: rosterEntries.results.length,
-  };
+  // Check for missing locations
+  todos.push('Locations not yet implemented - pickup/dropoff will show as null');
 
   return json({
     data: {
       date,
       stats,
-      drivers: driversWithShifts,
-      vehicles: vehiclesWithShifts,
-      unassigned: unassignedEntries,
-    },
+      drivers,
+      vehicles,
+      unassigned: unassignedJobs,
+      _meta: {
+        source: 'real_data',
+        todos,
+        publishedRosters: [...new Set((entriesResult.results as any[]).map(e => e.roster_code))]
+      }
+    }
   });
 }
 
@@ -281,9 +509,12 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
 // ASSIGNMENT ACTIONS
 // ============================================
 
-async function assignToEntry(env: Env, input: AssignInput): Promise<Response> {
+async function assignToEntry(
+  env: Env, 
+  input: { roster_entry_id: string; driver_id?: string; vehicle_id?: string }
+): Promise<Response> {
   const { roster_entry_id, driver_id, vehicle_id } = input;
-
+  
   const updates: string[] = [];
   const bindings: (string | null)[] = [];
 
@@ -293,6 +524,7 @@ async function assignToEntry(env: Env, input: AssignInput): Promise<Response> {
   }
 
   if (vehicle_id !== undefined) {
+    // TODO: Vehicle assignment at entry level - consider duty line level
     updates.push('vehicle_id = ?');
     bindings.push(vehicle_id || null);
   }
@@ -303,27 +535,33 @@ async function assignToEntry(env: Env, input: AssignInput): Promise<Response> {
 
   updates.push('updated_at = ?');
   bindings.push(new Date().toISOString());
-  bindings.push(roster_entry_id, TENANT_ID);
+  bindings.push(roster_entry_id);
 
   const result = await env.DB.prepare(`
-    UPDATE roster_entries SET ${updates.join(', ')}
-    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+    UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
   `).bind(...bindings).run();
 
   if (result.meta.changes === 0) {
-    return error('Roster entry not found', 404);
+    return error('Entry not found', 404);
   }
 
-  // Return updated entry
-  const entry = await env.DB.prepare(`
-    SELECT * FROM v_roster_full WHERE id = ?
-  `).bind(roster_entry_id).first();
-
-  return json({ data: entry });
+  return json({ success: true, message: 'Assignment updated' });
 }
 
-async function transferEntry(env: Env, input: TransferInput): Promise<Response> {
+async function transferEntry(
+  env: Env,
+  input: { roster_entry_id: string; to_driver_id?: string; to_vehicle_id?: string }
+): Promise<Response> {
   const { roster_entry_id, to_driver_id, to_vehicle_id } = input;
+  
+  // Get current entry
+  const entry = await env.DB.prepare(`
+    SELECT * FROM roster_entries WHERE id = ? AND deleted_at IS NULL
+  `).bind(roster_entry_id).first();
+
+  if (!entry) {
+    return error('Entry not found', 404);
+  }
 
   const updates: string[] = [];
   const bindings: (string | null)[] = [];
@@ -344,22 +582,24 @@ async function transferEntry(env: Env, input: TransferInput): Promise<Response> 
 
   updates.push('updated_at = ?');
   bindings.push(new Date().toISOString());
-  bindings.push(roster_entry_id, TENANT_ID);
+  bindings.push(roster_entry_id);
 
-  const result = await env.DB.prepare(`
-    UPDATE roster_entries SET ${updates.join(', ')}
-    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  await env.DB.prepare(`
+    UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
   `).bind(...bindings).run();
 
-  if (result.meta.changes === 0) {
-    return error('Roster entry not found', 404);
-  }
-
-  const entry = await env.DB.prepare(`
-    SELECT * FROM v_roster_full WHERE id = ?
-  `).bind(roster_entry_id).first();
-
-  return json({ data: entry });
+  return json({ 
+    success: true, 
+    message: 'Transfer complete',
+    from: {
+      driver_id: (entry as any).driver_id,
+      vehicle_id: (entry as any).vehicle_id
+    },
+    to: {
+      driver_id: to_driver_id,
+      vehicle_id: to_vehicle_id
+    }
+  });
 }
 
 async function unassignEntry(
@@ -367,135 +607,26 @@ async function unassignEntry(
   input: { roster_entry_id: string; unassign: 'driver' | 'vehicle' | 'both' }
 ): Promise<Response> {
   const { roster_entry_id, unassign } = input;
-
-  let updateClause = '';
-  if (unassign === 'driver') {
-    updateClause = 'driver_id = NULL';
-  } else if (unassign === 'vehicle') {
-    updateClause = 'vehicle_id = NULL';
-  } else {
-    updateClause = 'driver_id = NULL, vehicle_id = NULL';
-  }
-
-  const result = await env.DB.prepare(`
-    UPDATE roster_entries SET ${updateClause}, updated_at = ?
-    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(new Date().toISOString(), roster_entry_id, TENANT_ID).run();
-
-  if (result.meta.changes === 0) {
-    return error('Roster entry not found', 404);
-  }
-
-  const entry = await env.DB.prepare(`
-    SELECT * FROM v_roster_full WHERE id = ?
-  `).bind(roster_entry_id).first();
-
-  return json({ data: entry });
-}
-
-// ============================================
-// DUTY MANAGEMENT
-// ============================================
-
-async function updateDuty(env: Env, dutyId: string, input: DutyUpdateInput): Promise<Response> {
+  
   const updates: string[] = [];
-  const bindings: (string | number | null)[] = [];
-
-  if ('duty_type_id' in input) { updates.push('duty_type_id = ?'); bindings.push(input.duty_type_id!); }
-  if ('start_time' in input) { updates.push('start_time = ?'); bindings.push(input.start_time!); }
-  if ('end_time' in input) { updates.push('end_time = ?'); bindings.push(input.end_time!); }
-  if ('description' in input) { updates.push('description = ?'); bindings.push(input.description || null); }
-  if ('vehicle_id' in input) { updates.push('vehicle_id = ?'); bindings.push(input.vehicle_id || null); }
-  if ('driver_id' in input) { updates.push('driver_id = ?'); bindings.push(input.driver_id || null); }
-  if ('pay_type_id' in input) { updates.push('pay_type_id = ?'); bindings.push(input.pay_type_id!); }
-
-  if (updates.length === 0) {
-    return error('No fields to update');
+  
+  if (unassign === 'driver' || unassign === 'both') {
+    updates.push('driver_id = NULL');
+  }
+  
+  if (unassign === 'vehicle' || unassign === 'both') {
+    updates.push('vehicle_id = NULL');
   }
 
   updates.push('updated_at = ?');
-  bindings.push(new Date().toISOString(), dutyId);
 
   const result = await env.DB.prepare(`
-    UPDATE roster_duties SET ${updates.join(', ')} WHERE id = ?
-  `).bind(...bindings).run();
+    UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
+  `).bind(new Date().toISOString(), roster_entry_id).run();
 
   if (result.meta.changes === 0) {
-    return error('Duty not found', 404);
+    return error('Entry not found', 404);
   }
 
-  // Return the updated duty
-  const duty = await env.DB.prepare(`
-    SELECT 
-      rd.*,
-      dt.code as duty_type_code,
-      dt.name as duty_type_name,
-      dt.color as duty_type_color,
-      pt.code as pay_type_code
-    FROM roster_duties rd
-    JOIN duty_types dt ON rd.duty_type_id = dt.id
-    LEFT JOIN pay_types pt ON rd.pay_type_id = pt.id
-    WHERE rd.id = ?
-  `).bind(dutyId).first();
-
-  return json({ data: duty });
-}
-
-async function addAdHocDuty(env: Env, input: AdHocDutyInput): Promise<Response> {
-  // Verify roster entry exists
-  const entry = await env.DB.prepare(`
-    SELECT id FROM roster_entries WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(input.roster_entry_id, TENANT_ID).first();
-
-  if (!entry) {
-    return error('Roster entry not found', 404);
-  }
-
-  // Get next sequence number
-  const maxSeq = await env.DB.prepare(`
-    SELECT MAX(sequence) as max_seq FROM roster_duties WHERE roster_entry_id = ?
-  `).bind(input.roster_entry_id).first<{ max_seq: number | null }>();
-
-  const sequence = (maxSeq?.max_seq || 0) + 1;
-  const id = uuid();
-  const now = new Date().toISOString();
-
-  await env.DB.prepare(`
-    INSERT INTO roster_duties (
-      id, roster_entry_id, duty_type_id, sequence, start_time, end_time,
-      description, vehicle_id, pay_type_id, status, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', ?, ?)
-  `).bind(
-    id, input.roster_entry_id, input.duty_type_id, sequence,
-    input.start_time, input.end_time, input.description || null,
-    input.vehicle_id || null, input.pay_type_id || 'pt-std', now, now
-  ).run();
-
-  // Return the new duty
-  const duty = await env.DB.prepare(`
-    SELECT 
-      rd.*,
-      dt.code as duty_type_code,
-      dt.name as duty_type_name,
-      dt.color as duty_type_color,
-      pt.code as pay_type_code
-    FROM roster_duties rd
-    JOIN duty_types dt ON rd.duty_type_id = dt.id
-    LEFT JOIN pay_types pt ON rd.pay_type_id = pt.id
-    WHERE rd.id = ?
-  `).bind(id).first();
-
-  return json({ data: duty });
-}
-
-async function deleteDuty(env: Env, dutyId: string): Promise<Response> {
-  const result = await env.DB.prepare(`
-    DELETE FROM roster_duties WHERE id = ?
-  `).bind(dutyId).run();
-
-  if (result.meta.changes === 0) {
-    return error('Duty not found', 404);
-  }
-
-  return json({ success: true });
+  return json({ success: true, message: `Unassigned ${unassign}` });
 }
