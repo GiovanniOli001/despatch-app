@@ -414,8 +414,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       start: u.start,
       end: u.end,
       driverId: u.driverId,
-      type: 'assigned',
-      duties: []  // Empty - vehicle duties derived from driver duties
+      type: 'assigned'
     }));
 
     // Add maintenance block if in maintenance
@@ -426,15 +425,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
         start: 5,
         end: 23,
         driverId: null,
-        type: 'maintenance',
-        duties: [{
-          id: `vd-maint-${veh.id}`,
-          type: 'maintenance',
-          start: 5,
-          end: 23,
-          description: 'Scheduled maintenance',
-          driver: null
-        }]
+        type: 'maintenance'
       });
     }
 
@@ -626,6 +617,9 @@ async function unassignEntry(
   
   if (unassign === 'driver' || unassign === 'both') {
     updates.push('driver_id = NULL');
+    // When unassigning driver from dispatch, auto-include in dispatch
+    // so it appears in unassigned section
+    updates.push('include_in_dispatch = 1');
   }
   
   if (unassign === 'vehicle' || unassign === 'both') {
