@@ -96,15 +96,20 @@ export async function handleRoster(
 // ============================================
 
 async function listRosters(env: Env): Promise<Response> {
-  const result = await env.DB.prepare(`
-    SELECT r.*, 
-      (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL) as entry_count
-    FROM rosters r
-    WHERE r.tenant_id = ? AND r.deleted_at IS NULL
-    ORDER BY r.start_date DESC
-  `).bind(TENANT_ID).all();
-  
-  return json({ data: result.results });
+  try {
+    const result = await env.DB.prepare(`
+      SELECT r.*, 
+        (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL) as entry_count
+      FROM rosters r
+      WHERE r.tenant_id = ? AND r.deleted_at IS NULL
+      ORDER BY r.start_date DESC
+    `).bind(TENANT_ID).all();
+    
+    return json({ data: result.results });
+  } catch (err) {
+    console.error('listRosters error:', err);
+    return error(err instanceof Error ? err.message : 'Failed to list rosters', 500);
+  }
 }
 
 async function getRoster(env: Env, id: string): Promise<Response> {
@@ -130,20 +135,25 @@ async function getRoster(env: Env, id: string): Promise<Response> {
 }
 
 async function createRoster(env: Env, input: RosterInput): Promise<Response> {
-  if (!input.code || !input.name || !input.start_date || !input.end_date) {
-    return error('code, name, start_date, and end_date are required');
+  try {
+    if (!input.code || !input.name || !input.start_date || !input.end_date) {
+      return error('code, name, start_date, and end_date are required');
+    }
+    
+    const id = uuid();
+    const now = new Date().toISOString();
+    
+    await env.DB.prepare(`
+      INSERT INTO rosters (id, tenant_id, code, name, start_date, end_date, status, notes, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(id, TENANT_ID, input.code, input.name, input.start_date, input.end_date,
+      input.status || 'draft', input.notes || null, now, now).run();
+    
+    return json({ data: { id, ...input } }, 201);
+  } catch (err) {
+    console.error('createRoster error:', err);
+    return error(err instanceof Error ? err.message : 'Failed to create roster', 500);
   }
-  
-  const id = uuid();
-  const now = new Date().toISOString();
-  
-  await env.DB.prepare(`
-    INSERT INTO rosters (id, tenant_id, code, name, start_date, end_date, status, notes, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, TENANT_ID, input.code, input.name, input.start_date, input.end_date,
-    input.status || 'draft', input.notes || null, now, now).run();
-  
-  return json({ data: { id, ...input } }, 201);
 }
 
 async function updateRoster(env: Env, id: string, input: Partial<RosterInput>): Promise<Response> {
@@ -177,34 +187,35 @@ async function deleteRoster(env: Env, id: string): Promise<Response> {
 // ============================================
 
 async function getDayView(env: Env, rosterId: string, date: string): Promise<Response> {
-  // Verify roster
-  const roster = await env.DB.prepare(`
-    SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(rosterId, TENANT_ID).first();
-  
-  if (!roster) return error('Roster not found', 404);
-  
-  // Get all duty blocks with calculated times
-  const blocks = await env.DB.prepare(`
-    SELECT 
-      db.id,
-      db.shift_template_id,
-      db.sequence,
-      db.name as block_name,
-      db.driver_id as default_driver_id,
-      st.code as shift_code,
-      st.name as shift_name,
-      st.shift_type,
-      e.first_name || ' ' || e.last_name as default_driver_name,
-      (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as start_time,
-      (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as end_time,
-      (SELECT COUNT(*) FROM shift_template_duty_blocks db2 WHERE db2.shift_template_id = db.shift_template_id) as blocks_in_shift
-    FROM shift_template_duty_blocks db
-    JOIN shift_templates st ON db.shift_template_id = st.id
-    LEFT JOIN employees e ON db.driver_id = e.id
-    WHERE st.tenant_id = ? AND st.deleted_at IS NULL AND st.is_active = 1
-    ORDER BY st.code, db.sequence
-  `).bind(TENANT_ID).all();
+  try {
+    // Verify roster
+    const roster = await env.DB.prepare(`
+      SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+    `).bind(rosterId, TENANT_ID).first();
+    
+    if (!roster) return error('Roster not found', 404);
+    
+    // Get all duty blocks with calculated times
+    const blocks = await env.DB.prepare(`
+      SELECT 
+        db.id,
+        db.shift_template_id,
+        db.sequence,
+        db.name as block_name,
+        db.driver_id as default_driver_id,
+        st.code as shift_code,
+        st.name as shift_name,
+        st.shift_type,
+        e.first_name || ' ' || e.last_name as default_driver_name,
+        (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as start_time,
+        (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as end_time,
+        (SELECT COUNT(*) FROM shift_template_duty_blocks db2 WHERE db2.shift_template_id = db.shift_template_id) as blocks_in_shift
+      FROM shift_template_duty_blocks db
+      JOIN shift_templates st ON db.shift_template_id = st.id
+      LEFT JOIN employees e ON db.driver_id = e.id
+      WHERE st.tenant_id = ? AND st.deleted_at IS NULL AND st.is_active = 1
+      ORDER BY st.code, db.sequence
+    `).bind(TENANT_ID).all();
   
   // Get existing assignments for this date
   const assignments = await env.DB.prepare(`
@@ -280,6 +291,10 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
       by_driver: byDriver,
     }
   });
+  } catch (err) {
+    console.error('getDayView error:', err);
+    return error(err instanceof Error ? err.message : 'Failed to load day view', 500);
+  }
 }
 
 // ============================================
