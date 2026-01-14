@@ -2774,6 +2774,246 @@
       padding: 40px !important;
     }
     
+    /* ============================================
+       OPS CALENDAR STYLES
+       ============================================ */
+    .ops-calendar-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    .ops-calendar-grid {
+      flex: 1;
+      padding: 16px;
+      overflow: auto;
+    }
+    
+    .ops-calendar-sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    
+    .ops-sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .ops-sidebar-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    .ops-roster-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+    
+    .ops-roster-item {
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+      border-left: 4px solid var(--accent-blue);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .ops-roster-item:hover {
+      background: var(--bg-hover);
+      transform: translateX(2px);
+    }
+    
+    .ops-roster-item.status-draft { border-left-color: var(--accent-amber); }
+    .ops-roster-item.status-published { border-left-color: var(--accent-green); }
+    .ops-roster-item.status-archived { border-left-color: var(--text-muted); opacity: 0.7; }
+    
+    .ops-roster-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+    
+    .ops-roster-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    
+    .ops-roster-status {
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    
+    .ops-roster-status.draft { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); }
+    .ops-roster-status.published { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); }
+    .ops-roster-status.archived { background: rgba(100, 116, 139, 0.2); color: var(--text-muted); }
+    
+    .ops-roster-name { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+    .ops-roster-dates { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+    .ops-roster-stats { display: flex; gap: 12px; font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
+    
+    .ops-roster-actions {
+      display: flex;
+      gap: 6px;
+    }
+    
+    .ops-roster-actions button {
+      flex: 1;
+      padding: 6px 8px;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .ops-roster-actions .btn-publish {
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+    }
+    .ops-roster-actions .btn-publish:hover { background: rgba(34, 197, 94, 0.3); }
+    
+    .ops-roster-actions .btn-unpublish {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid var(--accent-amber);
+      color: var(--accent-amber);
+    }
+    .ops-roster-actions .btn-unpublish:hover { background: rgba(245, 158, 11, 0.3); }
+    
+    .ops-roster-actions .btn-open {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      color: var(--text-primary);
+    }
+    .ops-roster-actions .btn-open:hover { background: var(--bg-hover); border-color: var(--accent-blue); }
+    
+    /* Calendar Grid */
+    .calendar-month {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-secondary);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .calendar-header-row {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+    }
+    
+    .calendar-header-cell {
+      padding: 12px 8px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    
+    .calendar-header-cell.weekend { color: var(--accent-amber); }
+    
+    .calendar-body {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+    }
+    
+    .calendar-day {
+      min-height: 100px;
+      border-right: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      padding: 4px;
+      background: var(--bg-primary);
+      position: relative;
+    }
+    
+    .calendar-day:nth-child(7n) { border-right: none; }
+    .calendar-day.other-month { background: var(--bg-secondary); opacity: 0.5; }
+    .calendar-day.weekend { background: rgba(245, 158, 11, 0.03); }
+    .calendar-day.today { background: rgba(59, 130, 246, 0.08); }
+    .calendar-day.holiday { background: rgba(239, 68, 68, 0.08); }
+    
+    .calendar-day-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 4px;
+      margin-bottom: 4px;
+    }
+    
+    .calendar-day-number {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+    }
+    
+    .calendar-day.today .calendar-day-number {
+      background: var(--accent-blue);
+      color: white;
+    }
+    
+    .calendar-holiday-badge {
+      font-size: 9px;
+      padding: 2px 5px;
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--accent-red);
+      border-radius: 3px;
+      white-space: nowrap;
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .calendar-roster-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 0 2px;
+    }
+    
+    .calendar-roster-bar {
+      font-size: 10px;
+      padding: 3px 6px;
+      border-radius: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .calendar-roster-bar:hover { filter: brightness(1.1); transform: scale(1.02); }
+    .calendar-roster-bar.draft { background: rgba(245, 158, 11, 0.2); color: var(--accent-amber); border: 1px solid rgba(245, 158, 11, 0.3); }
+    .calendar-roster-bar.published { background: rgba(34, 197, 94, 0.2); color: var(--accent-green); border: 1px solid rgba(34, 197, 94, 0.3); }
+    .calendar-roster-bar.archived { background: rgba(100, 116, 139, 0.2); color: var(--text-muted); border: 1px solid rgba(100, 116, 139, 0.3); }
+    
+    .calendar-no-rosters {
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    
     .badge {
       display: inline-block;
       padding: 4px 8px;
@@ -3777,9 +4017,27 @@
       
       <!-- Operations Calendar Screen -->
       <div class="screen" id="screen-calendar" style="display: none;">
-        <div class="screen-placeholder">
-          <div class="screen-placeholder-title">Operations Calendar</div>
-          <div class="screen-placeholder-desc">View and manage scheduled operations, charters, and resource allocation across days, weeks, and months.</div>
+        <div class="screen-header-bar">
+          <h2>Operations Calendar</h2>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <button class="btn-secondary" onclick="changeCalendarMonth(-1)">← Prev</button>
+            <span id="calendarMonthLabel" style="font-size: 16px; font-weight: 600; min-width: 140px; text-align: center;"></span>
+            <button class="btn-secondary" onclick="changeCalendarMonth(1)">Next →</button>
+            <button class="btn-secondary" onclick="goToCalendarToday()" style="margin-left: 8px;">Today</button>
+          </div>
+        </div>
+        
+        <div class="ops-calendar-container">
+          <div class="ops-calendar-grid" id="opsCalendarGrid">
+            <div style="padding: 40px; text-align: center; color: var(--text-muted);">Loading calendar...</div>
+          </div>
+          
+          <div class="ops-calendar-sidebar">
+            <div class="ops-sidebar-header">
+              <h3>Rosters This Month</h3>
+            </div>
+            <div class="ops-roster-list" id="opsRosterList"></div>
+          </div>
         </div>
       </div>
       
@@ -10025,6 +10283,14 @@ Guidelines:
       
       // Update header title based on screen
       updateHeaderForScreen(screen);
+      
+      // Load screen data
+      if (screen === 'calendar') {
+        loadOpsCalendar();
+      }
+      if (screen === 'roster') {
+        loadRosters();
+      }
     }
     
     function updateHeaderForScreen(screen) {
@@ -10854,6 +11120,206 @@ Guidelines:
     
     function formatDateISO(date) {
       return date.toISOString().split('T')[0];
+    }
+    
+    // ============================================
+    // OPS CALENDAR
+    // ============================================
+    
+    let opsCalendarYear = new Date().getFullYear();
+    let opsCalendarMonth = new Date().getMonth() + 1;
+    let opsCalendarData = null;
+    
+    async function loadOpsCalendar() {
+      const grid = document.getElementById('opsCalendarGrid');
+      const list = document.getElementById('opsRosterList');
+      
+      grid.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">Loading calendar...</div>';
+      list.innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading...</div>';
+      
+      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+                          'July', 'August', 'September', 'October', 'November', 'December'];
+      document.getElementById('calendarMonthLabel').textContent = `${monthNames[opsCalendarMonth - 1]} ${opsCalendarYear}`;
+      
+      try {
+        const result = await apiRequest(`/ops-calendar/${opsCalendarYear}/${opsCalendarMonth}`);
+        opsCalendarData = result.data;
+        renderOpsCalendar();
+        renderOpsRosterList();
+      } catch (err) {
+        grid.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--accent-red);">Error: ${err.message}</div>`;
+        list.innerHTML = '';
+      }
+    }
+    
+    function renderOpsCalendar() {
+      if (!opsCalendarData) return;
+      
+      const grid = document.getElementById('opsCalendarGrid');
+      const { days, rosters } = opsCalendarData;
+      
+      const rosterMap = {};
+      rosters.forEach(r => rosterMap[r.id] = r);
+      
+      const firstDayOfWeek = days[0].dayOfWeek;
+      
+      let html = `
+        <div class="calendar-month">
+          <div class="calendar-header-row">
+            <div class="calendar-header-cell">Sun</div>
+            <div class="calendar-header-cell">Mon</div>
+            <div class="calendar-header-cell">Tue</div>
+            <div class="calendar-header-cell">Wed</div>
+            <div class="calendar-header-cell">Thu</div>
+            <div class="calendar-header-cell">Fri</div>
+            <div class="calendar-header-cell weekend">Sat</div>
+          </div>
+          <div class="calendar-body">
+      `;
+      
+      for (let i = 0; i < firstDayOfWeek; i++) {
+        html += `<div class="calendar-day other-month"></div>`;
+      }
+      
+      for (const day of days) {
+        const classes = ['calendar-day'];
+        if (day.isWeekend) classes.push('weekend');
+        if (day.isToday) classes.push('today');
+        if (day.isHoliday) classes.push('holiday');
+        
+        html += `
+          <div class="${classes.join(' ')}">
+            <div class="calendar-day-header">
+              <div class="calendar-day-number">${parseInt(day.date.split('-')[2])}</div>
+              ${day.isHoliday ? `<div class="calendar-holiday-badge" title="${day.holidayName}">${day.holidayName}</div>` : ''}
+            </div>
+            <div class="calendar-roster-bars">
+        `;
+        
+        for (const rosterId of day.rosters) {
+          const roster = rosterMap[rosterId];
+          if (roster) {
+            html += `
+              <div class="calendar-roster-bar ${roster.status}" 
+                   onclick="openRosterFromCalendar('${roster.id}')" 
+                   title="${roster.code} - ${roster.name}">
+                ${roster.code}
+              </div>
+            `;
+          }
+        }
+        
+        html += `</div></div>`;
+      }
+      
+      const lastDayOfWeek = days[days.length - 1].dayOfWeek;
+      for (let i = lastDayOfWeek + 1; i < 7; i++) {
+        html += `<div class="calendar-day other-month"></div>`;
+      }
+      
+      html += `</div></div>`;
+      grid.innerHTML = html;
+    }
+    
+    function renderOpsRosterList() {
+      if (!opsCalendarData) return;
+      
+      const list = document.getElementById('opsRosterList');
+      const { rosters } = opsCalendarData;
+      
+      if (rosters.length === 0) {
+        list.innerHTML = `
+          <div class="calendar-no-rosters">
+            <p>No rosters in this month.</p>
+            <p style="margin-top: 8px;"><a href="#" onclick="navigateTo('roster'); return false;" style="color: var(--accent-blue);">Go to Roster</a> to create one.</p>
+          </div>
+        `;
+        return;
+      }
+      
+      let html = '';
+      
+      for (const roster of rosters) {
+        const startDate = new Date(roster.startDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+        const endDate = new Date(roster.endDate).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+        
+        html += `
+          <div class="ops-roster-item status-${roster.status}" onclick="openRosterFromCalendar('${roster.id}')">
+            <div class="ops-roster-header">
+              <span class="ops-roster-code">${roster.code}</span>
+              <span class="ops-roster-status ${roster.status}">${roster.status}</span>
+            </div>
+            <div class="ops-roster-name">${roster.name}</div>
+            <div class="ops-roster-dates">${startDate} → ${endDate}</div>
+            <div class="ops-roster-stats">
+              <span>📋 ${roster.entryCount} entries</span>
+              <span>✓ ${roster.assignedCount} assigned</span>
+              ${roster.unassignedCount > 0 ? `<span style="color: var(--accent-amber);">⚠ ${roster.unassignedCount} unassigned</span>` : ''}
+            </div>
+            <div class="ops-roster-actions" onclick="event.stopPropagation();">
+              ${roster.status === 'draft' ? 
+                `<button class="btn-publish" onclick="publishRosterFromCalendar('${roster.id}')">Publish</button>` :
+                roster.status === 'published' ?
+                `<button class="btn-unpublish" onclick="unpublishRosterFromCalendar('${roster.id}')">Unpublish</button>` : ''
+              }
+              <button class="btn-open" onclick="openRosterFromCalendar('${roster.id}')">Open →</button>
+            </div>
+          </div>
+        `;
+      }
+      
+      list.innerHTML = html;
+    }
+    
+    function changeCalendarMonth(delta) {
+      opsCalendarMonth += delta;
+      if (opsCalendarMonth > 12) { opsCalendarMonth = 1; opsCalendarYear++; }
+      else if (opsCalendarMonth < 1) { opsCalendarMonth = 12; opsCalendarYear--; }
+      loadOpsCalendar();
+    }
+    
+    function goToCalendarToday() {
+      const today = new Date();
+      opsCalendarYear = today.getFullYear();
+      opsCalendarMonth = today.getMonth() + 1;
+      loadOpsCalendar();
+    }
+    
+    function openRosterFromCalendar(rosterId) {
+      navigateTo('roster');
+      setTimeout(() => openRoster(rosterId), 100);
+    }
+    
+    async function publishRosterFromCalendar(rosterId) {
+      if (!confirm('Publish this roster? It will become visible in Dispatch.')) return;
+      
+      try {
+        const result = await apiRequest(`/roster/containers/${rosterId}/publish`, { method: 'POST' });
+        if (result.error) {
+          if (result.conflict) {
+            showToast(`Conflict: ${result.conflict.driverName} on ${result.conflict.date} (${result.conflict.conflictingRoster})`, 'error');
+          } else {
+            showToast(result.error, 'error');
+          }
+          return;
+        }
+        showToast('Roster published!', 'success');
+        loadOpsCalendar();
+      } catch (err) {
+        showToast(err.message || 'Failed to publish', 'error');
+      }
+    }
+    
+    async function unpublishRosterFromCalendar(rosterId) {
+      if (!confirm('Unpublish this roster? It will be removed from Dispatch.')) return;
+      
+      try {
+        await apiRequest(`/roster/containers/${rosterId}/unpublish`, { method: 'POST' });
+        showToast('Roster unpublished', 'success');
+        loadOpsCalendar();
+      } catch (err) {
+        showToast(err.message || 'Failed to unpublish', 'error');
+      }
     }
     
     // ============================================
