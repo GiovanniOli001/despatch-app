@@ -10992,6 +10992,16 @@ Guidelines:
       document.getElementById('rosterDayLabel').textContent = 
         `${dayNames[currentRosterDate.getDay()]}, ${formatDateShort(currentRosterDate)}`;
       
+      // Check for holiday
+      const holidayBadge = document.getElementById('rosterDayHoliday');
+      const holiday = getAustralianHoliday(dateStr);
+      if (holiday) {
+        holidayBadge.textContent = holiday;
+        holidayBadge.style.display = 'inline';
+      } else {
+        holidayBadge.style.display = 'none';
+      }
+      
       try {
         const result = await apiRequest(`/roster/day/${currentRosterId}/${dateStr}`);
         dayViewData = result.data;
@@ -11000,6 +11010,51 @@ Guidelines:
         document.getElementById('rosterGantt').innerHTML = 
           `<div style="padding: 40px; text-align: center; color: var(--accent-red);">Error: ${err.message}</div>`;
       }
+    }
+    
+    function getAustralianHoliday(dateStr) {
+      // Australian public holidays (QLD focused)
+      const holidays = {
+        // 2025
+        '2025-01-01': "New Year's Day",
+        '2025-01-27': "Australia Day",
+        '2025-04-18': "Good Friday",
+        '2025-04-19': "Easter Saturday",
+        '2025-04-21': "Easter Monday",
+        '2025-04-25': "ANZAC Day",
+        '2025-05-05': "Labour Day (QLD)",
+        '2025-06-09': "King's Birthday (QLD)",
+        '2025-08-13': "Royal Queensland Show (Brisbane)",
+        '2025-12-25': "Christmas Day",
+        '2025-12-26': "Boxing Day",
+        // 2026
+        '2026-01-01': "New Year's Day",
+        '2026-01-26': "Australia Day",
+        '2026-04-03': "Good Friday",
+        '2026-04-04': "Easter Saturday",
+        '2026-04-06': "Easter Monday",
+        '2026-04-25': "ANZAC Day",
+        '2026-05-04': "Labour Day (QLD)",
+        '2026-06-08': "King's Birthday (QLD)",
+        '2026-08-12': "Royal Queensland Show (Brisbane)",
+        '2026-12-25': "Christmas Day",
+        '2026-12-26': "Boxing Day",
+        '2026-12-28': "Boxing Day (Observed)",
+        // 2027
+        '2027-01-01': "New Year's Day",
+        '2027-01-26': "Australia Day",
+        '2027-03-26': "Good Friday",
+        '2027-03-27': "Easter Saturday",
+        '2027-03-29': "Easter Monday",
+        '2027-04-26': "ANZAC Day (Observed)",
+        '2027-05-03': "Labour Day (QLD)",
+        '2027-06-14': "King's Birthday (QLD)",
+        '2027-12-25': "Christmas Day",
+        '2027-12-27': "Christmas Day (Observed)",
+        '2027-12-26': "Boxing Day",
+        '2027-12-28': "Boxing Day (Observed)",
+      };
+      return holidays[dateStr] || null;
     }
     
     // ============================================

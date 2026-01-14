@@ -140,6 +140,19 @@ async function createRoster(env: Env, input: RosterInput): Promise<Response> {
       return error('code, name, start_date, and end_date are required');
     }
     
+    // Check if code already exists (including soft-deleted)
+    const existing = await env.DB.prepare(`
+      SELECT id, deleted_at FROM rosters WHERE tenant_id = ? AND code = ?
+    `).bind(TENANT_ID, input.code).first();
+    
+    if (existing) {
+      if ((existing as any).deleted_at) {
+        return error(`Roster code "${input.code}" was used by a deleted roster. Please use a different code.`);
+      } else {
+        return error(`Roster code "${input.code}" already exists. Please use a different code.`);
+      }
+    }
+    
     const id = uuid();
     const now = new Date().toISOString();
     
@@ -152,7 +165,11 @@ async function createRoster(env: Env, input: RosterInput): Promise<Response> {
     return json({ data: { id, ...input } }, 201);
   } catch (err) {
     console.error('createRoster error:', err);
-    return error(err instanceof Error ? err.message : 'Failed to create roster', 500);
+    const errMsg = err instanceof Error ? err.message : '';
+    if (errMsg.includes('UNIQUE constraint')) {
+      return error('A roster with this code already exists. Please use a different code.');
+    }
+    return error('Failed to create roster. Please try again.');
   }
 }
 
