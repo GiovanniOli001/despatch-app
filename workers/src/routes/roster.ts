@@ -89,14 +89,14 @@ export async function handleRoster(
   // ROSTER CONTAINER ROUTES
   // ============================================
 
-  // GET /api/roster/containers - List all rosters
-  if (method === 'GET' && firstSegment === 'containers') {
-    return listRosters(env, new URL(request.url).searchParams);
+  // GET /api/roster/containers/:id - Get roster with all entries (check FIRST - more specific)
+  if (method === 'GET' && firstSegment === 'containers' && secondSegment && secondSegment !== 'add-shift') {
+    return getRoster(env, secondSegment);
   }
 
-  // GET /api/roster/containers/:id - Get roster with all entries
-  if (method === 'GET' && firstSegment === 'containers' && secondSegment) {
-    return getRoster(env, secondSegment);
+  // GET /api/roster/containers - List all rosters
+  if (method === 'GET' && firstSegment === 'containers' && !secondSegment) {
+    return listRosters(env, new URL(request.url).searchParams);
   }
 
   // POST /api/roster/containers - Create roster
