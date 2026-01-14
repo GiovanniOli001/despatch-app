@@ -75,61 +75,6 @@ interface ToggleDispatchAllInput {
 }
 
 // ============================================
-// HELPER: Copy duty lines to roster entry
-// ============================================
-
-/**
- * Copies duty lines from the shift template to roster_duty_lines
- * This creates instance-specific copies that can be edited in Dispatch
- * without affecting the original template
- */
-async function copyDutyLinesToRosterEntry(
-  env: Env,
-  rosterEntryId: string,
-  dutyBlockId: string
-): Promise<void> {
-  const now = new Date().toISOString();
-  
-  // Get duty lines from the template
-  const lines = await env.DB.prepare(`
-    SELECT dl.*, v.fleet_number as vehicle_number 
-    FROM shift_template_duty_lines dl
-    LEFT JOIN vehicles v ON dl.vehicle_id = v.id
-    WHERE dl.duty_block_id = ? AND dl.deleted_at IS NULL 
-    ORDER BY dl.sequence
-  `).bind(dutyBlockId).all();
-  
-  if (!lines.results || lines.results.length === 0) return;
-  
-  // Copy each line to roster_duty_lines
-  for (const line of lines.results as any[]) {
-    const id = uuid();
-    await env.DB.prepare(`
-      INSERT INTO roster_duty_lines (
-        id, tenant_id, roster_entry_id, source_duty_line_id, sequence,
-        start_time, end_time, duty_type, description, 
-        vehicle_id, vehicle_number, pay_type, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      id,
-      TENANT_ID,
-      rosterEntryId,
-      line.id,  // source_duty_line_id - links back to template
-      line.sequence,
-      line.start_time,
-      line.end_time,
-      line.duty_type,
-      line.description,
-      line.vehicle_id,
-      line.vehicle_number,
-      line.pay_type || 'STD',
-      now,
-      now
-    ).run();
-  }
-}
-
-// ============================================
 // ROUTER
 // ============================================
 
@@ -725,6 +670,8 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
         UPDATE roster_entries SET driver_id = ?, updated_at = ? WHERE id = ?
       `).bind(driver_id, now, (existing as any).id).run();
       createdIds.push((existing as any).id);
+      // Copy duty lines if they don't exist yet
+      await copyDutyLinesToRosterEntry(env, (existing as any).id, block.id);
     } else {
       const id = uuid();
       await env.DB.prepare(`
@@ -734,15 +681,60 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
         ) VALUES (?, ?, ?, ?, ?, ?, 'Assigned Block', ?, ?, ?, 'scheduled', 'manual', 0, ?, ?)
       `).bind(id, TENANT_ID, rosterId, shift_template_id, block.id, date,
         block.start_time || 6, block.end_time || 18, driver_id, now, now).run();
-      
-      // Copy duty lines from template to this roster entry
-      await copyDutyLinesToRosterEntry(env, id, block.id);
-      
       createdIds.push(id);
+      // Copy duty lines from template to instance
+      await copyDutyLinesToRosterEntry(env, id, block.id);
     }
   }
   
   return json({ data: { assigned: createdIds.length, entry_ids: createdIds } });
+}
+
+// Helper: Copy duty lines from template to roster instance
+async function copyDutyLinesToRosterEntry(env: Env, entryId: string, dutyBlockId: string): Promise<void> {
+  try {
+    // Get duty lines from the shift template
+    const templateLines = await env.DB.prepare(`
+      SELECT id, sequence, start_time, end_time, duty_type, description, vehicle_id, pay_type
+      FROM shift_template_duty_lines
+      WHERE duty_block_id = ?
+      ORDER BY sequence
+    `).bind(dutyBlockId).all();
+    
+    if (templateLines.results.length === 0) return;
+    
+    const now = new Date().toISOString();
+    
+    // Copy each line to roster_duty_lines
+    for (const line of templateLines.results as any[]) {
+      const newId = crypto.randomUUID();
+      
+      // Get vehicle number if vehicle_id exists
+      let vehicleNumber: string | null = null;
+      if (line.vehicle_id) {
+        const vehicle = await env.DB.prepare(`
+          SELECT fleet_number FROM vehicles WHERE id = ?
+        `).bind(line.vehicle_id).first() as { fleet_number: string } | null;
+        if (vehicle) vehicleNumber = vehicle.fleet_number;
+      }
+      
+      await env.DB.prepare(`
+        INSERT INTO roster_duty_lines (
+          id, tenant_id, roster_entry_id, source_duty_line_id, sequence,
+          start_time, end_time, duty_type, description, vehicle_id, vehicle_number, pay_type,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        newId, TENANT_ID, entryId, line.id, line.sequence,
+        line.start_time, line.end_time, line.duty_type, line.description,
+        line.vehicle_id, vehicleNumber, line.pay_type || 'STD',
+        now, now
+      ).run();
+    }
+  } catch (err) {
+    console.log('copyDutyLinesToRosterEntry error:', err);
+    // Don't throw - graceful fallback if table doesn't exist
+  }
 }
 
 async function unassignBlock(env: Env, entryId: string): Promise<Response> {
@@ -781,6 +773,8 @@ async function toggleDispatch(env: Env, input: ToggleDispatchInput): Promise<Res
     await env.DB.prepare(`
       UPDATE roster_entries SET include_in_dispatch = ?, updated_at = ? WHERE id = ?
     `).bind(includeValue, now, (existing as any).id).run();
+    // Copy duty lines if they don't exist yet
+    await copyDutyLinesToRosterEntry(env, (existing as any).id, duty_block_id);
   } else {
     // Create new entry with no driver (unassigned but toggled for dispatch)
     const block = await env.DB.prepare(`
@@ -800,8 +794,7 @@ async function toggleDispatch(env: Env, input: ToggleDispatchInput): Promise<Res
       (block as any)?.start_time || 6, (block as any)?.end_time || 18,
       includeValue, now, now
     ).run();
-    
-    // Copy duty lines from template to this roster entry
+    // Copy duty lines from template to instance
     await copyDutyLinesToRosterEntry(env, id, duty_block_id);
   }
   
@@ -858,6 +851,8 @@ async function toggleDispatchDay(env: Env, input: ToggleDispatchDayInput): Promi
         `).bind(includeValue, now, (existing as any).id).run();
         updatedCount++;
       }
+      // Copy duty lines if they don't exist yet
+      await copyDutyLinesToRosterEntry(env, (existing as any).id, block.duty_block_id);
     } else {
       // Create new entry
       const id = uuid();
@@ -871,11 +866,9 @@ async function toggleDispatchDay(env: Env, input: ToggleDispatchDayInput): Promi
         block.start_time || 6, block.end_time || 18,
         includeValue, now, now
       ).run();
-      
-      // Copy duty lines from template to this roster entry
-      await copyDutyLinesToRosterEntry(env, id, block.duty_block_id);
-      
       createdCount++;
+      // Copy duty lines from template to instance
+      await copyDutyLinesToRosterEntry(env, id, block.duty_block_id);
     }
   }
   

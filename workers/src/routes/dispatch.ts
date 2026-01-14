@@ -232,35 +232,41 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
   // Build duty lines map (keyed by roster_entry_id)
   const dutyLinesByEntry = new Map<string, any[]>();
   
+  // Try to get from roster_duty_lines first (may not exist for old entries)
   if (entryIds.length > 0) {
-    const placeholders = entryIds.map(() => '?').join(',');
-    const linesResult = await env.DB.prepare(`
-      SELECT 
-        rdl.id,
-        rdl.roster_entry_id,
-        rdl.sequence,
-        rdl.start_time,
-        rdl.end_time,
-        rdl.duty_type,
-        rdl.vehicle_id,
-        rdl.pay_type,
-        rdl.description,
-        dt.code as duty_type_code,
-        dt.name as duty_type_name,
-        dt.color as duty_type_color,
-        v.fleet_number as vehicle_number
-      FROM roster_duty_lines rdl
-      LEFT JOIN duty_types dt ON rdl.duty_type = dt.code OR rdl.duty_type = dt.id
-      LEFT JOIN vehicles v ON rdl.vehicle_id = v.id
-      WHERE rdl.roster_entry_id IN (${placeholders}) AND rdl.deleted_at IS NULL
-      ORDER BY rdl.roster_entry_id, rdl.sequence
-    `).bind(...entryIds).all();
+    try {
+      const placeholders = entryIds.map(() => '?').join(',');
+      const linesResult = await env.DB.prepare(`
+        SELECT 
+          rdl.id,
+          rdl.roster_entry_id,
+          rdl.sequence,
+          rdl.start_time,
+          rdl.end_time,
+          rdl.duty_type,
+          rdl.vehicle_id,
+          rdl.pay_type,
+          rdl.description,
+          dt.code as duty_type_code,
+          dt.name as duty_type_name,
+          dt.color as duty_type_color,
+          COALESCE(rdl.vehicle_number, v.fleet_number) as vehicle_number
+        FROM roster_duty_lines rdl
+        LEFT JOIN duty_types dt ON rdl.duty_type = dt.code OR rdl.duty_type = dt.id
+        LEFT JOIN vehicles v ON rdl.vehicle_id = v.id
+        WHERE rdl.roster_entry_id IN (${placeholders}) AND rdl.deleted_at IS NULL
+        ORDER BY rdl.roster_entry_id, rdl.sequence
+      `).bind(...entryIds).all();
 
-    for (const line of linesResult.results as any[]) {
-      if (!dutyLinesByEntry.has(line.roster_entry_id)) {
-        dutyLinesByEntry.set(line.roster_entry_id, []);
+      for (const line of linesResult.results as any[]) {
+        if (!dutyLinesByEntry.has(line.roster_entry_id)) {
+          dutyLinesByEntry.set(line.roster_entry_id, []);
+        }
+        dutyLinesByEntry.get(line.roster_entry_id)!.push(line);
       }
-      dutyLinesByEntry.get(line.roster_entry_id)!.push(line);
+    } catch (err) {
+      // Table might not exist yet - that's OK, will fall back to template
+      console.log('roster_duty_lines query failed, falling back to template:', err);
     }
   }
   
@@ -270,34 +276,38 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
   const dutyLinesByBlock = new Map<string, any[]>();
   
   if (blockIds.length > 0) {
-    const placeholders = blockIds.map(() => '?').join(',');
-    const linesResult = await env.DB.prepare(`
-      SELECT 
-        dl.id,
-        dl.duty_block_id,
-        dl.sequence,
-        dl.start_time,
-        dl.end_time,
-        dl.duty_type,
-        dl.vehicle_id,
-        dl.pay_type,
-        dl.description,
-        dt.code as duty_type_code,
-        dt.name as duty_type_name,
-        dt.color as duty_type_color,
-        v.fleet_number as vehicle_number
-      FROM shift_template_duty_lines dl
-      LEFT JOIN duty_types dt ON dl.duty_type = dt.code OR dl.duty_type = dt.id
-      LEFT JOIN vehicles v ON dl.vehicle_id = v.id
-      WHERE dl.duty_block_id IN (${placeholders}) AND dl.deleted_at IS NULL
-      ORDER BY dl.duty_block_id, dl.sequence
-    `).bind(...blockIds).all();
+    try {
+      const placeholders = blockIds.map(() => '?').join(',');
+      const linesResult = await env.DB.prepare(`
+        SELECT 
+          dl.id,
+          dl.duty_block_id,
+          dl.sequence,
+          dl.start_time,
+          dl.end_time,
+          dl.duty_type,
+          dl.vehicle_id,
+          dl.pay_type,
+          dl.description,
+          dt.code as duty_type_code,
+          dt.name as duty_type_name,
+          dt.color as duty_type_color,
+          v.fleet_number as vehicle_number
+        FROM shift_template_duty_lines dl
+        LEFT JOIN duty_types dt ON dl.duty_type = dt.code OR dl.duty_type = dt.id
+        LEFT JOIN vehicles v ON dl.vehicle_id = v.id
+        WHERE dl.duty_block_id IN (${placeholders})
+        ORDER BY dl.duty_block_id, dl.sequence
+      `).bind(...blockIds).all();
 
-    for (const line of linesResult.results as any[]) {
-      if (!dutyLinesByBlock.has(line.duty_block_id)) {
-        dutyLinesByBlock.set(line.duty_block_id, []);
+      for (const line of linesResult.results as any[]) {
+        if (!dutyLinesByBlock.has(line.duty_block_id)) {
+          dutyLinesByBlock.set(line.duty_block_id, []);
+        }
+        dutyLinesByBlock.get(line.duty_block_id)!.push(line);
       }
-      dutyLinesByBlock.get(line.duty_block_id)!.push(line);
+    } catch (err) {
+      console.log('Failed to load template duty lines:', err);
     }
   }
 

@@ -5763,6 +5763,7 @@
     async function changeDate(delta) {
       currentDate.setDate(currentDate.getDate() + delta);
       document.getElementById('currentDate').textContent = formatDate(currentDate);
+      selectedItem = null;  // Clear selection when changing date
       
       // Reload data when changing date
       if (dataSource === 'real') {
@@ -6670,7 +6671,13 @@
       }
       
       if (selectedItem.type === 'driver') {
-        panel.innerHTML = renderDriverDetail(drivers[selectedItem.index]);
+        const driver = drivers[selectedItem.index];
+        if (!driver) {
+          selectedItem = null;
+          panel.innerHTML = `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Driver not found</div></div>`;
+          return;
+        }
+        panel.innerHTML = renderDriverDetail(driver);
         // Populate transfer list if in transfer mode
         if (transferringShift && transferringShift.type === 'driver') {
           setTimeout(() => updateTransferDriverList(), 0);
@@ -6680,7 +6687,13 @@
           setTimeout(() => updateBulkVehicleList(), 0);
         }
       } else if (selectedItem.type === 'vehicle') {
-        panel.innerHTML = renderVehicleDetail(vehicles[selectedItem.index]);
+        const vehicle = vehicles[selectedItem.index];
+        if (!vehicle) {
+          selectedItem = null;
+          panel.innerHTML = `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Vehicle not found</div></div>`;
+          return;
+        }
+        panel.innerHTML = renderVehicleDetail(vehicle);
         // Populate transfer list if in transfer mode
         if (transferringShift && transferringShift.type === 'vehicle') {
           setTimeout(() => updateTransferVehicleList(), 0);
@@ -6690,7 +6703,13 @@
           setTimeout(() => updateBulkDriverList(), 0);
         }
       } else if (selectedItem.type === 'job') {
-        panel.innerHTML = renderJobDetail(unassignedJobs[selectedItem.index]);
+        const job = unassignedJobs[selectedItem.index];
+        if (!job) {
+          selectedItem = null;
+          panel.innerHTML = `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Job not found</div></div>`;
+          return;
+        }
+        panel.innerHTML = renderJobDetail(job);
         // Populate assignment list after render
         setTimeout(() => {
           if (allocationMode === 'vehicle') {
@@ -8208,6 +8227,7 @@
     }
 
     function renderJobDetail(job) {
+      if (!job) return `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Select a job to view details</div></div>`;
       if (allocationMode === 'vehicle') {
         return renderJobDetailVehicleCentric(job);
       }
@@ -8215,18 +8235,21 @@
     }
     
     function renderJobDetailDriverCentric(job) {
+      if (!job) return `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Job not found</div></div>`;
+      
       // Calculate total job hours
       let totalHours = 0;
-      if (job.duties && job.duties.length > 0) {
-        totalHours = job.duties.reduce((sum, duty) => sum + (duty.end - duty.start), 0);
+      const duties = job.duties || [];
+      if (duties.length > 0) {
+        totalHours = duties.reduce((sum, duty) => sum + (duty.end - duty.start), 0);
       } else {
-        totalHours = job.end - job.start;
+        totalHours = (job.end || 18) - (job.start || 6);
       }
       
       // Render job duties
-      const dutiesHTML = job.duties && job.duties.length > 0 ? `
+      const dutiesHTML = duties.length > 0 ? `
         <div class="duty-list">
-          ${job.duties.map(duty => {
+          ${duties.map(duty => {
             const dt = DUTY_TYPES[duty.type] || DUTY_TYPES.driving;
             const hours = duty.end - duty.start;
             return `
@@ -8559,18 +8582,21 @@
     }
     
     function renderJobDetailVehicleCentric(job) {
+      if (!job) return `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Job not found</div></div>`;
+      
       // Calculate total job hours
       let totalHours = 0;
-      if (job.duties && job.duties.length > 0) {
-        totalHours = job.duties.reduce((sum, duty) => sum + (duty.end - duty.start), 0);
+      const duties = job.duties || [];
+      if (duties.length > 0) {
+        totalHours = duties.reduce((sum, duty) => sum + (duty.end - duty.start), 0);
       } else {
-        totalHours = job.end - job.start;
+        totalHours = (job.end || 18) - (job.start || 6);
       }
       
       // Render job duties
-      const dutiesHTML = job.duties && job.duties.length > 0 ? `
+      const dutiesHTML = duties.length > 0 ? `
         <div class="duty-list">
-          ${job.duties.map(duty => {
+          ${duties.map(duty => {
             const dt = DUTY_TYPES[duty.type] || DUTY_TYPES.driving;
             const hours = duty.end - duty.start;
             return `
@@ -9397,6 +9423,7 @@
           }
           
           showToast(`${driver.name} assigned to ${job.name}`);
+          selectedItem = null;  // Clear selection before reload
           await loadDispatchData();  // Reload from API
           return;
         } catch (err) {
@@ -9494,6 +9521,7 @@
           
           showToast(`${shift.name} transferred to ${targetDriver.name}`);
           transferringShift = null;
+          selectedItem = null;  // Clear selection before reload
           await loadDispatchData();  // Reload from API
           return;
         } catch (err) {
@@ -9554,6 +9582,7 @@
           }
           
           showToast(`${shift.name} moved to unassigned`);
+          selectedItem = null;  // Clear selection before reload
           await loadDispatchData();  // Reload from API
           return;
         } catch (err) {
