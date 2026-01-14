@@ -4832,9 +4832,30 @@
           const data = result.data;
           
           // Map API response to frontend format
-          drivers = data.drivers || [];
-          vehicles = data.vehicles || [];
-          unassignedJobs = data.unassigned || [];
+          // Ensure each driver has a shifts array, and each shift has duties
+          drivers = (data.drivers || []).map(d => ({
+            ...d,
+            shifts: (d.shifts || []).map(s => ({
+              ...s,
+              duties: s.duties || []
+            }))
+          }));
+          
+          // Ensure each vehicle has a shifts array, and each shift has duties
+          vehicles = (data.vehicles || []).map(v => ({
+            ...v,
+            shifts: (v.shifts || []).map(s => ({
+              ...s,
+              duties: s.duties || []
+            }))
+          }));
+          
+          // Ensure each unassigned job has a duties array
+          unassignedJobs = (data.unassigned || []).map(j => ({
+            ...j,
+            duties: j.duties || []
+          }));
+          
           dispatchMeta = data._meta || null;
           
           // Update stats
@@ -4846,6 +4867,9 @@
           if (dispatchMeta && dispatchMeta.todos && dispatchMeta.todos.length > 0) {
             console.warn('Dispatch TODOs:', dispatchMeta.todos);
           }
+          
+          // Sync vehicle assignments (with defensive checks already in place)
+          syncAllVehicleAssignments();
           
           renderAll();
           
@@ -4995,7 +5019,7 @@
             </div>
           `;
         } else {
-          driver.shifts.forEach((shift) => {
+          (driver.shifts || []).forEach((shift) => {
             const top = timeToVerticalPosition(shift.start);
             const height = (shift.end - shift.start) * 2 * VERTICAL_SLOT_HEIGHT;
             const isCharter = shift.type === 'charter';
@@ -5086,7 +5110,7 @@
         
         let blocksHtml = '';
         if (vehicle.status === 'maintenance') {
-          const maintShift = vehicle.shifts.find(s => s.type === 'maintenance');
+          const maintShift = (vehicle.shifts || []).find(s => s.type === 'maintenance');
           if (maintShift) {
             const top = timeToVerticalPosition(maintShift.start);
             const height = (maintShift.end - maintShift.start) * 2 * VERTICAL_SLOT_HEIGHT;
@@ -5098,7 +5122,7 @@
             `;
           }
         } else {
-          vehicle.shifts.filter(s => s.type !== 'maintenance').forEach((shift) => {
+          (vehicle.shifts || []).filter(s => s.type !== 'maintenance').forEach((shift) => {
             const top = timeToVerticalPosition(shift.start);
             const height = (shift.end - shift.start) * 2 * VERTICAL_SLOT_HEIGHT;
             const isCharter = shift.type === 'charter';
@@ -5695,7 +5719,9 @@
     // Sync all existing vehicle assignments from driver duties to vehicle schedules
     function syncAllVehicleAssignments() {
       drivers.forEach(driver => {
+        if (!driver.shifts) return;
         driver.shifts.forEach(shift => {
+          if (!shift.duties) return;
           shift.duties.forEach(duty => {
             if (duty.vehicle) {
               syncVehicleSchedule(duty.vehicle, duty, driver, shift);
@@ -6287,11 +6313,11 @@
       if (driver.status === 'leave') {
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
-        driver.shifts.forEach(shift => {
+        (driver.shifts || []).forEach(shift => {
           const shiftLeft = timeToPercent(shift.start);
           blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
           
-          shift.duties.forEach(duty => {
+          (shift.duties || []).forEach(duty => {
             const left = timeToPercent(duty.start);
             const width = Math.max(timeToPercent(duty.end) - left, 0.5);
             blocksHTML += `<div class="timeline-duty ${duty.type}" style="left: ${left}%; width: ${width}%;"></div>`;
@@ -6324,7 +6350,7 @@
       if (driver.status === 'leave') {
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
-        driver.shifts.forEach(shift => {
+        (driver.shifts || []).forEach(shift => {
           const shiftLeft = timeToPercent(shift.start);
           const shiftWidth = timeToPercent(shift.end) - shiftLeft;
           const shiftDuration = shift.end - shift.start;
@@ -6333,7 +6359,7 @@
           let segmentsHTML = '';
           let vehicleStripHTML = '';
           
-          shift.duties.forEach(duty => {
+          (shift.duties || []).forEach(duty => {
             const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
             const dutyLeft = ((duty.start - shift.start) / shiftDuration) * 100;
             
@@ -6383,7 +6409,7 @@
       if (driver.status === 'leave') {
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
-        driver.shifts.forEach(shift => {
+        (driver.shifts || []).forEach(shift => {
           const shiftLeft = timeToPercent(shift.start);
           const shiftWidth = timeToPercent(shift.end) - shiftLeft;
           const shiftDuration = shift.end - shift.start;
@@ -6391,7 +6417,7 @@
           let segmentsHTML = '';
           let vehicleStripHTML = '';
           
-          shift.duties.forEach(duty => {
+          (shift.duties || []).forEach(duty => {
             const dutyLeft = ((duty.start - shift.start) / shiftDuration) * 100;
             const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
             segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
@@ -6459,11 +6485,11 @@
           // Style A: Fragmented blocks showing duties
           if (allocationMode === 'vehicle' && vehicle.shifts) {
             // Vehicle-centric: show duties with driver assignment indicators
-            vehicle.shifts.forEach(shift => {
+            (vehicle.shifts || []).forEach(shift => {
               const shiftLeft = timeToPercent(shift.start);
               blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
               
-              shift.duties.forEach(duty => {
+              (shift.duties || []).forEach(duty => {
                 const left = timeToPercent(duty.start);
                 const width = Math.max(timeToPercent(duty.end) - left, 0.5);
                 blocksHTML += `<div class="timeline-duty ${duty.type}" style="left: ${left}%; width: ${width}%;"></div>`;
@@ -6476,17 +6502,17 @@
             });
           } else {
             // Driver-centric: simple blocks
-            vehicle.shifts.forEach(shift => {
+            (vehicle.shifts || []).forEach(shift => {
               const left = timeToPercent(shift.start);
               const width = timeToPercent(shift.end) - left;
               const typeClass = shift.type === 'maintenance' ? 'maintenance' : 'driving';
-              const label = shift.type === 'maintenance' ? 'MAINT' : shift.duties[0]?.driver || shift.name;
+              const label = shift.type === 'maintenance' ? 'MAINT' : (shift.duties && shift.duties[0]?.driver) || shift.name;
               blocksHTML += `<div class="timeline-duty ${typeClass}" style="left: ${left}%; width: ${width}%;">${label}</div>`;
             });
           }
         } else {
           // Styles B, C, D, E: Unified bars with driver strip
-          vehicle.shifts.forEach(shift => {
+          (vehicle.shifts || []).forEach(shift => {
             const left = timeToPercent(shift.start);
             const width = timeToPercent(shift.end) - left;
             const shiftDuration = shift.end - shift.start;
@@ -6496,7 +6522,7 @@
             let driverStripHTML = '';
             
             // Show duty segments
-            shift.duties.forEach(duty => {
+            (shift.duties || []).forEach(duty => {
               const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
               const dutyLeft = ((duty.start - shift.start) / shiftDuration) * 100;
               
@@ -6715,7 +6741,7 @@
       
       if (driver.status === 'leave') {
         scheduleHTML = `<div class="info-row"><span class="info-value" style="color: var(--accent-red)">On Leave</span></div>`;
-      } else if (driver.shifts.length === 0) {
+      } else if (!driver.shifts || driver.shifts.length === 0) {
         scheduleHTML = `<div class="info-row"><span class="info-value" style="color: var(--accent-green)">Available All Day</span></div>`;
       } else {
         scheduleHTML = driver.shifts.map((shift, shiftIdx) => {
@@ -9208,11 +9234,36 @@
       renderAll();
     }
 
-    function assignDriverToJob(jobIndex, driverIndex) {
+    async function assignDriverToJob(jobIndex, driverIndex) {
       const job = unassignedJobs[jobIndex];
       const driver = drivers[driverIndex];
       
-      // Use the job's pre-defined duties instead of generating new ones
+      // If real data mode, call API to persist
+      if (dataSource === 'real' && job.entryId) {
+        try {
+          const result = await apiRequest('/dispatch/assign', {
+            method: 'POST',
+            body: {
+              roster_entry_id: job.entryId,
+              driver_id: driver.id
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+          
+          showToast(`${driver.name} assigned to ${job.name}`);
+          await loadDispatchData();  // Reload from API
+          return;
+        } catch (err) {
+          showToast(err.message || 'Assignment failed', 'error');
+          return;
+        }
+      }
+      
+      // Fake data mode - just update local arrays
       const duties = job.duties.map(d => ({ ...d, vehicle: null }));
       
       driver.shifts.push({
@@ -9276,13 +9327,40 @@
       renderDetailPanel();
     }
     
-    function executeTransferDriverShift(targetDriverId) {
+    async function executeTransferDriverShift(targetDriverId) {
       if (!transferringShift || transferringShift.type !== 'driver') return;
       
       const sourceDriver = drivers.find(d => d.id === transferringShift.sourceId);
       const targetDriver = drivers.find(d => d.id === targetDriverId);
       const shift = transferringShift.shift;
       
+      // If real data mode, call API to persist
+      if (dataSource === 'real' && shift.entryId) {
+        try {
+          const result = await apiRequest('/dispatch/transfer', {
+            method: 'POST',
+            body: {
+              roster_entry_id: shift.entryId,
+              to_driver_id: targetDriverId
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+          
+          showToast(`${shift.name} transferred to ${targetDriver.name}`);
+          transferringShift = null;
+          await loadDispatchData();  // Reload from API
+          return;
+        } catch (err) {
+          showToast(err.message || 'Transfer failed', 'error');
+          return;
+        }
+      }
+      
+      // Fake data mode - just update local arrays
       // Unsync all vehicle assignments before clearing them
       shift.duties.forEach(duty => {
         if (duty.vehicle) {
@@ -9313,10 +9391,36 @@
       renderAll();
     }
     
-    function unassignDriverShift(driverId, shiftIdx) {
+    async function unassignDriverShift(driverId, shiftIdx) {
       const driver = drivers.find(d => d.id === driverId);
       const shift = driver.shifts[shiftIdx];
       
+      // If real data mode, call API to persist
+      if (dataSource === 'real' && shift.entryId) {
+        try {
+          const result = await apiRequest('/dispatch/unassign', {
+            method: 'POST',
+            body: {
+              roster_entry_id: shift.entryId,
+              unassign: 'driver'
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+          
+          showToast(`${shift.name} moved to unassigned`);
+          await loadDispatchData();  // Reload from API
+          return;
+        } catch (err) {
+          showToast(err.message || 'Unassign failed', 'error');
+          return;
+        }
+      }
+      
+      // Fake data mode - just update local arrays
       // Unsync all vehicle assignments from this shift
       shift.duties.forEach(duty => {
         if (duty.vehicle) {
