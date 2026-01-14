@@ -6993,7 +6993,7 @@
       return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
     }
     
-    function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
+    async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
@@ -7051,6 +7051,30 @@
         return;
       }
       
+      // Call API in real mode
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+        try {
+          const body = { duty_line_id: duty.id };
+          if (field === 'start') body.start_time = newTime;
+          if (field === 'end') body.end_time = newTime;
+          
+          const result = await apiRequest('/dispatch/update-duty-line', {
+            method: 'POST',
+            body
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            renderDetailPanel();
+            return;
+          }
+        } catch (err) {
+          showToast(err.message || 'Update failed', 'error');
+          renderDetailPanel();
+          return;
+        }
+      }
+      
       // Update the duty
       if (oldVehicle) unsyncVehicleSchedule(oldVehicle, duty.id);
       duty[field] = newTime;
@@ -7063,22 +7087,45 @@
       renderAll();
     }
     
-    function updateDutyDesc(driverId, shiftId, dutyIdx, value) {
+    async function updateDutyDesc(driverId, shiftId, dutyIdx, value) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
       const shift = driver.shifts.find(s => s.id === shiftId);
       if (!shift || !shift.duties[dutyIdx]) return;
       
-      shift.duties[dutyIdx].description = value;
+      const duty = shift.duties[dutyIdx];
+      
+      // Call API in real mode
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+        try {
+          const result = await apiRequest('/dispatch/update-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: duty.id,
+              description: value
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+        } catch (err) {
+          showToast(err.message || 'Update failed', 'error');
+          return;
+        }
+      }
+      
+      duty.description = value;
       
       // Sync to vehicle if assigned
-      if (shift.duties[dutyIdx].vehicle) {
-        syncVehicleSchedule(shift.duties[dutyIdx].vehicle, shift.duties[dutyIdx], driver, shift);
+      if (duty.vehicle) {
+        syncVehicleSchedule(duty.vehicle, duty, driver, shift);
       }
     }
     
-    function updateDutyType(driverId, shiftId, dutyIdx, value) {
+    async function updateDutyType(driverId, shiftId, dutyIdx, value) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
@@ -7087,6 +7134,37 @@
       
       const duty = shift.duties[dutyIdx];
       const oldVehicle = duty.vehicle;
+      
+      // Map frontend type to backend type
+      const backendTypeMap = {
+        'driving': 'DRIVE',
+        'oov': 'OOV',
+        'break': 'BREAK',
+        'waiting': 'WAIT',
+        'dead': 'DEAD',
+        'charter': 'CHARTER'
+      };
+      
+      // Call API in real mode
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+        try {
+          const result = await apiRequest('/dispatch/update-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: duty.id,
+              duty_type: backendTypeMap[value] || value
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+        } catch (err) {
+          showToast(err.message || 'Update failed', 'error');
+          return;
+        }
+      }
       
       duty.type = value;
       
@@ -7100,7 +7178,7 @@
       showToast(`Type changed to ${DUTY_TYPES[value]?.label || value}`);
     }
     
-    function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
+    async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
@@ -7116,6 +7194,27 @@
         showToast(`${newVehicle} not available`, 'error');
         renderDetailPanel();
         return;
+      }
+      
+      // Call API in real mode - pass fleet number, backend will resolve to ID
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+        try {
+          const result = await apiRequest('/dispatch/update-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: duty.id,
+              vehicle_number: newVehicle  // Pass fleet number, backend resolves ID
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+        } catch (err) {
+          showToast(err.message || 'Update failed', 'error');
+          return;
+        }
       }
       
       // Unsync old vehicle
@@ -7143,30 +7242,73 @@
       return `${h}h ${m}m`;
     }
     
-    function updateDutyPayType(driverId, shiftId, dutyIdx, payType) {
+    async function updateDutyPayType(driverId, shiftId, dutyIdx, payType) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
       const shift = driver.shifts.find(s => s.id === shiftId);
       if (!shift || !shift.duties[dutyIdx]) return;
       
-      shift.duties[dutyIdx].payType = payType;
-      showToast(`Pay type updated to ${PAY_TYPES[payType].label}`);
+      const duty = shift.duties[dutyIdx];
+      
+      // Call API in real mode
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+        try {
+          const result = await apiRequest('/dispatch/update-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: duty.id,
+              pay_type: payType
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+        } catch (err) {
+          showToast(err.message || 'Update failed', 'error');
+          return;
+        }
+      }
+      
+      duty.payType = payType;
+      showToast(`Pay type updated to ${PAY_TYPES[payType]?.label || payType}`);
     }
     
-    function bulkUpdatePayType(driverId, shiftId, payType) {
+    async function bulkUpdatePayType(driverId, shiftId, payType) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
       const shift = driver.shifts.find(s => s.id === shiftId);
       if (!shift) return;
       
+      // Call API for each duty in real mode
+      if (dataSource === 'real') {
+        try {
+          const promises = shift.duties
+            .filter(duty => duty.id && !duty.id.startsWith('placeholder-'))
+            .map(duty => apiRequest('/dispatch/update-duty-line', {
+              method: 'POST',
+              body: {
+                duty_line_id: duty.id,
+                pay_type: payType
+              }
+            }));
+          
+          await Promise.all(promises);
+        } catch (err) {
+          showToast(err.message || 'Bulk update failed', 'error');
+          return;
+        }
+      }
+      
       shift.duties.forEach(duty => {
         duty.payType = payType;
       });
       
       renderDetailPanel();
-      showToast(`All duties updated to ${PAY_TYPES[payType].label}`);
+      showToast(`All duties updated to ${PAY_TYPES[payType]?.label || payType}`);
     }
     
     function insertDuty(driverId, shiftId, dutyIdx, position) {

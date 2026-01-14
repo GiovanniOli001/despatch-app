@@ -75,6 +75,61 @@ interface ToggleDispatchAllInput {
 }
 
 // ============================================
+// HELPER: Copy duty lines to roster entry
+// ============================================
+
+/**
+ * Copies duty lines from the shift template to roster_duty_lines
+ * This creates instance-specific copies that can be edited in Dispatch
+ * without affecting the original template
+ */
+async function copyDutyLinesToRosterEntry(
+  env: Env,
+  rosterEntryId: string,
+  dutyBlockId: string
+): Promise<void> {
+  const now = new Date().toISOString();
+  
+  // Get duty lines from the template
+  const lines = await env.DB.prepare(`
+    SELECT dl.*, v.fleet_number as vehicle_number 
+    FROM shift_template_duty_lines dl
+    LEFT JOIN vehicles v ON dl.vehicle_id = v.id
+    WHERE dl.duty_block_id = ? AND dl.deleted_at IS NULL 
+    ORDER BY dl.sequence
+  `).bind(dutyBlockId).all();
+  
+  if (!lines.results || lines.results.length === 0) return;
+  
+  // Copy each line to roster_duty_lines
+  for (const line of lines.results as any[]) {
+    const id = uuid();
+    await env.DB.prepare(`
+      INSERT INTO roster_duty_lines (
+        id, tenant_id, roster_entry_id, source_duty_line_id, sequence,
+        start_time, end_time, duty_type, description, 
+        vehicle_id, vehicle_number, pay_type, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      TENANT_ID,
+      rosterEntryId,
+      line.id,  // source_duty_line_id - links back to template
+      line.sequence,
+      line.start_time,
+      line.end_time,
+      line.duty_type,
+      line.description,
+      line.vehicle_id,
+      line.vehicle_number,
+      line.pay_type || 'STD',
+      now,
+      now
+    ).run();
+  }
+}
+
+// ============================================
 // ROUTER
 // ============================================
 
@@ -679,6 +734,10 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
         ) VALUES (?, ?, ?, ?, ?, ?, 'Assigned Block', ?, ?, ?, 'scheduled', 'manual', 0, ?, ?)
       `).bind(id, TENANT_ID, rosterId, shift_template_id, block.id, date,
         block.start_time || 6, block.end_time || 18, driver_id, now, now).run();
+      
+      // Copy duty lines from template to this roster entry
+      await copyDutyLinesToRosterEntry(env, id, block.id);
+      
       createdIds.push(id);
     }
   }
@@ -741,6 +800,9 @@ async function toggleDispatch(env: Env, input: ToggleDispatchInput): Promise<Res
       (block as any)?.start_time || 6, (block as any)?.end_time || 18,
       includeValue, now, now
     ).run();
+    
+    // Copy duty lines from template to this roster entry
+    await copyDutyLinesToRosterEntry(env, id, duty_block_id);
   }
   
   return json({ 
@@ -809,6 +871,10 @@ async function toggleDispatchDay(env: Env, input: ToggleDispatchDayInput): Promi
         block.start_time || 6, block.end_time || 18,
         includeValue, now, now
       ).run();
+      
+      // Copy duty lines from template to this roster entry
+      await copyDutyLinesToRosterEntry(env, id, block.duty_block_id);
+      
       createdCount++;
     }
   }
