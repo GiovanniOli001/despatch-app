@@ -5,6 +5,8 @@
  * Read/write interface for the dispatch board.
  * Essentially a day-view of the roster with additional
  * operational actions (assign, transfer, unassign).
+ * 
+ * IMPORTANT: Only shows entries from PUBLISHED rosters.
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
@@ -129,7 +131,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     ORDER BY v.fleet_number
   `).bind(date, TENANT_ID).all();
 
-  // Get all roster entries for the date
+  // Get roster entries for the date - ONLY FROM PUBLISHED ROSTERS
   const rosterEntries = await env.DB.prepare(`
     SELECT 
       r.*,
@@ -140,13 +142,20 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       v.rego as vehicle_rego,
       v.capacity as vehicle_capacity,
       rt.code as route_code,
-      c.name as customer_name
+      c.name as customer_name,
+      ros.code as roster_code,
+      ros.name as roster_name
     FROM roster_entries r
+    JOIN rosters ros ON r.roster_id = ros.id
     LEFT JOIN employees e ON r.driver_id = e.id
     LEFT JOIN vehicles v ON r.vehicle_id = v.id
     LEFT JOIN routes rt ON r.route_id = rt.id
     LEFT JOIN customers c ON r.customer_id = c.id
-    WHERE r.tenant_id = ? AND r.date = ? AND r.deleted_at IS NULL
+    WHERE r.tenant_id = ? 
+      AND r.date = ? 
+      AND r.deleted_at IS NULL
+      AND ros.status = 'published'
+      AND ros.deleted_at IS NULL
     ORDER BY r.start_time
   `).bind(TENANT_ID, date).all();
 

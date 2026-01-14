@@ -9,6 +9,7 @@ import { handleShifts } from './routes/shifts';
 import { handleRoster } from './routes/roster';
 import { handleDispatch } from './routes/dispatch';
 import { handleConfig } from './routes/config';
+import { handleOpsCalendar } from './routes/ops-calendar';
 
 export interface Env {
   DB: D1Database;
@@ -96,6 +97,9 @@ export default {
 
         case 'config':
           return handleConfig(request, env, segments.slice(1));
+
+        case 'ops-calendar':
+          return handleOpsCalendar(request, env, segments.slice(1));
 
         default:
           return error('Not found', 404);

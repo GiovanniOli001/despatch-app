@@ -7,6 +7,11 @@
  * - Each day automatically shows ALL shift template duty blocks in "Unassigned"
  * - User drags blocks from Unassigned to Drivers to create assignments
  * - roster_entries track assignments (block + date + driver)
+ * 
+ * Status Flow:
+ * - draft: Visible in Ops Calendar, NOT in Dispatch
+ * - published: Visible in both Ops Calendar AND Dispatch
+ * - archived: Hidden from active views
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
@@ -58,12 +63,20 @@ export async function handleRoster(
         if (!body) return error('Invalid request body');
         return createRoster(env, body);
       }
-      if (method === 'PUT' && seg2) {
+      if (method === 'PUT' && seg2 && !seg3) {
         const body = await parseBody<Partial<RosterInput>>(request);
         if (!body) return error('Invalid request body');
         return updateRoster(env, seg2, body);
       }
-      if (method === 'DELETE' && seg2) return deleteRoster(env, seg2);
+      if (method === 'DELETE' && seg2 && !seg3) return deleteRoster(env, seg2);
+      
+      // PUBLISH / UNPUBLISH
+      if (method === 'POST' && seg2 && seg3 === 'publish') {
+        return publishRoster(env, seg2);
+      }
+      if (method === 'POST' && seg2 && seg3 === 'unpublish') {
+        return unpublishRoster(env, seg2);
+      }
     }
 
     // DAY VIEW
@@ -99,7 +112,8 @@ async function listRosters(env: Env): Promise<Response> {
   try {
     const result = await env.DB.prepare(`
       SELECT r.*, 
-        (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL) as entry_count
+        (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL) as entry_count,
+        (SELECT COUNT(*) FROM roster_entries re WHERE re.roster_id = r.id AND re.deleted_at IS NULL AND re.driver_id IS NOT NULL) as assigned_count
       FROM rosters r
       WHERE r.tenant_id = ? AND r.deleted_at IS NULL
       ORDER BY r.start_date DESC
@@ -126,10 +140,21 @@ async function getRoster(env: Env, id: string): Promise<Response> {
     ORDER BY first_name, last_name
   `).bind(TENANT_ID).all();
   
+  // Get entry counts
+  const stats = await env.DB.prepare(`
+    SELECT 
+      COUNT(*) as total_entries,
+      SUM(CASE WHEN driver_id IS NOT NULL THEN 1 ELSE 0 END) as assigned_entries
+    FROM roster_entries
+    WHERE roster_id = ? AND deleted_at IS NULL
+  `).bind(id).first();
+  
   return json({
     data: {
       ...roster,
       drivers: drivers.results,
+      entry_count: (stats as any)?.total_entries || 0,
+      assigned_count: (stats as any)?.assigned_entries || 0,
     }
   });
 }
@@ -200,6 +225,112 @@ async function deleteRoster(env: Env, id: string): Promise<Response> {
 }
 
 // ============================================
+// PUBLISH / UNPUBLISH
+// ============================================
+
+async function publishRoster(env: Env, id: string): Promise<Response> {
+  const roster = await env.DB.prepare(`
+    SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(id, TENANT_ID).first();
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  const r = roster as any;
+  
+  if (r.status === 'published') {
+    return error('Roster is already published');
+  }
+  
+  // Check for overlapping published rosters with same drivers on same dates
+  const overlapping = await env.DB.prepare(`
+    SELECT id, code, name FROM rosters 
+    WHERE tenant_id = ? 
+      AND deleted_at IS NULL 
+      AND status = 'published'
+      AND id != ?
+      AND start_date <= ?
+      AND end_date >= ?
+  `).bind(TENANT_ID, id, r.end_date, r.start_date).all();
+  
+  if (overlapping.results.length > 0) {
+    // Check for actual duty conflicts (same driver, same date, overlapping times)
+    for (const otherRoster of overlapping.results as any[]) {
+      const conflict = await env.DB.prepare(`
+        SELECT 
+          re1.date,
+          e.first_name || ' ' || e.last_name as driver_name,
+          re1.start_time as time1_start,
+          re1.end_time as time1_end,
+          re2.start_time as time2_start,
+          re2.end_time as time2_end
+        FROM roster_entries re1
+        JOIN roster_entries re2 ON re1.driver_id = re2.driver_id AND re1.date = re2.date
+        JOIN employees e ON re1.driver_id = e.id
+        WHERE re1.roster_id = ? 
+          AND re2.roster_id = ?
+          AND re1.deleted_at IS NULL
+          AND re2.deleted_at IS NULL
+          AND re1.driver_id IS NOT NULL
+          AND (
+            (re1.start_time < re2.end_time AND re1.end_time > re2.start_time)
+          )
+        LIMIT 1
+      `).bind(id, otherRoster.id).first();
+      
+      if (conflict) {
+        const c = conflict as any;
+        return json({
+          error: 'Cannot publish: driver conflict detected',
+          conflict: {
+            date: c.date,
+            driverName: c.driver_name,
+            conflictingRoster: otherRoster.code
+          }
+        }, 409);
+      }
+    }
+  }
+  
+  const now = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE rosters SET status = 'published', updated_at = ? WHERE id = ?
+  `).bind(now, id).run();
+  
+  return json({ 
+    data: { 
+      id, 
+      status: 'published',
+      message: 'Roster published successfully'
+    } 
+  });
+}
+
+async function unpublishRoster(env: Env, id: string): Promise<Response> {
+  const roster = await env.DB.prepare(`
+    SELECT * FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(id, TENANT_ID).first();
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  if ((roster as any).status !== 'published') {
+    return error('Roster is not published');
+  }
+  
+  const now = new Date().toISOString();
+  await env.DB.prepare(`
+    UPDATE rosters SET status = 'draft', updated_at = ? WHERE id = ?
+  `).bind(now, id).run();
+  
+  return json({ 
+    data: { 
+      id, 
+      status: 'draft',
+      message: 'Roster unpublished'
+    } 
+  });
+}
+
+// ============================================
 // DAY VIEW - Core of new design
 // ============================================
 
@@ -234,80 +365,81 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
       ORDER BY st.code, db.sequence
     `).bind(TENANT_ID).all();
   
-  // Get existing assignments for this date
-  const assignments = await env.DB.prepare(`
-    SELECT 
-      re.id as entry_id,
-      re.duty_block_id,
-      re.driver_id,
-      e.first_name || ' ' || e.last_name as driver_name,
-      e.employee_number as driver_number
-    FROM roster_entries re
-    LEFT JOIN employees e ON re.driver_id = e.id
-    WHERE re.roster_id = ? AND re.date = ? AND re.deleted_at IS NULL
-  `).bind(rosterId, date).all();
+    // Get existing assignments for this date
+    const assignments = await env.DB.prepare(`
+      SELECT 
+        re.id as entry_id,
+        re.duty_block_id,
+        re.driver_id,
+        e.first_name || ' ' || e.last_name as driver_name,
+        e.employee_number as driver_number
+      FROM roster_entries re
+      LEFT JOIN employees e ON re.driver_id = e.id
+      WHERE re.roster_id = ? AND re.date = ? AND re.deleted_at IS NULL
+    `).bind(rosterId, date).all();
   
-  // Map assignments by block ID
-  const assignmentMap: Record<string, any> = {};
-  for (const a of assignments.results as any[]) {
-    if (a.duty_block_id) {
-      assignmentMap[a.duty_block_id] = a;
+    // Map assignments by block ID
+    const assignmentMap: Record<string, any> = {};
+    for (const a of assignments.results as any[]) {
+      if (a.duty_block_id) {
+        assignmentMap[a.duty_block_id] = a;
+      }
     }
-  }
   
-  // Get drivers
-  const drivers = await env.DB.prepare(`
-    SELECT id, employee_number, first_name, last_name
-    FROM employees
-    WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active'
-    ORDER BY first_name, last_name
-  `).bind(TENANT_ID).all();
+    // Get drivers
+    const drivers = await env.DB.prepare(`
+      SELECT id, employee_number, first_name, last_name
+      FROM employees
+      WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active'
+      ORDER BY first_name, last_name
+    `).bind(TENANT_ID).all();
   
-  // Build response
-  const unassigned: any[] = [];
-  const byDriver: Record<string, any[]> = {};
+    // Build response
+    const unassigned: any[] = [];
+    const byDriver: Record<string, any[]> = {};
   
-  for (const d of drivers.results as any[]) {
-    byDriver[d.id] = [];
-  }
+    for (const d of drivers.results as any[]) {
+      byDriver[(d as any).id] = [];
+    }
   
-  for (const block of blocks.results as any[]) {
-    const assignment = assignmentMap[block.id];
+    for (const block of blocks.results as any[]) {
+      const assignment = assignmentMap[block.id];
     
-    const blockData = {
-      id: block.id,
-      shift_template_id: block.shift_template_id,
-      shift_code: block.shift_code,
-      shift_name: block.shift_name,
-      shift_type: block.shift_type,
-      block_name: block.block_name,
-      start_time: block.start_time || 6,
-      end_time: block.end_time || 18,
-      default_driver_id: block.default_driver_id,
-      default_driver_name: block.default_driver_name,
-      blocks_in_shift: block.blocks_in_shift,
-      // Assignment info
-      entry_id: assignment?.entry_id || null,
-      assigned_driver_id: assignment?.driver_id || null,
-      assigned_driver_name: assignment?.driver_name || null,
-    };
+      const blockData = {
+        id: block.id,
+        shift_template_id: block.shift_template_id,
+        shift_code: block.shift_code,
+        shift_name: block.shift_name,
+        shift_type: block.shift_type,
+        block_name: block.block_name,
+        start_time: block.start_time || 6,
+        end_time: block.end_time || 18,
+        default_driver_id: block.default_driver_id,
+        default_driver_name: block.default_driver_name,
+        blocks_in_shift: block.blocks_in_shift,
+        // Assignment info
+        entry_id: assignment?.entry_id || null,
+        assigned_driver_id: assignment?.driver_id || null,
+        assigned_driver_name: assignment?.driver_name || null,
+      };
     
-    if (assignment?.driver_id && byDriver[assignment.driver_id]) {
-      byDriver[assignment.driver_id].push(blockData);
-    } else {
-      unassigned.push(blockData);
+      if (assignment?.driver_id && byDriver[assignment.driver_id]) {
+        byDriver[assignment.driver_id].push(blockData);
+      } else {
+        unassigned.push(blockData);
+      }
     }
-  }
   
-  return json({
-    data: {
-      roster_id: rosterId,
-      date,
-      drivers: drivers.results,
-      unassigned,
-      by_driver: byDriver,
-    }
-  });
+    return json({
+      data: {
+        roster_id: rosterId,
+        roster_status: (roster as any).status,
+        date,
+        drivers: drivers.results,
+        unassigned,
+        by_driver: byDriver,
+      }
+    });
   } catch (err) {
     console.error('getDayView error:', err);
     return error(err instanceof Error ? err.message : 'Failed to load day view', 500);
