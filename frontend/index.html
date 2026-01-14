@@ -10199,25 +10199,33 @@ Guidelines:
       document.getElementById('shiftModalOverlay').classList.add('show');
     }
     
-    function editShift(id) {
-      const shift = shiftsData.find(s => s.id === id);
-      if (!shift) return;
-      
-      editingShiftId = id;
-      // TODO: Load duty blocks from API when we have the schema
-      shiftDutyBlocks = shift.duty_blocks ? shift.duty_blocks.map(b => ({
-        ...b,
-        lines: b.lines ? b.lines.map(l => ({...l})) : []
-      })) : [];
-      
-      document.getElementById('shiftModalTitle').textContent = 'Edit Shift Template';
-      document.getElementById('shiftCode').value = shift.code || '';
-      document.getElementById('shiftName').value = shift.name || '';
-      document.getElementById('shiftType').value = shift.shift_type || 'regular';
-      document.getElementById('shiftNotes').value = shift.notes || '';
-      
-      renderShiftDutyBlocks();
-      document.getElementById('shiftModalOverlay').classList.add('show');
+    async function editShift(id) {
+      // Fetch full shift data with duty blocks
+      try {
+        const result = await apiRequest(`/shifts/${id}`);
+        const shift = result.data;
+        if (!shift) {
+          showToast('Shift not found', 'error');
+          return;
+        }
+        
+        editingShiftId = id;
+        shiftDutyBlocks = shift.duty_blocks ? shift.duty_blocks.map(b => ({
+          ...b,
+          lines: b.lines ? b.lines.map(l => ({...l})) : []
+        })) : [];
+        
+        document.getElementById('shiftModalTitle').textContent = 'Edit Shift Template';
+        document.getElementById('shiftCode').value = shift.code || '';
+        document.getElementById('shiftName').value = shift.name || '';
+        document.getElementById('shiftType').value = shift.shift_type || 'regular';
+        document.getElementById('shiftNotes').value = shift.notes || '';
+        
+        renderShiftDutyBlocks();
+        document.getElementById('shiftModalOverlay').classList.add('show');
+      } catch (err) {
+        showToast(err.message || 'Failed to load shift', 'error');
+      }
     }
     
     function closeShiftModal() {
