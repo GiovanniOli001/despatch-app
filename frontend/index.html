@@ -11036,26 +11036,57 @@ Guidelines:
         html += renderGanttRow(driver, driverBlocks);
       }
       
-      // Unassigned row
-      html += renderGanttRow(null, unassigned);
+      // Unassigned section - group by shift
+      const unassignedByShift = {};
+      for (const block of unassigned) {
+        const shiftId = block.shift_template_id;
+        if (!unassignedByShift[shiftId]) {
+          unassignedByShift[shiftId] = {
+            shift_code: block.shift_code,
+            shift_name: block.shift_name,
+            blocks: []
+          };
+        }
+        unassignedByShift[shiftId].blocks.push(block);
+      }
+      
+      // Render each shift as its own unassigned row
+      for (const shiftId of Object.keys(unassignedByShift)) {
+        const shift = unassignedByShift[shiftId];
+        html += renderUnassignedShiftRow(shift.shift_code, shift.blocks);
+      }
+      
+      // If no unassigned, show empty drop zone
+      if (Object.keys(unassignedByShift).length === 0) {
+        html += renderEmptyUnassignedRow();
+      }
       
       container.innerHTML = html;
       setupDragDrop();
     }
     
-    function renderGanttRow(driver, blocks) {
-      const driverId = driver?.id || '';
-      const driverName = driver ? `${driver.first_name} ${driver.last_name}` : 'Unassigned';
-      const driverNumber = driver?.employee_number || `${blocks.length} blocks`;
-      const isUnassigned = !driver;
-      
-      let html = `<div class="roster-gantt-row ${isUnassigned ? 'unassigned-row' : ''}" data-driver-id="${driverId}">`;
-      html += `<div class="roster-gantt-driver" ${isUnassigned ? 'style="background: var(--bg-tertiary);"' : ''}>`;
-      html += `<div class="roster-gantt-driver-name" ${isUnassigned ? 'style="color: var(--text-muted);"' : ''}>${driverName}</div>`;
-      html += `<div class="roster-gantt-driver-id">${driverNumber}</div>`;
+    function renderEmptyUnassignedRow() {
+      let html = `<div class="roster-gantt-row unassigned-row" data-driver-id="">`;
+      html += `<div class="roster-gantt-driver" style="background: var(--bg-tertiary);">`;
+      html += `<div class="roster-gantt-driver-name" style="color: var(--text-muted);">Unassigned</div>`;
+      html += `<div class="roster-gantt-driver-id">Drop here</div>`;
+      html += `</div>`;
+      html += `<div class="roster-gantt-blocks" data-driver-id="">`;
+      for (let h = 0; h < GANTT_HOURS; h++) {
+        html += `<div class="roster-gantt-grid-line" style="left: ${(h / GANTT_HOURS) * 100}%;"></div>`;
+      }
+      html += `</div></div>`;
+      return html;
+    }
+    
+    function renderUnassignedShiftRow(shiftCode, blocks) {
+      let html = `<div class="roster-gantt-row unassigned-row" data-driver-id="">`;
+      html += `<div class="roster-gantt-driver" style="background: var(--bg-tertiary);">`;
+      html += `<div class="roster-gantt-driver-name" style="color: var(--text-muted);">${shiftCode}</div>`;
+      html += `<div class="roster-gantt-driver-id" style="color: var(--text-muted);">${blocks.length} block${blocks.length !== 1 ? 's' : ''}</div>`;
       html += `</div>`;
       
-      html += `<div class="roster-gantt-blocks" data-driver-id="${driverId}">`;
+      html += `<div class="roster-gantt-blocks" data-driver-id="">`;
       
       // Grid lines
       for (let h = 0; h < GANTT_HOURS; h++) {
@@ -11085,11 +11116,56 @@ Guidelines:
         html += `<div class="roster-gantt-block-name">${block.shift_code} / ${block.block_name}</div>`;
         html += `<div class="roster-gantt-block-time">${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}</div>`;
         
-        // Quick assign button for blocks with default driver
         if (hasDefault) {
           html += `<button class="quick-assign-btn" onclick="event.stopPropagation(); quickAssign('${block.id}', '${block.shift_template_id}', '${block.default_driver_id}')" title="Assign to ${block.default_driver_name}">⚡</button>`;
         }
         
+        html += `</div>`;
+      }
+      
+      html += `</div></div>`;
+      return html;
+    }
+    
+    function renderGanttRow(driver, blocks) {
+      const driverId = driver.id;
+      const driverName = `${driver.first_name} ${driver.last_name}`;
+      const driverNumber = driver.employee_number;
+      
+      let html = `<div class="roster-gantt-row" data-driver-id="${driverId}">`;
+      html += `<div class="roster-gantt-driver">`;
+      html += `<div class="roster-gantt-driver-name">${driverName}</div>`;
+      html += `<div class="roster-gantt-driver-id">${driverNumber}</div>`;
+      html += `</div>`;
+      
+      html += `<div class="roster-gantt-blocks" data-driver-id="${driverId}">`;
+      
+      // Grid lines
+      for (let h = 0; h < GANTT_HOURS; h++) {
+        html += `<div class="roster-gantt-grid-line" style="left: ${(h / GANTT_HOURS) * 100}%;"></div>`;
+      }
+      
+      // Blocks
+      for (const block of blocks) {
+        const startPct = ((block.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
+        const widthPct = ((block.end_time - block.start_time) / GANTT_HOURS) * 100;
+        if (startPct < 0 || startPct >= 100) continue;
+        
+        const color = getShiftColor(block.shift_type);
+        const hasMultiple = block.blocks_in_shift > 1;
+        
+        html += `<div class="roster-gantt-block" 
+          style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: ${color};"
+          draggable="true"
+          data-block-id="${block.id}"
+          data-shift-id="${block.shift_template_id}"
+          data-entry-id="${block.entry_id || ''}"
+          data-has-multiple="${hasMultiple}"
+          ondragstart="onBlockDragStart(event)"
+          onclick="showBlockInfo('${block.id}')"
+        >`;
+        html += `<div class="roster-gantt-block-name">${block.shift_code} / ${block.block_name}</div>`;
+        html += `<div class="roster-gantt-block-time">${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}</div>`;
         html += `</div>`;
       }
       
