@@ -2649,6 +2649,17 @@
     }
     
     /* Screen placeholder */
+    .screen {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      overflow: hidden;
+    }
+    
+    .screen#screen-dispatch {
+      display: contents;
+    }
+    
     .screen-placeholder {
       flex: 1;
       display: flex;
@@ -3219,6 +3230,7 @@
           <div class="empty-text">Select a driver, vehicle, or job</div>
         </div>
       </div>
+    </div>
     </div>
       </div><!-- end screen-dispatch -->
       
