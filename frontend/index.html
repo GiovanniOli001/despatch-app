@@ -1202,8 +1202,8 @@
     .duty-header-desc { flex: 1; min-width: 30px; }
     .duty-header-location { width: 70px; flex-shrink: 0; }
     .duty-header-vehicle { width: 58px; flex-shrink: 0; }
-    .duty-header-pay { width: 42px; flex-shrink: 0; }
-    .duty-header-hours { width: 32px; text-align: right; flex-shrink: 0; }
+    .duty-header-pay { width: 48px; flex-shrink: 0; }
+    .duty-header-hours { width: 36px; text-align: right; flex-shrink: 0; }
     .duty-header-actions { width: 24px; flex-shrink: 0; }
 
     .duty-item {
@@ -1269,6 +1269,11 @@
       overflow: visible;
       min-height: 32px;
       position: relative;
+      z-index: 1;
+    }
+    
+    .duty-item-inline:focus-within {
+      z-index: 100;
     }
     
     .duty-item-inline:hover { background: var(--bg-hover); }
@@ -1282,7 +1287,6 @@
       padding: 4px 6px;
       gap: 4px;
       min-width: 0;
-      overflow: hidden;
     }
     
     .duty-inline-time {
@@ -1359,9 +1363,14 @@
       position: absolute;
       top: 100%;
       left: 0;
-      width: 220px;
-      z-index: 1001;
+      width: 250px;
+      z-index: 9999;
       font-size: 11px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    
+    .duty-inline-location-wrapper:focus-within {
+      z-index: 100;
     }
     
     .duty-inline-location-wrapper .location-suggestion {
@@ -1400,14 +1409,14 @@
     }
     
     .duty-inline-select.pay {
-      width: 42px;
+      width: 48px;
     }
     
     .duty-inline-hours {
       font-family: 'JetBrains Mono', monospace;
       font-size: 10px;
       color: var(--text-muted);
-      width: 32px;
+      width: 36px;
       text-align: right;
       flex-shrink: 0;
     }
@@ -9382,11 +9391,28 @@
         return;
       }
       
-      const firstSlot = allSlots[0];
-      const duration = Math.min(0.5, firstSlot.end - firstSlot.start);
+      // PRIORITY: Find slots WITHIN existing shifts first (these can be saved to DB)
+      let selectedSlot = null;
+      let containingShift = null;
       
-      // Determine if this slot is within an existing shift or needs a new adhoc shift
-      const containingShift = driver.shifts.find(s => s.start <= firstSlot.start && s.end >= firstSlot.start + duration);
+      for (const slot of allSlots) {
+        const duration = Math.min(0.5, slot.end - slot.start);
+        const shift = driver.shifts.find(s => s.start <= slot.start && s.end >= slot.start + duration);
+        if (shift && shift.entryId) {
+          selectedSlot = slot;
+          containingShift = shift;
+          break;
+        }
+      }
+      
+      // If no slot within shifts, use first slot (will be adhoc/local only)
+      if (!selectedSlot) {
+        selectedSlot = allSlots[0];
+        const duration = Math.min(0.5, selectedSlot.end - selectedSlot.start);
+        containingShift = driver.shifts.find(s => s.start <= selectedSlot.start && s.end >= selectedSlot.start + duration);
+      }
+      
+      const duration = Math.min(0.5, selectedSlot.end - selectedSlot.start);
       
       editingDuty = {
         driverId, 
@@ -9395,9 +9421,9 @@
         duty: { 
           id: `d-new-${Date.now()}`, 
           type: 'driving', 
-          start: firstSlot.start, 
-          end: firstSlot.start + duration, 
-          description: 'Adhoc duty', 
+          start: selectedSlot.start, 
+          end: selectedSlot.start + duration, 
+          description: 'New duty', 
           vehicle: null 
         },
         shift: containingShift || null,
