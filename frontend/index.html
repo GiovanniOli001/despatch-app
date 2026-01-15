@@ -3832,11 +3832,30 @@
     .duty-col-arrows { width: 32px; }
     .duty-col-time { width: 70px; }
     .duty-col-type { width: 100px; }
-    .duty-col-desc { flex: 1; min-width: 120px; }
+    .duty-col-desc { flex: 1; min-width: 100px; }
+    .duty-col-location { width: 150px; position: relative; }
     .duty-col-vehicle { width: 100px; }
     .duty-col-pay { width: 80px; }
     .duty-col-hours { width: 55px; text-align: right; }
     .duty-col-actions { width: 36px; text-align: center; }
+    
+    .duty-col-location .location-input-wrapper {
+      position: relative;
+    }
+    
+    .duty-col-location input[type="text"] {
+      width: 100%;
+      font-size: 12px;
+      padding: 4px 6px;
+    }
+    
+    .duty-col-location .location-autocomplete {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 250px;
+      z-index: 1001;
+    }
     
     .duty-line {
       display: flex;
@@ -11812,6 +11831,25 @@ Guidelines:
       renderShiftDutyTotals();
     }
     
+    // Update location fields for shift duty line
+    function updateShiftDutyLocation(blockIdx, lineIdx) {
+      const inputId = `shiftLoc_${blockIdx}_${lineIdx}`;
+      const nameInput = document.getElementById(inputId);
+      const latInput = document.getElementById(inputId + 'Lat');
+      const lngInput = document.getElementById(inputId + 'Lng');
+      
+      if (!nameInput) return;
+      
+      const line = shiftDutyBlocks[blockIdx]?.lines[lineIdx];
+      if (!line) return;
+      
+      line.location_name = nameInput.value || null;
+      line.location_lat = parseFloat(latInput?.value) || null;
+      line.location_lng = parseFloat(lngInput?.value) || null;
+      
+      renderShiftDutyTotals();
+    }
+    
     function calculateLineHours(line) {
       if (line.start_time === null || line.end_time === null) return 0;
       let hours = line.end_time - line.start_time;
@@ -11876,6 +11914,19 @@ Guidelines:
                   onchange="updateDutyLine(${blockIdx}, ${lineIdx}, 'description', this.value)"
                   placeholder="Description...">
               </div>
+              <div class="duty-col-location">
+                <div class="location-input-wrapper">
+                  <input type="text" 
+                    id="shiftLoc_${blockIdx}_${lineIdx}"
+                    value="${line.location_name || ''}" 
+                    oninput="onLocationInput('shiftLoc_${blockIdx}_${lineIdx}')"
+                    onfocus="onLocationInput('shiftLoc_${blockIdx}_${lineIdx}')"
+                    onblur="setTimeout(() => updateShiftDutyLocation(${blockIdx}, ${lineIdx}), 200)"
+                    placeholder="Search location...">
+                  <input type="hidden" id="shiftLoc_${blockIdx}_${lineIdx}Lat" value="${line.location_lat || ''}">
+                  <input type="hidden" id="shiftLoc_${blockIdx}_${lineIdx}Lng" value="${line.location_lng || ''}">
+                </div>
+              </div>
               <div class="duty-col-vehicle">
                 <select onchange="updateDutyLine(${blockIdx}, ${lineIdx}, 'vehicle_id', this.value)">
                   ${vehicleOptions.replace(`value="${line.vehicle_id}"`, `value="${line.vehicle_id}" selected`)}
@@ -11921,6 +11972,7 @@ Guidelines:
                 <span class="duty-col-time">End</span>
                 <span class="duty-col-type">Type</span>
                 <span class="duty-col-desc">Description</span>
+                <span class="duty-col-location">Location</span>
                 <span class="duty-col-vehicle">Vehicle</span>
                 <span class="duty-col-pay">Pay</span>
                 <span class="duty-col-hours">Hours</span>
