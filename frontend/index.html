@@ -715,6 +715,7 @@
     .style-b .shift-bar .shift-label {
       position: absolute;
       left: 8px;
+      right: 8px;
       top: 0;
       height: calc(100% - 10px);
       display: flex;
@@ -725,7 +726,99 @@
       text-shadow: 0 1px 3px rgba(0,0,0,0.5);
       z-index: 5;
       pointer-events: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
+    
+    /* Tooltip for shift bars */
+    .shift-bar .shift-tooltip {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 10px;
+      min-width: 180px;
+      max-width: 280px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      z-index: 9999;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.15s, visibility 0.15s;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text-primary);
+      text-align: left;
+    }
+    
+    .shift-bar:hover .shift-tooltip {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .shift-bar .shift-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: var(--border-color);
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text-primary);
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--text-secondary);
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-label {
+      color: var(--text-muted);
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-duties {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border-color);
+      font-size: 10px;
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-duty {
+      display: flex;
+      gap: 6px;
+      padding: 2px 0;
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-duty-type {
+      width: 6px;
+      height: 6px;
+      border-radius: 2px;
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    
+    .shift-bar .shift-tooltip .tooltip-duty-type.driving { background: var(--duty-driving); }
+    .shift-bar .shift-tooltip .tooltip-duty-type.oov { background: var(--duty-oov); }
+    .shift-bar .shift-tooltip .tooltip-duty-type.break { background: var(--duty-break); }
+    .shift-bar .shift-tooltip .tooltip-duty-type.waiting { background: var(--duty-waiting); }
+    .shift-bar .shift-tooltip .tooltip-duty-type.charter { background: var(--duty-charter); }
+    .shift-bar .shift-tooltip .tooltip-duty-type.dead { background: var(--duty-dead); }
 
     .style-b .shift-bar .vehicle-strip {
       position: absolute;
@@ -824,6 +917,7 @@
     .style-c .shift-bar .shift-label {
       position: absolute;
       left: 10px;
+      right: 10px;
       top: 0;
       height: calc(100% - 10px);
       display: flex;
@@ -833,6 +927,9 @@
       color: white;
       text-shadow: 0 1px 3px rgba(0,0,0,0.5);
       z-index: 5;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .style-c .shift-bar .vehicle-strip {
@@ -935,6 +1032,7 @@
     .style-d .shift-bar .shift-label {
       position: absolute;
       left: 8px;
+      right: 8px;
       top: 0;
       height: calc(100% - 10px);
       display: flex;
@@ -943,6 +1041,9 @@
       font-weight: 600;
       color: var(--text-primary);
       z-index: 5;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .style-d .shift-bar.charter .shift-label {
@@ -1054,6 +1155,7 @@
     .style-e .shift-bar .shift-label {
       position: absolute;
       left: 12px;
+      right: 12px;
       top: 0;
       height: calc(100% - 10px);
       display: flex;
@@ -1063,6 +1165,9 @@
       color: white;
       text-shadow: 0 1px 2px rgba(0,0,0,0.5);
       z-index: 5;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .style-e .shift-bar .vehicle-strip {
@@ -6197,6 +6302,42 @@
       const desc = duty.description || dt.label;
       return desc.length > 12 ? desc.substring(0, 10) + '…' : desc;
     }
+    
+    // Generate tooltip HTML for shift bars (styles B/C/D/E)
+    function renderShiftTooltip(shift) {
+      const totalHours = (shift.end - shift.start).toFixed(2);
+      const duties = shift.duties || [];
+      
+      let dutiesHTML = '';
+      if (duties.length > 0) {
+        dutiesHTML = `<div class="tooltip-duties">`;
+        duties.slice(0, 5).forEach(duty => {
+          const dt = DUTY_TYPES[duty.type] || DUTY_TYPES.driving;
+          const desc = duty.description || dt.label;
+          dutiesHTML += `
+            <div class="tooltip-duty">
+              <div class="tooltip-duty-type ${duty.type}"></div>
+              <span>${formatTime(duty.start)}-${formatTime(duty.end)}</span>
+              <span style="flex:1; overflow:hidden; text-overflow:ellipsis;">${desc}</span>
+            </div>
+          `;
+        });
+        if (duties.length > 5) {
+          dutiesHTML += `<div style="color: var(--text-muted); font-style: italic;">+${duties.length - 5} more...</div>`;
+        }
+        dutiesHTML += `</div>`;
+      }
+      
+      return `
+        <div class="shift-tooltip">
+          <div class="tooltip-title">${shift.name}</div>
+          <div class="tooltip-row"><span class="tooltip-label">Time</span><span class="tooltip-value">${formatTime(shift.start)} - ${formatTime(shift.end)}</span></div>
+          <div class="tooltip-row"><span class="tooltip-label">Hours</span><span class="tooltip-value">${totalHours}h</span></div>
+          <div class="tooltip-row"><span class="tooltip-label">Duties</span><span class="tooltip-value">${duties.length}</span></div>
+          ${dutiesHTML}
+        </div>
+      `;
+    }
 
     function formatTime(hour) {
       const h = Math.floor(hour);
@@ -6813,6 +6954,7 @@
               ${segmentsHTML}
               <div class="shift-label">${shift.name}</div>
               <div class="vehicle-strip">${vehicleStripHTML}</div>
+              ${renderShiftTooltip(shift)}
             </div>
           `;
         });
@@ -6866,6 +7008,7 @@
               ${segmentsHTML}
               <div class="shift-label">${shift.name}</div>
               <div class="vehicle-strip">${vehicleStripHTML}</div>
+              ${renderShiftTooltip(shift)}
             </div>
           `;
         });
@@ -7000,6 +7143,7 @@
                 ${segmentsHTML}
                 <div class="shift-label">${label}</div>
                 <div class="vehicle-strip">${driverStripHTML}</div>
+                ${renderShiftTooltip(shift)}
               </div>
             `;
           });
