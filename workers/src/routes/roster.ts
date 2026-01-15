@@ -633,13 +633,16 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
       
       // Only exclude if same roster AND same block (we're updating an existing entry)
       // Different rosters with same block SHOULD conflict
+      // Also exclude deleted rosters
       const overlap = await env.DB.prepare(`
         SELECT re.id, db.name as block_name, st.code as shift_code, r.code as roster_code
         FROM roster_entries re
         JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
         JOIN shift_templates st ON re.shift_template_id = st.id
         JOIN rosters r ON re.roster_id = r.id
-        WHERE re.date = ? AND re.driver_id = ? AND re.deleted_at IS NULL
+        WHERE re.date = ? AND re.driver_id = ? 
+        AND re.deleted_at IS NULL
+        AND r.deleted_at IS NULL
         AND NOT (re.roster_id = ? AND re.duty_block_id = ?)
         AND (
           (re.start_time < ? AND re.end_time > ?) OR
@@ -693,6 +696,17 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
 // Helper: Copy duty lines from template to roster instance
 async function copyDutyLinesToRosterEntry(env: Env, entryId: string, dutyBlockId: string): Promise<void> {
   try {
+    // Check if duty lines already exist for this entry
+    const existingLines = await env.DB.prepare(`
+      SELECT COUNT(*) as count FROM roster_duty_lines 
+      WHERE roster_entry_id = ? AND deleted_at IS NULL
+    `).bind(entryId).first() as { count: number } | null;
+    
+    if (existingLines && existingLines.count > 0) {
+      // Lines already exist, don't duplicate
+      return;
+    }
+    
     // Get duty lines from the shift template
     const templateLines = await env.DB.prepare(`
       SELECT id, sequence, start_time, end_time, duty_type, description, vehicle_id, pay_type,

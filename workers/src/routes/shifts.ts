@@ -204,50 +204,138 @@ async function createShiftTemplate(env: Env, input: ShiftTemplateInput): Promise
 }
 
 async function updateShiftTemplate(env: Env, id: string, input: ShiftTemplateInput): Promise<Response> {
-  const existing = await env.DB.prepare(`
-    SELECT id FROM shift_templates WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
-  `).bind(id, TENANT_ID).first();
+  try {
+    const existing = await env.DB.prepare(`
+      SELECT id FROM shift_templates WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+    `).bind(id, TENANT_ID).first();
 
-  if (!existing) return error('Shift template not found', 404);
+    if (!existing) return error('Shift template not found', 404);
 
-  const now = new Date().toISOString();
+    const now = new Date().toISOString();
 
-  // Update template fields
-  await env.DB.prepare(`
-    UPDATE shift_templates SET
-      code = COALESCE(?, code),
-      name = COALESCE(?, name),
-      shift_type = COALESCE(?, shift_type),
-      default_start = COALESCE(?, default_start),
-      default_end = COALESCE(?, default_end),
-      notes = ?,
-      updated_at = ?
-    WHERE id = ? AND tenant_id = ?
-  `).bind(
-    input.code || null,
-    input.name || null,
-    input.shift_type || null,
-    input.default_start ?? null,
-    input.default_end ?? null,
-    input.notes || null,
-    now,
-    id, TENANT_ID
-  ).run();
-
-  // Replace duty blocks if provided
-  if (input.duty_blocks !== undefined) {
-    // Delete existing blocks (cascade deletes lines)
+    // Update template fields
     await env.DB.prepare(`
-      DELETE FROM shift_template_duty_blocks WHERE shift_template_id = ?
-    `).bind(id).run();
+      UPDATE shift_templates SET
+        code = COALESCE(?, code),
+        name = COALESCE(?, name),
+        shift_type = COALESCE(?, shift_type),
+        default_start = COALESCE(?, default_start),
+        default_end = COALESCE(?, default_end),
+        notes = ?,
+        updated_at = ?
+      WHERE id = ? AND tenant_id = ?
+    `).bind(
+      input.code || null,
+      input.name || null,
+      input.shift_type || null,
+      input.default_start ?? null,
+      input.default_end ?? null,
+      input.notes || null,
+      now,
+      id, TENANT_ID
+    ).run();
 
-    // Create new blocks and lines
-    if (input.duty_blocks.length > 0) {
-      await saveDutyBlocks(env, id, input.duty_blocks);
+    // Replace duty blocks if provided
+    if (input.duty_blocks !== undefined) {
+      // First, try to create all new blocks - if this fails, old data is preserved
+      const newBlockIds: string[] = [];
+      
+      try {
+        for (const block of input.duty_blocks) {
+          const blockId = uuid();
+          newBlockIds.push(blockId);
+          
+          // Validate driver_id if provided - set to null if invalid
+          let driverId = null;
+          if (block.driver_id && block.driver_id.trim() !== '') {
+            const driverExists = await env.DB.prepare(`
+              SELECT id FROM employees WHERE id = ?
+            `).bind(block.driver_id).first();
+            if (driverExists) {
+              driverId = block.driver_id;
+            }
+          }
+
+          // Insert new duty block
+          await env.DB.prepare(`
+            INSERT INTO shift_template_duty_blocks (
+              id, shift_template_id, sequence, name, driver_id, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            blockId, id, block.sequence, block.name, driverId, now, now
+          ).run();
+
+          // Insert duty lines for this block
+          if (block.lines && block.lines.length > 0) {
+            for (const line of block.lines) {
+              // Validate vehicle_id if provided
+              let vehicleId = null;
+              if (line.vehicle_id && line.vehicle_id.trim() !== '') {
+                const vehicleExists = await env.DB.prepare(`
+                  SELECT id FROM vehicles WHERE id = ?
+                `).bind(line.vehicle_id).first();
+                if (vehicleExists) {
+                  vehicleId = line.vehicle_id;
+                }
+              }
+              
+              await env.DB.prepare(`
+                INSERT INTO shift_template_duty_lines (
+                  id, duty_block_id, sequence, start_time, end_time,
+                  duty_type, description, vehicle_id, pay_type,
+                  location_name, location_lat, location_lng,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(
+                uuid(), blockId, line.sequence,
+                line.start_time, line.end_time,
+                line.duty_type || 'driving',
+                line.description || null,
+                vehicleId,
+                line.pay_type || 'STD',
+                line.location_name ?? null,
+                line.location_lat ?? null,
+                line.location_lng ?? null,
+                now, now
+              ).run();
+            }
+          }
+        }
+        
+        // SUCCESS - now delete old blocks (new ones are already saved)
+        // Get old block IDs (excluding the ones we just created)
+        const oldBlocks = await env.DB.prepare(`
+          SELECT id FROM shift_template_duty_blocks 
+          WHERE shift_template_id = ? AND id NOT IN (${newBlockIds.map(() => '?').join(',') || "''"})
+        `).bind(id, ...newBlockIds).all();
+        
+        for (const oldBlock of oldBlocks.results as Record<string, unknown>[]) {
+          await env.DB.prepare(`
+            DELETE FROM shift_template_duty_lines WHERE duty_block_id = ?
+          `).bind(oldBlock.id).run();
+        }
+        
+        await env.DB.prepare(`
+          DELETE FROM shift_template_duty_blocks 
+          WHERE shift_template_id = ? AND id NOT IN (${newBlockIds.map(() => '?').join(',') || "''"})
+        `).bind(id, ...newBlockIds).run();
+        
+      } catch (insertErr) {
+        // Insert failed - clean up any new blocks we created and preserve old data
+        console.error('Insert failed, rolling back new blocks:', insertErr);
+        for (const newBlockId of newBlockIds) {
+          await env.DB.prepare(`DELETE FROM shift_template_duty_lines WHERE duty_block_id = ?`).bind(newBlockId).run();
+          await env.DB.prepare(`DELETE FROM shift_template_duty_blocks WHERE id = ?`).bind(newBlockId).run();
+        }
+        throw insertErr;
+      }
     }
-  }
 
-  return getShiftTemplate(env, id);
+    return getShiftTemplate(env, id);
+  } catch (err) {
+    console.error('updateShiftTemplate error:', err);
+    return error(`Failed to update shift: ${err instanceof Error ? err.message : 'Unknown error'}`, 500);
+  }
 }
 
 async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInput[]): Promise<void> {
@@ -255,6 +343,9 @@ async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInp
 
   for (const block of blocks) {
     const blockId = uuid();
+    
+    // Only use driver_id if it's a valid non-empty string
+    const driverId = block.driver_id && block.driver_id.trim() !== '' ? block.driver_id : null;
 
     // Insert duty block with driver_id
     await env.DB.prepare(`
@@ -262,12 +353,15 @@ async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInp
         id, shift_template_id, sequence, name, driver_id, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      blockId, templateId, block.sequence, block.name, block.driver_id || null, now, now
+      blockId, templateId, block.sequence, block.name, driverId, now, now
     ).run();
 
     // Insert duty lines
     if (block.lines && block.lines.length > 0) {
       for (const line of block.lines) {
+        // Only use vehicle_id if it's a valid non-empty string
+        const vehicleId = line.vehicle_id && line.vehicle_id.trim() !== '' ? line.vehicle_id : null;
+        
         await env.DB.prepare(`
           INSERT INTO shift_template_duty_lines (
             id, duty_block_id, sequence, start_time, end_time,
@@ -280,11 +374,11 @@ async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInp
           line.start_time, line.end_time,
           line.duty_type || 'driving',
           line.description || null,
-          line.vehicle_id || null,
+          vehicleId,
           line.pay_type || 'STD',
-          line.location_name || null,
-          line.location_lat || null,
-          line.location_lng || null,
+          line.location_name ?? null,
+          line.location_lat ?? null,
+          line.location_lng ?? null,
           now, now
         ).run();
       }
