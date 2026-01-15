@@ -3725,8 +3725,8 @@
       height: 18px;
       border: none;
       border-radius: 3px;
-      background: rgba(255,255,255,0.3);
-      color: white;
+      background: rgba(250, 204, 21, 0.9);
+      color: #000;
       font-size: 10px;
       cursor: pointer;
       display: flex;
@@ -3734,6 +3734,7 @@
       justify-content: center;
       opacity: 0;
       transition: opacity 0.2s;
+      z-index: 10;
     }
     
     .roster-gantt-block:hover .quick-assign-btn {
@@ -3741,7 +3742,8 @@
     }
     
     .quick-assign-btn:hover {
-      background: rgba(255,255,255,0.5);
+      background: rgba(250, 204, 21, 1);
+      transform: scale(1.1);
     }
     
     .roster-gantt-row.unassigned-row .roster-gantt-blocks {
