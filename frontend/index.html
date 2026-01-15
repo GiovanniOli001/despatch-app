@@ -12969,9 +12969,9 @@ Guidelines:
           <td><span class="roster-status ${r.status}">${r.status}</span></td>
           <td>${r.entry_count || 0}</td>
           <td>
-            <button class="action-btn" onclick="openRoster('${r.id}')" title="View">📋</button>
-            <button class="action-btn" onclick="editRosterDetails('${r.id}')" title="Edit">✏️</button>
-            <button class="action-btn" onclick="deleteRoster('${r.id}')" title="Delete">🗑️</button>
+            <button class="action-btn" onclick="openRoster('${r.id}')">Open</button>
+            <button class="action-btn" onclick="editRosterDetails('${r.id}')">Edit</button>
+            <button class="action-btn danger" onclick="deleteRoster('${r.id}')">Delete</button>
           </td>
         </tr>
       `).join('');
