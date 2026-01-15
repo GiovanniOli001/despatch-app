@@ -269,11 +269,45 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     ORDER BY re.start_time, st.code
   `).bind(date).all();
 
+  // Also get adhoc entries (no template)
+  const adhocEntriesResult = await env.DB.prepare(`
+    SELECT 
+      re.id as entry_id,
+      NULL as roster_id,
+      NULL as shift_template_id,
+      NULL as duty_block_id,
+      re.date,
+      re.driver_id,
+      re.start_time,
+      re.end_time,
+      re.status as entry_status,
+      1 as include_in_dispatch,
+      NULL as roster_code,
+      re.name as roster_name,
+      re.name as shift_code,
+      re.name as shift_name,
+      re.shift_type,
+      re.name as block_name,
+      1 as block_sequence
+    FROM roster_entries re
+    WHERE re.date = ?
+      AND re.shift_template_id IS NULL
+      AND re.deleted_at IS NULL
+      AND re.driver_id IS NOT NULL
+    ORDER BY re.start_time
+  `).bind(date).all();
+
+  // Merge rostered and adhoc entries
+  const allEntries = [
+    ...(entriesResult.results as any[]),
+    ...(adhocEntriesResult.results as any[])
+  ];
+
   // ========================================
   // 4. GET DUTY LINES FOR ALL ENTRIES
   // ========================================
   // Get all roster entry IDs
-  const entryIds = (entriesResult.results as any[]).map(e => e.entry_id);
+  const entryIds = allEntries.map(e => e.entry_id);
   
   // Build duty lines map (keyed by roster_entry_id)
   const dutyLinesByEntry = new Map<string, any[]>();
@@ -321,7 +355,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
   
   // Fallback: If no roster_duty_lines exist (entries created before migration),
   // fall back to reading from shift_template_duty_lines
-  const blockIds = [...new Set((entriesResult.results as any[]).map(e => e.duty_block_id))];
+  const blockIds = [...new Set(allEntries.map(e => e.duty_block_id).filter(id => id != null))];
   const dutyLinesByBlock = new Map<string, any[]>();
   
   if (blockIds.length > 0) {
@@ -398,7 +432,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
   const unassignedShifts: DispatchShift[] = [];
   const vehicleUsage = new Map<string, { shiftId: string; start: number; end: number; driverId: string | null }[]>();
 
-  for (const entry of entriesResult.results as any[]) {
+  for (const entry of allEntries) {
     // Prefer roster_duty_lines (instance-specific), fall back to template lines
     const dutyLines = dutyLinesByEntry.get(entry.entry_id) || dutyLinesByBlock.get(entry.duty_block_id) || [];
     
@@ -626,7 +660,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     vehicles_in_use: vehicles.filter(v => v.status === 'in_use').length,
     vehicles_maintenance: vehicles.filter(v => v.status === 'maintenance').length,
     unassigned_count: unassignedJobs.length,
-    total_shifts: entriesResult.results.length
+    total_shifts: allEntries.length
   };
 
   // ========================================
@@ -657,7 +691,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       _meta: {
         source: 'real_data',
         todos,
-        publishedRosters: [...new Set((entriesResult.results as any[]).map(e => e.roster_code))]
+        publishedRosters: [...new Set(allEntries.map(e => e.roster_code).filter(c => c != null))]
       }
     }
   });
@@ -1034,9 +1068,6 @@ async function createAdhocShift(
   if (!date || !employee_id || !duty) {
     return error('Missing required fields: date, employee_id, duty');
   }
-
-  // Generate adhoc code
-  const adhocCode = `ADHOC-${Date.now().toString(36).toUpperCase()}`;
   
   // Resolve vehicle if provided
   let resolvedVehicleId: string | null = null;
@@ -1058,15 +1089,20 @@ async function createAdhocShift(
   const entryId = crypto.randomUUID();
   const dutyLineId = crypto.randomUUID();
 
+  // Generate adhoc name
+  const adhocName = `ADHOC-${Date.now().toString(36).toUpperCase()}`;
+
   // Create roster entry (no template = adhoc)
   await env.DB.prepare(`
     INSERT INTO roster_entries (
-      id, tenant_id, roster_id, shift_template_id, duty_block_id,
-      date, employee_id, adhoc_code, status,
+      id, tenant_id, shift_template_id, date, name, shift_type,
+      start_time, end_time, driver_id, status, source,
       created_at, updated_at
-    ) VALUES (?, ?, NULL, NULL, NULL, ?, ?, ?, 'scheduled', ?, ?)
+    ) VALUES (?, ?, NULL, ?, ?, 'adhoc', ?, ?, ?, 'scheduled', 'manual', ?, ?)
   `).bind(
-    entryId, TENANT_ID, date, employee_id, adhocCode, now, now
+    entryId, TENANT_ID, date, adhocName,
+    duty.start_time, duty.end_time, employee_id,
+    now, now
   ).run();
 
   // Create duty line
@@ -1092,6 +1128,6 @@ async function createAdhocShift(
     message: 'Adhoc shift created',
     entry_id: entryId,
     duty_line_id: dutyLineId,
-    adhoc_code: adhocCode
+    adhoc_code: adhocName
   });
 }
