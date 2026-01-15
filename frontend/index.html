@@ -7098,21 +7098,16 @@
           if (activeDuties.length === 0 && !showCancelledDuties) return;
           if (allDuties.length === 0) return;
           
-          // Calculate shift bounds
-          // Style B: use ALL duties since we render hidden placeholders
-          // Styles C/D: use active duties only (absolute positioning)
-          let shiftStart, shiftEnd;
-          if (style === 'style-b') {
-            shiftStart = Math.min(...allDuties.map(d => d.start));
-            shiftEnd = Math.max(...allDuties.map(d => d.end));
-          } else {
-            shiftStart = activeDuties.length > 0 
-              ? Math.min(...activeDuties.map(d => d.start))
-              : Math.min(...allDuties.map(d => d.start));
-            shiftEnd = activeDuties.length > 0 
-              ? Math.max(...activeDuties.map(d => d.end))
-              : Math.max(...allDuties.map(d => d.end));
-          }
+          // Determine which duties to render
+          const dutiesToRender = showCancelledDuties 
+            ? [...allDuties].sort((a, b) => a.start - b.start)
+            : [...activeDuties].sort((a, b) => a.start - b.start);
+          
+          if (dutiesToRender.length === 0) return;
+          
+          // Calculate shift bounds based on duties being rendered
+          const shiftStart = Math.min(...dutiesToRender.map(d => d.start));
+          const shiftEnd = Math.max(...dutiesToRender.map(d => d.end));
           
           const shiftLeft = timeToPercent(shiftStart);
           const shiftWidth = timeToPercent(shiftEnd) - shiftLeft;
@@ -7122,21 +7117,14 @@
           let segmentsHTML = '';
           let vehicleStripHTML = '';
           
-          // Sort ALL duties by start time
-          const sortedAllDuties = [...allDuties].sort((a, b) => a.start - b.start);
-          
           if (style === 'style-b') {
-            // Style B: Flexbox layout - render ALL duties in sequence, hidden placeholders for cancelled
-            sortedAllDuties.forEach(duty => {
+            // Style B: Flexbox layout - duties flow sequentially
+            dutiesToRender.forEach(duty => {
               const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
               const isCancelled = duty.cancelled;
               
-              if (isCancelled && !showCancelledDuties) {
-                // Hidden placeholder to maintain gap
-                segmentsHTML += `<div class="segment" style="width: ${dutyWidth}%; visibility: hidden;"></div>`;
-                vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
-              } else if (isCancelled) {
-                // Show cancelled ghost
+              if (isCancelled) {
+                // Show cancelled ghost (only when showCancelledDuties is true)
                 segmentsHTML += `<div class="segment cancelled-ghost" style="width: ${dutyWidth}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
                 vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%; opacity: 0.3;"></div>`;
               } else {
@@ -7153,9 +7141,7 @@
             });
           } else {
             // Styles C/D: Absolute positioning
-            const dutiesToShow = showCancelledDuties ? sortedAllDuties : activeDuties.sort((a, b) => a.start - b.start);
-            
-            dutiesToShow.forEach(duty => {
+            dutiesToRender.forEach(duty => {
               const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
               const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
               const isCancelled = duty.cancelled;
@@ -7214,20 +7200,16 @@
           if (activeDuties.length === 0 && !showCancelledDuties) return;
           if (allDuties.length === 0) return;
           
-          // Determine which duties to display
-          const dutiesToShow = showCancelledDuties 
+          // Determine which duties to render
+          const dutiesToRender = showCancelledDuties 
             ? [...allDuties].sort((a, b) => a.start - b.start)
-            : activeDuties;
+            : [...activeDuties].sort((a, b) => a.start - b.start);
           
-          if (dutiesToShow.length === 0) return;
+          if (dutiesToRender.length === 0) return;
           
-          // Calculate shift bounds - always based on active duties for consistent positioning
-          const shiftStart = activeDuties.length > 0 
-            ? Math.min(...activeDuties.map(d => d.start))
-            : Math.min(...allDuties.map(d => d.start));
-          const shiftEnd = activeDuties.length > 0 
-            ? Math.max(...activeDuties.map(d => d.end))
-            : Math.max(...allDuties.map(d => d.end));
+          // Calculate shift bounds based on duties being rendered
+          const shiftStart = Math.min(...dutiesToRender.map(d => d.start));
+          const shiftEnd = Math.max(...dutiesToRender.map(d => d.end));
           
           const shiftLeft = timeToPercent(shiftStart);
           const shiftWidth = timeToPercent(shiftEnd) - shiftLeft;
@@ -7236,10 +7218,7 @@
           let segmentsHTML = '';
           let vehicleStripHTML = '';
           
-          // Sort duties by start time for proper rendering
-          const sortedDuties = [...dutiesToShow].sort((a, b) => a.start - b.start);
-          
-          sortedDuties.forEach(duty => {
+          dutiesToRender.forEach(duty => {
             const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
             const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
             
@@ -7249,7 +7228,7 @@
             
             segmentsHTML += `<div class="${segmentClass}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"${tooltip}></div>`;
             
-            // Build vehicle strip segments (only for active duties)
+            // Build vehicle strip segments
             if (!isCancelled) {
               if (duty.vehicle) {
                 vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
@@ -7258,7 +7237,7 @@
               } else {
                 vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
               }
-            } else if (showCancelledDuties) {
+            } else {
               vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%; opacity: 0.3;"></div>`;
             }
           });
