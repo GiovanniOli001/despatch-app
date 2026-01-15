@@ -10207,12 +10207,9 @@
       const minStart = Math.min(...shift.duties.map(d => d.start));
       const maxEnd = Math.max(...shift.duties.map(d => d.end));
       
-      if (minStart < shift.start) {
-        shift.start = minStart;
-      }
-      if (maxEnd > shift.end) {
-        shift.end = maxEnd;
-      }
+      // Always update to actual bounds of duties
+      shift.start = minStart;
+      shift.end = maxEnd;
     }
 
     function deleteDuty(driverId, shiftId, dutyIdx) {

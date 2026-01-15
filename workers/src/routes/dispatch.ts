@@ -826,6 +826,28 @@ async function unassignEntry(
   return json({ success: true, message: `Unassigned ${unassign}` });
 }
 
+// ============================================
+// HELPER: Recalculate roster_entry times from duty lines
+// ============================================
+async function recalculateRosterEntryTimes(env: Env, roster_entry_id: string): Promise<void> {
+  // Get MIN start_time and MAX end_time from all duty lines for this entry
+  const times = await env.DB.prepare(`
+    SELECT 
+      MIN(start_time) as min_start,
+      MAX(end_time) as max_end
+    FROM roster_duty_lines 
+    WHERE roster_entry_id = ? AND deleted_at IS NULL
+  `).bind(roster_entry_id).first() as { min_start: number | null; max_end: number | null } | null;
+
+  if (times && times.min_start !== null && times.max_end !== null) {
+    await env.DB.prepare(`
+      UPDATE roster_entries 
+      SET start_time = ?, end_time = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(times.min_start, times.max_end, new Date().toISOString(), roster_entry_id).run();
+  }
+}
+
 async function updateDutyLine(
   env: Env,
   input: {
@@ -849,11 +871,11 @@ async function updateDutyLine(
   }
 
   // Check if duty line exists in roster_duty_lines (instance-specific edits)
-  const existing = await env.DB.prepare(`
-    SELECT id FROM roster_duty_lines WHERE id = ? AND deleted_at IS NULL
-  `).bind(duty_line_id).first();
+  const existingLine = await env.DB.prepare(`
+    SELECT id, roster_entry_id FROM roster_duty_lines WHERE id = ? AND deleted_at IS NULL
+  `).bind(duty_line_id).first() as { id: string; roster_entry_id: string } | null;
 
-  if (!existing) {
+  if (!existingLine) {
     return error('Duty line not found', 404);
   }
 
@@ -945,6 +967,9 @@ async function updateDutyLine(
     UPDATE roster_duty_lines SET ${updates.join(', ')} WHERE id = ?
   `).bind(...bindings).run();
 
+  // Recalculate parent roster_entry times based on all duty lines
+  await recalculateRosterEntryTimes(env, existingLine.roster_entry_id);
+
   return json({ success: true, message: 'Duty line updated' });
 }
 
@@ -1033,6 +1058,9 @@ async function createDutyLine(
     location_name || null, location_lat || null, location_lng || null,
     now, now
   ).run();
+
+  // Recalculate parent roster_entry times based on all duty lines
+  await recalculateRosterEntryTimes(env, roster_entry_id);
 
   return json({ 
     success: true, 
