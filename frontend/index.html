@@ -2230,6 +2230,52 @@
       color: white;
     }
     
+    .filter-toggle-btn {
+      padding: 5px 10px;
+      font-size: 10px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .filter-toggle-btn:hover {
+      background: var(--bg-secondary);
+      border-color: var(--text-muted);
+    }
+    
+    .filter-toggle-btn.active {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: var(--accent-amber);
+      color: var(--accent-amber);
+    }
+    
+    /* Cancelled duty bar on Gantt */
+    .timeline-duty.cancelled-ghost {
+      opacity: 0.35;
+      background: repeating-linear-gradient(
+        -45deg,
+        var(--bg-tertiary),
+        var(--bg-tertiary) 3px,
+        rgba(239, 68, 68, 0.3) 3px,
+        rgba(239, 68, 68, 0.3) 6px
+      ) !important;
+      border: 1px dashed rgba(239, 68, 68, 0.5);
+    }
+    
+    .segment.cancelled-ghost {
+      opacity: 0.35;
+      background: repeating-linear-gradient(
+        -45deg,
+        var(--bg-tertiary),
+        var(--bg-tertiary) 3px,
+        rgba(239, 68, 68, 0.3) 3px,
+        rgba(239, 68, 68, 0.3) 6px
+      ) !important;
+    }
+    
     /* Assignment list styles */
     .assignment-panel {
       display: flex;
@@ -4508,6 +4554,9 @@
               <option value="status">Sort: Status</option>
               <option value="name">Sort: Name</option>
             </select>
+            <button class="filter-toggle-btn" id="showCancelledBtn" onclick="event.stopPropagation(); toggleShowCancelled()" title="Show cancelled duties on Gantt">
+              Show Cancelled
+            </button>
           </div>
           <div class="timeline-header">
             <div class="timeline-label-col">Name</div>
@@ -5336,6 +5385,7 @@
     let viewMode = 'horizontal'; // 'horizontal' or 'vertical'
     let dataSource = 'fake'; // 'fake' or 'real'
     let dispatchMeta = null; // Metadata from real API
+    let showCancelledDuties = false; // Toggle to show cancelled duties on Gantt
     
     // Filter state
     let driverFilters = { search: '', status: 'all', sort: 'status' };
@@ -6721,6 +6771,18 @@
       }
       updateStats();
     }
+    
+    function toggleShowCancelled() {
+      showCancelledDuties = !showCancelledDuties;
+      const btn = document.getElementById('showCancelledBtn');
+      if (btn) {
+        btn.classList.toggle('active', showCancelledDuties);
+      }
+      renderDriverRows();
+      if (viewMode === 'vertical') {
+        renderDriverVertical();
+      }
+    }
 
     function toggleSection(sectionId) {
       const section = document.getElementById(sectionId);
@@ -6982,13 +7044,19 @@
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
         (driver.shifts || []).forEach(shift => {
-          // Filter out cancelled duties for Gantt display
+          // Filter out cancelled duties for Gantt display (unless toggle is on)
           const activeDuties = (shift.duties || []).filter(d => !d.cancelled);
-          if (activeDuties.length === 0) return; // Skip shift entirely if all duties cancelled
+          const cancelledDuties = showCancelledDuties ? (shift.duties || []).filter(d => d.cancelled) : [];
           
-          const shiftLeft = timeToPercent(shift.start);
-          blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
+          if (activeDuties.length === 0 && cancelledDuties.length === 0) return;
           
+          // Only show shift label if there are active duties
+          if (activeDuties.length > 0) {
+            const shiftLeft = timeToPercent(shift.start);
+            blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
+          }
+          
+          // Render active duties
           activeDuties.forEach(duty => {
             const left = timeToPercent(duty.start);
             const width = Math.max(timeToPercent(duty.end) - left, 0.5);
@@ -7002,6 +7070,13 @@
             if (duty.vehicle) {
               blocksHTML += `<div class="vehicle-status-bar" style="left: ${left}%; width: ${width}%;"></div>`;
             }
+          });
+          
+          // Render cancelled duties as ghost bars
+          cancelledDuties.forEach(duty => {
+            const left = timeToPercent(duty.start);
+            const width = Math.max(timeToPercent(duty.end) - left, 0.5);
+            blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${left}%; width: ${width}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
           });
         });
       }
@@ -7027,50 +7102,62 @@
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
         (driver.shifts || []).forEach(shift => {
-          // Filter out cancelled duties for Gantt display
+          // Filter out cancelled duties for Gantt display (unless toggle is on)
           const activeDuties = (shift.duties || []).filter(d => !d.cancelled);
-          if (activeDuties.length === 0) return; // Skip shift entirely if all duties cancelled
+          const cancelledDuties = showCancelledDuties ? (shift.duties || []).filter(d => d.cancelled) : [];
           
-          // Recalculate shift bounds based on active duties only
-          const activeStart = Math.min(...activeDuties.map(d => d.start));
-          const activeEnd = Math.max(...activeDuties.map(d => d.end));
+          if (activeDuties.length === 0 && cancelledDuties.length === 0) return;
           
-          const shiftLeft = timeToPercent(activeStart);
-          const shiftWidth = timeToPercent(activeEnd) - shiftLeft;
-          const shiftDuration = activeEnd - activeStart;
-          const shiftTypeClass = shift.type === 'charter' ? 'charter' : (shift.type === 'adhoc' ? 'adhoc' : 'regular');
-          
-          let segmentsHTML = '';
-          let vehicleStripHTML = '';
-          
-          activeDuties.forEach(duty => {
-            const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-            const dutyLeft = ((duty.start - activeStart) / shiftDuration) * 100;
+          // Render active shift bar if there are active duties
+          if (activeDuties.length > 0) {
+            // Recalculate shift bounds based on active duties only
+            const activeStart = Math.min(...activeDuties.map(d => d.start));
+            const activeEnd = Math.max(...activeDuties.map(d => d.end));
             
-            if (style === 'style-b') {
-              segmentsHTML += `<div class="segment ${duty.type}" style="width: ${dutyWidth}%;"></div>`;
-            } else {
-              segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
-            }
+            const shiftLeft = timeToPercent(activeStart);
+            const shiftWidth = timeToPercent(activeEnd) - shiftLeft;
+            const shiftDuration = activeEnd - activeStart;
+            const shiftTypeClass = shift.type === 'charter' ? 'charter' : (shift.type === 'adhoc' ? 'adhoc' : 'regular');
             
-            // Build vehicle strip segments
-            if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
-            } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
-              vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
-            } else {
-              vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
-            }
+            let segmentsHTML = '';
+            let vehicleStripHTML = '';
+            
+            activeDuties.forEach(duty => {
+              const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
+              const dutyLeft = ((duty.start - activeStart) / shiftDuration) * 100;
+              
+              if (style === 'style-b') {
+                segmentsHTML += `<div class="segment ${duty.type}" style="width: ${dutyWidth}%;"></div>`;
+              } else {
+                segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+              }
+              
+              // Build vehicle strip segments
+              if (duty.vehicle) {
+                vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+              } else {
+                vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
+              }
+            });
+            
+            blocksHTML += `
+              <div class="shift-bar ${shiftTypeClass}" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
+                ${segmentsHTML}
+                <div class="shift-label">${shift.name}</div>
+                <div class="vehicle-strip">${vehicleStripHTML}</div>
+                ${renderShiftTooltip(shift)}
+              </div>
+            `;
+          }
+          
+          // Render cancelled duties as ghost bars (outside the shift bar)
+          cancelledDuties.forEach(duty => {
+            const left = timeToPercent(duty.start);
+            const width = Math.max(timeToPercent(duty.end) - left, 0.5);
+            blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${left}%; width: ${width}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
           });
-          
-          blocksHTML += `
-            <div class="shift-bar ${shiftTypeClass}" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
-              ${segmentsHTML}
-              <div class="shift-label">${shift.name}</div>
-              <div class="vehicle-strip">${vehicleStripHTML}</div>
-              ${renderShiftTooltip(shift)}
-            </div>
-          `;
         });
       }
       
@@ -7095,44 +7182,56 @@
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
         (driver.shifts || []).forEach(shift => {
-          // Filter out cancelled duties for Gantt display
+          // Filter out cancelled duties for Gantt display (unless toggle is on)
           const activeDuties = (shift.duties || []).filter(d => !d.cancelled);
-          if (activeDuties.length === 0) return; // Skip shift entirely if all duties cancelled
+          const cancelledDuties = showCancelledDuties ? (shift.duties || []).filter(d => d.cancelled) : [];
           
-          // Recalculate shift bounds based on active duties only
-          const activeStart = Math.min(...activeDuties.map(d => d.start));
-          const activeEnd = Math.max(...activeDuties.map(d => d.end));
+          if (activeDuties.length === 0 && cancelledDuties.length === 0) return;
           
-          const shiftLeft = timeToPercent(activeStart);
-          const shiftWidth = timeToPercent(activeEnd) - shiftLeft;
-          const shiftDuration = activeEnd - activeStart;
-          
-          let segmentsHTML = '';
-          let vehicleStripHTML = '';
-          
-          activeDuties.forEach(duty => {
-            const dutyLeft = ((duty.start - activeStart) / shiftDuration) * 100;
-            const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-            segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+          // Render active shift bar if there are active duties
+          if (activeDuties.length > 0) {
+            // Recalculate shift bounds based on active duties only
+            const activeStart = Math.min(...activeDuties.map(d => d.start));
+            const activeEnd = Math.max(...activeDuties.map(d => d.end));
             
-            // Build vehicle strip segments
-            if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
-            } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
-              vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
-            } else {
-              vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
-            }
-          });
+            const shiftLeft = timeToPercent(activeStart);
+            const shiftWidth = timeToPercent(activeEnd) - shiftLeft;
+            const shiftDuration = activeEnd - activeStart;
+            
+            let segmentsHTML = '';
+            let vehicleStripHTML = '';
+            
+            activeDuties.forEach(duty => {
+              const dutyLeft = ((duty.start - activeStart) / shiftDuration) * 100;
+              const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
+              segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+              
+              // Build vehicle strip segments
+              if (duty.vehicle) {
+                vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+              } else {
+                vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
+              }
+            });
+            
+            blocksHTML += `
+              <div class="shift-bar" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
+                ${segmentsHTML}
+                <div class="shift-label">${shift.name}</div>
+                <div class="vehicle-strip">${vehicleStripHTML}</div>
+                ${renderShiftTooltip(shift)}
+              </div>
+            `;
+          }
           
-          blocksHTML += `
-            <div class="shift-bar" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
-              ${segmentsHTML}
-              <div class="shift-label">${shift.name}</div>
-              <div class="vehicle-strip">${vehicleStripHTML}</div>
-              ${renderShiftTooltip(shift)}
-            </div>
-          `;
+          // Render cancelled duties as ghost bars (outside the shift bar)
+          cancelledDuties.forEach(duty => {
+            const left = timeToPercent(duty.start);
+            const width = Math.max(timeToPercent(duty.end) - left, 0.5);
+            blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${left}%; width: ${width}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
+          });
         });
       }
       
@@ -9217,6 +9316,7 @@
         
         for (const shift of driver.shifts) {
           for (const duty of shift.duties) {
+            if (duty.cancelled) continue; // Skip cancelled duties
             const dStartMins = toMinutes(duty.start);
             const dEndMins = toMinutes(duty.end);
             if (jobStartMins < dEndMins && jobEndMins > dStartMins) {
@@ -9227,20 +9327,24 @@
         return true;
       };
       
-      // Helper to get total hours for a driver
+      // Helper to get total hours for a driver (excluding cancelled)
       const getTotalHours = (driver) => {
         return driver.shifts.reduce((total, shift) => {
-          return total + shift.duties.reduce((sum, duty) => sum + (duty.end - duty.start), 0);
+          return total + shift.duties.filter(d => !d.cancelled).reduce((sum, duty) => sum + (duty.end - duty.start), 0);
         }, 0);
+      };
+      
+      // Helper to check if driver has active duties
+      const hasActiveDuties = (driver) => {
+        return driver.shifts.some(s => s.duties.some(d => !d.cancelled));
       };
       
       // Apply availability filter
       if (filter === 'no-duties') {
-        filteredDrivers = filteredDrivers.filter(d => d.shifts.length === 0 || d.shifts.every(s => s.duties.length === 0));
+        filteredDrivers = filteredDrivers.filter(d => !hasActiveDuties(d));
       } else if (filter === 'has-duties') {
         filteredDrivers = filteredDrivers.filter(d => {
-          const hasDuties = d.shifts.some(s => s.duties.length > 0);
-          return hasDuties && isAvailableForJob(d);
+          return hasActiveDuties(d) && isAvailableForJob(d);
         });
       } else if (filter === 'not-available') {
         filteredDrivers = filteredDrivers.filter(d => !isAvailableForJob(d));
@@ -9300,7 +9404,7 @@
             const driverIdx = drivers.indexOf(d);
             const totalHours = getTotalHours(d);
             const available = isAvailableForJob(d);
-            const shiftCount = d.shifts.filter(s => s.duties.length > 0).length;
+            const shiftCount = d.shifts.filter(s => s.duties.some(duty => !duty.cancelled)).length;
             
             // Build detail text
             let detailText = '';
