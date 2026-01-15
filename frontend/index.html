@@ -4096,6 +4096,31 @@
       margin-bottom: 12px;
     }
     
+    /* Custom fields grid layout */
+    .custom-fields-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    
+    .custom-field-group.full-width {
+      grid-column: span 2;
+    }
+    
+    .custom-field-group.half-width {
+      grid-column: span 1;
+    }
+    
+    /* Ensure date inputs show picker */
+    input[type="date"].form-input {
+      cursor: pointer;
+    }
+    
+    input[type="date"].form-input::-webkit-calendar-picker-indicator {
+      filter: invert(0.8);
+      cursor: pointer;
+    }
+    
     /* Form section */
     .form-section {
       margin: 20px 0;
@@ -12169,6 +12194,24 @@ Guidelines:
         status: document.getElementById('empStatus').value,
       };
       
+      // Validate required custom fields
+      const requiredFields = document.querySelectorAll('.custom-field-input[data-required="true"]');
+      for (const field of requiredFields) {
+        const value = field.type === 'checkbox' ? field.checked : field.value;
+        if (!value || value === '') {
+          const fieldName = field.getAttribute('data-field-name') || 'Field';
+          showToast(`${fieldName} is required`, 'error');
+          // Switch to Custom Fields tab
+          document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
+            tab.classList.toggle('active', i === 1);
+          });
+          document.getElementById('empTabGeneral').classList.remove('active');
+          document.getElementById('empTabCustom').classList.add('active');
+          field.focus();
+          return;
+        }
+      }
+      
       try {
         let employeeId = editingEmployeeId;
         
@@ -12225,32 +12268,34 @@ Guidelines:
           }
         }
         
-        // Render custom field inputs
-        let html = '';
+        // Render custom field inputs with grid layout
+        let html = '<div class="custom-fields-grid">';
         for (const field of customFieldDefinitions) {
           const value = fieldValues[field.id] || '';
-          const required = field.is_required ? '*' : '';
-          const requiredAttr = field.is_required ? 'required' : '';
+          const required = field.is_required ? ' *' : '';
+          const requiredAttr = field.is_required ? 'data-required="true"' : '';
+          const fieldWidth = field.field_width || 'full';
+          const widthClass = fieldWidth === 'half' ? 'half-width' : 'full-width';
           
-          html += `<div class="form-group">`;
-          html += `<label class="form-label">${field.field_name} ${required}</label>`;
+          html += `<div class="form-group custom-field-group ${widthClass}">`;
+          html += `<label class="form-label">${escapeHtml(field.field_name)}${required}</label>`;
           
           switch (field.field_type) {
             case 'text':
-              html += `<input type="text" class="form-input custom-field-input" data-field-id="${field.id}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+              html += `<input type="text" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
               break;
             case 'number':
-              html += `<input type="number" class="form-input custom-field-input" data-field-id="${field.id}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+              html += `<input type="number" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
               break;
             case 'date':
-              html += `<input type="date" class="form-input custom-field-input" data-field-id="${field.id}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+              html += `<input type="date" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr} style="color-scheme: dark;">`;
               break;
             case 'boolean':
               const checked = value === 'true' || value === '1' ? 'checked' : '';
-              html += `<input type="checkbox" class="custom-field-input" data-field-id="${field.id}" ${checked}>`;
+              html += `<input type="checkbox" class="custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${checked}>`;
               break;
             case 'select':
-              html += `<select class="form-input custom-field-input" data-field-id="${field.id}" ${requiredAttr}>`;
+              html += `<select class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${requiredAttr}>`;
               html += `<option value="">-- Select --</option>`;
               if (field.field_options && Array.isArray(field.field_options)) {
                 for (const opt of field.field_options) {
@@ -12264,6 +12309,7 @@ Guidelines:
           
           html += `</div>`;
         }
+        html += '</div>';
         
         container.innerHTML = html;
       } catch (err) {
@@ -12336,9 +12382,15 @@ Guidelines:
           select: 'Dropdown'
         };
         
+        const widthLabels = {
+          full: 'Full',
+          half: 'Half'
+        };
+        
         let html = '';
         for (const field of customFieldDefinitions) {
           const typeLabel = typeLabels[field.field_type] || field.field_type;
+          const widthLabel = widthLabels[field.field_width] || 'Full';
           const requiredBadge = field.is_required ? '<span class="field-type-badge required">Required</span>' : '';
           
           html += `
@@ -12350,7 +12402,7 @@ Guidelines:
                   <span class="field-type-badge">${typeLabel}</span>
                   ${requiredBadge}
                 </div>
-                <div class="custom-field-meta">Key: ${field.field_key}</div>
+                <div class="custom-field-meta">Key: ${field.field_key} • Width: ${widthLabel}</div>
               </div>
               <div class="custom-field-actions">
                 <button onclick="editCustomField('${field.id}')" title="Edit">✏️</button>
@@ -12385,6 +12437,7 @@ Guidelines:
       document.getElementById('customFieldName').value = field.field_name;
       document.getElementById('customFieldKey').value = field.field_key;
       document.getElementById('customFieldType').value = field.field_type;
+      document.getElementById('customFieldWidth').value = field.field_width || 'full';
       document.getElementById('customFieldRequired').checked = field.is_required;
       
       // Handle options for select type
@@ -12414,6 +12467,7 @@ Guidelines:
         field_name: document.getElementById('customFieldName').value,
         field_key: document.getElementById('customFieldKey').value,
         field_type: document.getElementById('customFieldType').value,
+        field_width: document.getElementById('customFieldWidth').value,
         is_required: document.getElementById('customFieldRequired').checked,
       };
       
@@ -14411,7 +14465,14 @@ Guidelines:
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label class="form-label">
+              <label class="form-label">Field Width</label>
+              <select id="customFieldWidth" class="form-input">
+                <option value="full">Full Width</option>
+                <option value="half">Half Width</option>
+              </select>
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; padding-top: 22px;">
+              <label class="form-label" style="margin-bottom: 0;">
                 <input type="checkbox" id="customFieldRequired"> Required field
               </label>
             </div>

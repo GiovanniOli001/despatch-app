@@ -10,6 +10,7 @@ interface FieldDefinitionInput {
   field_key: string;
   field_type: 'text' | 'number' | 'date' | 'select' | 'boolean';
   field_options?: string[];  // For select type
+  field_width?: 'half' | 'full';  // Layout width
   is_required?: boolean;
   display_order?: number;
   tab_name?: string;
@@ -193,8 +194,8 @@ async function createFieldDefinition(env: Env, input: FieldDefinitionInput): Pro
   await env.DB.prepare(`
     INSERT INTO employee_custom_field_definitions (
       id, tenant_id, field_name, field_key, field_type, field_options,
-      is_required, display_order, tab_name, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      field_width, is_required, display_order, tab_name, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id,
     TENANT_ID,
@@ -202,6 +203,7 @@ async function createFieldDefinition(env: Env, input: FieldDefinitionInput): Pro
     sanitizedKey,
     input.field_type,
     input.field_options ? JSON.stringify(input.field_options) : null,
+    input.field_width || 'full',
     input.is_required ? 1 : 0,
     displayOrder,
     input.tab_name || 'Custom',
@@ -257,6 +259,11 @@ async function updateFieldDefinition(env: Env, id: string, input: Partial<FieldD
   if (input.tab_name !== undefined) {
     updates.push('tab_name = ?');
     bindings.push(input.tab_name);
+  }
+
+  if (input.field_width !== undefined) {
+    updates.push('field_width = ?');
+    bindings.push(input.field_width);
   }
 
   if (updates.length === 0) {
