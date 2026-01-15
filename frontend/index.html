@@ -688,7 +688,6 @@
       top: 2px;
       height: 32px;
       border-radius: 4px;
-      display: flex;
     }
 
     .style-b .shift-bar.regular { background: #1e3a5f; }
@@ -697,12 +696,10 @@
     .style-b .shift-bar.adhoc { background: #065f46; }
 
     .style-b .shift-bar .segment {
+      position: absolute;
+      top: 0;
       height: calc(100% - 10px);
-      position: relative;
-      border-right: 1px solid rgba(255,255,255,0.1);
     }
-
-    .style-b .shift-bar .segment:last-child { border-right: none; }
 
     .style-b .shift-bar .segment.driving { background: rgba(59, 130, 246, 0.6); }
     .style-b .shift-bar .segment.oov { background: rgba(245, 158, 11, 0.3); }
@@ -825,13 +822,14 @@
       left: 0;
       right: 0;
       height: 10px;
-      display: flex;
       background: rgba(0,0,0,0.4);
       border-radius: 0 0 4px 4px;
       overflow: hidden;
     }
     
     .style-b .shift-bar .vehicle-segment {
+      position: absolute;
+      top: 0;
       height: 100%;
       display: flex;
       align-items: center;
@@ -841,11 +839,6 @@
       color: #1a1a1a;
       overflow: hidden;
       white-space: nowrap;
-      border-right: 1px solid rgba(0,0,0,0.3);
-    }
-    
-    .style-b .shift-bar .vehicle-segment:last-child {
-      border-right: none;
     }
     
     .style-b .shift-bar .vehicle-segment.assigned {
@@ -936,13 +929,14 @@
       left: 0;
       right: 0;
       height: 10px;
-      display: flex;
       background: rgba(0,0,0,0.4);
       border-radius: 0 0 6px 6px;
       overflow: hidden;
     }
     
     .style-c .shift-bar .vehicle-segment {
+      position: absolute;
+      top: 0;
       height: 100%;
       display: flex;
       align-items: center;
@@ -952,11 +946,6 @@
       color: #1a1a1a;
       overflow: hidden;
       white-space: nowrap;
-      border-right: 1px solid rgba(0,0,0,0.3);
-    }
-    
-    .style-c .shift-bar .vehicle-segment:last-child {
-      border-right: none;
     }
     
     .style-c .shift-bar .vehicle-segment.assigned {
@@ -1061,13 +1050,14 @@
       left: 0;
       right: 0;
       height: 10px;
-      display: flex;
       background: rgba(0,0,0,0.15);
       border-radius: 0 0 4px 4px;
       overflow: hidden;
     }
     
     .style-d .shift-bar .vehicle-segment {
+      position: absolute;
+      top: 0;
       height: 100%;
       display: flex;
       align-items: center;
@@ -1077,11 +1067,6 @@
       color: #1a1a1a;
       overflow: hidden;
       white-space: nowrap;
-      border-right: 1px solid rgba(0,0,0,0.2);
-    }
-    
-    .style-d .shift-bar .vehicle-segment:last-child {
-      border-right: none;
     }
     
     .style-d .shift-bar .vehicle-segment.assigned {
@@ -1172,13 +1157,14 @@
       left: 0;
       right: 0;
       height: 10px;
-      display: flex;
       background: rgba(0,0,0,0.4);
       border-radius: 0 0 11px 11px;
       overflow: hidden;
     }
     
     .style-e .shift-bar .vehicle-segment {
+      position: absolute;
+      top: 0;
       height: 100%;
       display: flex;
       align-items: center;
@@ -1188,11 +1174,6 @@
       color: #1a1a1a;
       overflow: hidden;
       white-space: nowrap;
-      border-right: 1px solid rgba(0,0,0,0.3);
-    }
-    
-    .style-e .shift-bar .vehicle-segment:last-child {
-      border-right: none;
     }
     
     .style-e .shift-bar .vehicle-segment.assigned {
@@ -1619,17 +1600,25 @@
     /* Cancelled duty styling */
     .duty-item-inline.cancelled {
       opacity: 0.5;
-      background: rgba(239, 68, 68, 0.1);
+      background: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 4px,
+        rgba(239, 68, 68, 0.05) 4px,
+        rgba(239, 68, 68, 0.05) 8px
+      );
     }
     
     .duty-item-inline.cancelled .duty-inline-content {
       text-decoration: line-through;
+      text-decoration-color: var(--accent-red);
     }
     
     .duty-item-inline.cancelled .duty-inline-time,
     .duty-item-inline.cancelled .duty-inline-desc,
-    .duty-item-inline.cancelled .duty-inline-select {
-      text-decoration: line-through;
+    .duty-item-inline.cancelled .duty-inline-select,
+    .duty-item-inline.cancelled .duty-inline-location {
+      pointer-events: none;
       color: var(--text-muted);
     }
     
@@ -1639,12 +1628,13 @@
       color: var(--text-muted);
       cursor: pointer;
       padding: 2px 4px;
-      font-size: 11px;
+      font-size: 12px;
       border-radius: 3px;
       opacity: 0.5;
       transition: all 0.15s;
       flex-shrink: 0;
-      margin-right: 2px;
+      width: 24px;
+      text-align: center;
     }
     
     .duty-item-inline:hover .duty-cancel-btn {
@@ -1652,34 +1642,35 @@
     }
     
     .duty-cancel-btn:hover {
-      background: rgba(239, 68, 68, 0.2);
-      color: var(--accent-red);
+      background: rgba(245, 158, 11, 0.2);
+      color: var(--accent-amber);
     }
     
     .duty-reinstate-btn {
-      background: var(--accent-green);
-      border: none;
-      color: white;
+      background: rgba(34, 197, 94, 0.15);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--accent-green);
       cursor: pointer;
       padding: 4px 8px;
       font-size: 11px;
-      border-radius: 3px;
+      border-radius: 4px;
       transition: all 0.15s;
       flex-shrink: 0;
+      font-weight: 500;
     }
     
     .duty-reinstate-btn:hover {
-      background: #22c55e;
+      background: rgba(34, 197, 94, 0.25);
+      border-color: var(--accent-green);
     }
     
-    .cancelled-badge {
-      background: var(--accent-red);
-      color: white;
+    .duty-cancelled-badge {
       font-size: 10px;
       padding: 2px 6px;
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--accent-red);
       border-radius: 3px;
-      margin-left: 8px;
-      font-weight: 500;
+      margin-right: 8px;
     }
 
     /* Vehicle schedule item (driver-centric mode) */
@@ -2218,6 +2209,28 @@
       background: var(--accent-blue);
       border-color: var(--accent-blue);
       color: white;
+    }
+    
+    .filter-toggle-btn {
+      padding: 5px 10px;
+      font-size: 10px;
+      background: transparent;
+      border: 1px solid var(--border-subtle);
+      border-radius: 4px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    
+    .filter-toggle-btn:hover {
+      background: var(--bg-secondary);
+      border-color: var(--text-muted);
+    }
+    
+    .filter-toggle-btn.active {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: var(--accent-amber);
+      color: var(--accent-amber);
     }
     
     /* Cancelled duty bar on Gantt - for Style A (absolute positioned) */
@@ -4024,367 +4037,6 @@
       max-width: 95vw;
     }
     
-    /* Tabbed modal - larger size for employee modal */
-    .crud-modal-tabbed {
-      width: 700px;
-      max-width: 95vw;
-    }
-    
-    .modal-tabs {
-      display: flex;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-tertiary);
-    }
-    
-    .modal-tab {
-      padding: 12px 20px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text-secondary);
-      background: none;
-      border: none;
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
-    }
-    
-    .modal-tab:hover {
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-    }
-    
-    .modal-tab.active {
-      color: var(--accent-blue);
-      border-bottom-color: var(--accent-blue);
-      background: var(--bg-secondary);
-    }
-    
-    .modal-tab-content {
-      display: none;
-      padding: 20px;
-    }
-    
-    .modal-tab-content.active {
-      display: block;
-    }
-    
-    /* Settings gear button */
-    .btn-settings {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      font-size: 18px;
-      cursor: pointer;
-      padding: 6px 10px;
-      border-radius: 6px;
-      transition: all 0.15s;
-    }
-    
-    .btn-settings:hover {
-      color: var(--text-primary);
-      background: var(--bg-tertiary);
-    }
-    
-    /* Custom fields settings modal */
-    .custom-fields-list {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    
-    .custom-field-item {
-      display: flex;
-      align-items: center;
-      padding: 12px 16px;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-secondary);
-    }
-    
-    .custom-field-item:last-child {
-      border-bottom: none;
-    }
-    
-    .custom-field-item:hover {
-      background: var(--bg-tertiary);
-    }
-    
-    .custom-field-drag {
-      color: var(--text-muted);
-      cursor: grab;
-      padding: 0 8px;
-      font-size: 14px;
-    }
-    
-    .custom-field-info {
-      flex: 1;
-      min-width: 0;
-    }
-    
-    .custom-field-name {
-      font-weight: 500;
-      font-size: 14px;
-    }
-    
-    .custom-field-meta {
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-    
-    .custom-field-actions {
-      display: flex;
-      gap: 4px;
-    }
-    
-    .custom-field-actions button {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 4px;
-    }
-    
-    .custom-field-actions button:hover {
-      background: var(--bg-primary);
-      color: var(--text-primary);
-    }
-    
-    .custom-field-actions button.delete:hover {
-      color: var(--accent-red);
-    }
-    
-    .custom-fields-empty {
-      padding: 32px;
-      text-align: center;
-      color: var(--text-muted);
-    }
-    
-    /* Custom field type badges */
-    .field-type-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      font-size: 11px;
-      font-weight: 500;
-      border-radius: 4px;
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-      margin-left: 8px;
-    }
-    
-    .field-type-badge.required {
-      background: var(--accent-amber);
-      color: #000;
-    }
-    
-    /* Custom field input section in employee modal */
-    .custom-fields-section {
-      margin-top: 16px;
-      padding-top: 16px;
-      border-top: 1px solid var(--border);
-    }
-    
-    .custom-fields-section-title {
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-      margin-bottom: 12px;
-    }
-    
-    /* Custom fields grid layout */
-    .custom-fields-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-    }
-    
-    .custom-fields-row {
-      display: flex;
-      gap: 16px;
-    }
-    
-    .custom-field-group {
-      margin-bottom: 0;
-    }
-    
-    .custom-field-group.full-width {
-      flex: 1 1 100%;
-    }
-    
-    .custom-field-group.half-width {
-      flex: 1 1 calc(50% - 8px);
-      max-width: calc(50% - 8px);
-    }
-    
-    /* Date picker with button */
-    .date-input-wrapper {
-      display: flex;
-      gap: 8px;
-    }
-    
-    .date-input-wrapper input[type="date"] {
-      flex: 1;
-      color-scheme: dark;
-    }
-    
-    .date-picker-btn {
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 8px 12px;
-      cursor: pointer;
-      font-size: 16px;
-    }
-    
-    .date-picker-btn:hover {
-      background: var(--bg-primary);
-      border-color: var(--accent-blue);
-    }
-    
-    /* Checkbox wrapper */
-    .checkbox-wrapper {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      padding: 10px 0;
-    }
-    
-    .checkbox-wrapper input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-    }
-    
-    .checkbox-label {
-      font-size: 14px;
-      color: var(--text-primary);
-    }
-    
-    /* Layout editor styles */
-    .layout-editor {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-      background: var(--bg-primary);
-      margin-bottom: 16px;
-    }
-    
-    .layout-editor-title {
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-      margin-bottom: 12px;
-    }
-    
-    .layout-preview {
-      min-height: 100px;
-      background: var(--bg-tertiary);
-      border: 2px dashed var(--border);
-      border-radius: 6px;
-      padding: 12px;
-    }
-    
-    .layout-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-      min-height: 40px;
-      padding: 4px;
-      border-radius: 4px;
-      background: var(--bg-secondary);
-    }
-    
-    .layout-row:last-child {
-      margin-bottom: 0;
-    }
-    
-    .layout-row.drop-target {
-      border: 2px dashed var(--accent-blue);
-      background: rgba(59, 130, 246, 0.1);
-    }
-    
-    .layout-field {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 8px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      cursor: grab;
-      font-size: 13px;
-    }
-    
-    .layout-field:active {
-      cursor: grabbing;
-    }
-    
-    .layout-field.dragging {
-      opacity: 0.5;
-    }
-    
-    .layout-field.full-width {
-      flex: 1 1 100%;
-    }
-    
-    .layout-field.half-width {
-      flex: 1 1 calc(50% - 4px);
-    }
-    
-    .layout-field-name {
-      font-weight: 500;
-    }
-    
-    .layout-field-type {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    
-    .layout-field-controls {
-      display: flex;
-      gap: 4px;
-    }
-    
-    .layout-field-controls button {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 2px 6px;
-      font-size: 12px;
-      border-radius: 3px;
-    }
-    
-    .layout-field-controls button:hover {
-      background: var(--bg-primary);
-      color: var(--text-primary);
-    }
-    
-    .layout-add-row {
-      margin-top: 12px;
-      text-align: center;
-    }
-    
-    .layout-add-row button {
-      background: var(--bg-secondary);
-      border: 1px dashed var(--border);
-      color: var(--text-muted);
-      padding: 8px 16px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-    
-    .layout-add-row button:hover {
-      border-color: var(--accent-blue);
-      color: var(--accent-blue);
-    }
-    
     /* Form section */
     .form-section {
       margin: 20px 0;
@@ -4979,10 +4631,7 @@
       <div class="screen" id="screen-hrm" style="display: none;">
         <div class="screen-header-bar">
           <h2>Human Resources</h2>
-          <div style="display: flex; gap: 8px; align-items: center;">
-            <button class="btn-settings" onclick="showEmployeeFieldsSettings()" title="Custom Fields Settings">⚙️</button>
-            <button class="btn-primary" onclick="showAddEmployeeModal()">+ Add Employee</button>
-          </div>
+          <button class="btn-primary" onclick="showAddEmployeeModal()">+ Add Employee</button>
         </div>
         <div class="screen-filters">
           <input type="text" class="filter-input" placeholder="Search employees..." oninput="filterEmployees(this.value)">
@@ -5725,7 +5374,6 @@
     let dataSource = 'fake'; // 'fake' or 'real'
     let dispatchMeta = null; // Metadata from real API
     let showCancelledDuties = false; // Toggle to show cancelled duties on Gantt
-    let pendingCancelDuty = null; // For cancel duty modal
     
     // Filter state
     let driverFilters = { search: '', status: 'all', sort: 'status' };
@@ -6701,11 +6349,21 @@
     
     // Sync all existing vehicle assignments from driver duties to vehicle schedules
     function syncAllVehicleAssignments() {
+      // First, clear all non-maintenance shifts from vehicles
+      // This removes both 'synced' type and any other work shifts from API
+      vehicles.forEach(vehicle => {
+        if (vehicle.shifts) {
+          vehicle.shifts = vehicle.shifts.filter(s => s.type === 'maintenance');
+        }
+      });
+      
+      // Then rebuild synced shifts from driver duties (skip cancelled)
       drivers.forEach(driver => {
         if (!driver.shifts) return;
         driver.shifts.forEach(shift => {
           if (!shift.duties) return;
           shift.duties.forEach(duty => {
+            if (duty.cancelled) return; // Skip cancelled duties
             if (duty.vehicle) {
               syncVehicleSchedule(duty.vehicle, duty, driver, shift);
             }
@@ -6723,6 +6381,7 @@
         for (const shift of driver.shifts) {
           for (const duty of shift.duties) {
             if (excludeDutyId && duty.id === excludeDutyId) continue;
+            if (duty.cancelled) continue; // Skip cancelled duties
             if (duty.vehicle === vehicleId) {
               // Check for overlap
               if (start < duty.end && end > duty.start) {
@@ -6916,7 +6575,9 @@
     }
 
     function getShiftVehicleStatus(shift) {
-      const drivingDuties = shift.duties.filter(d => VEHICLE_REQUIRED_TYPES.includes(d.type));
+      // Only consider active (non-cancelled) duties
+      const activeDuties = shift.duties.filter(d => !d.cancelled);
+      const drivingDuties = activeDuties.filter(d => VEHICLE_REQUIRED_TYPES.includes(d.type));
       if (drivingDuties.length === 0) return { status: 'complete', label: 'N/A', assigned: 0, total: 0 };
       
       const withVehicle = drivingDuties.filter(d => d.vehicle);
@@ -6930,6 +6591,7 @@
       const endMins = toMinutes(end);
       return duties.find(d => {
         if (d.id === excludeId) return false;
+        if (d.cancelled) return false; // Skip cancelled duties
         const dStartMins = toMinutes(d.start);
         const dEndMins = toMinutes(d.end);
         return (startMins < dEndMins && endMins > dStartMins);
@@ -6938,7 +6600,9 @@
 
     function findAvailableSlots(duties, shiftStart, shiftEnd, minDuration = 0.25) {
       const slots = [];
-      const sortedDuties = [...duties].sort((a, b) => a.start - b.start);
+      // Only consider active (non-cancelled) duties
+      const activeDuties = duties.filter(d => !d.cancelled);
+      const sortedDuties = [...activeDuties].sort((a, b) => a.start - b.start);
       let currentTime = shiftStart;
       const minDurationMins = toMinutes(minDuration);
       
@@ -7112,7 +6776,10 @@
       if (btn) {
         btn.classList.toggle('active', showCancelledDuties);
       }
-      renderAll();
+      renderDriverRows();
+      if (viewMode === 'vertical') {
+        renderDriverVertical();
+      }
     }
 
     function toggleSection(sectionId) {
@@ -7442,52 +7109,108 @@
           
           const shiftTypeClass = shift.type === 'charter' ? 'charter' : (shift.type === 'adhoc' ? 'adhoc' : 'regular');
           
-          // Calculate shift bounds based on what we're showing
-          const dutiesToRender = showCancelledDuties ? allDuties : activeDuties;
-          if (dutiesToRender.length === 0) return;
-          
-          const shiftStart = Math.min(...dutiesToRender.map(d => d.start));
-          const shiftEnd = Math.max(...dutiesToRender.map(d => d.end));
-          const shiftLeft = timeToPercent(shiftStart);
-          const shiftWidth = timeToPercent(shiftEnd) - shiftLeft;
-          const shiftDuration = shiftEnd - shiftStart;
-          
-          let segmentsHTML = '';
-          let vehicleStripHTML = '';
-          
-          dutiesToRender.forEach(duty => {
-            const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-            const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
-            const isCancelled = duty.cancelled;
+          if (showCancelledDuties) {
+            // Show all duties in one bar
+            const dutiesToRender = [...allDuties].sort((a, b) => a.start - b.start);
+            const shiftStart = Math.min(...dutiesToRender.map(d => d.start));
+            const shiftEnd = Math.max(...dutiesToRender.map(d => d.end));
+            const shiftLeft = timeToPercent(shiftStart);
+            const shiftWidth = timeToPercent(shiftEnd) - shiftLeft;
+            const shiftDuration = shiftEnd - shiftStart;
             
-            if (isCancelled) {
-              segmentsHTML += `<div class="segment cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
-            } else if (style === 'style-b') {
-              segmentsHTML += `<div class="segment ${duty.type}" style="width: ${dutyWidth}%;"></div>`;
-            } else {
-              segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
-            }
+            let segmentsHTML = '';
+            let vehicleStripHTML = '';
             
-            // Build vehicle strip segments (skip cancelled)
-            if (!isCancelled) {
-              if (duty.vehicle) {
-                vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
-              } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
-                vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+            dutiesToRender.forEach(duty => {
+              const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
+              const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
+              const isCancelled = duty.cancelled;
+              
+              if (isCancelled) {
+                segmentsHTML += `<div class="segment cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
+                vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%; opacity: 0.3;"></div>`;
               } else {
-                vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
+                segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                if (duty.vehicle) {
+                  vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+                } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                  vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+                } else {
+                  vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                }
               }
+            });
+            
+            blocksHTML += `
+              <div class="shift-bar ${shiftTypeClass}" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
+                ${segmentsHTML}
+                <div class="shift-label">${shift.name}</div>
+                <div class="vehicle-strip">${vehicleStripHTML}</div>
+                ${renderShiftTooltip(shift)}
+              </div>
+            `;
+          } else {
+            // Group contiguous active duties into separate bars
+            const sortedActive = [...activeDuties].sort((a, b) => a.start - b.start);
+            const groups = [];
+            let currentGroup = [];
+            
+            sortedActive.forEach(duty => {
+              if (currentGroup.length === 0) {
+                currentGroup.push(duty);
+              } else {
+                const lastDuty = currentGroup[currentGroup.length - 1];
+                // Check if this duty is contiguous (starts when last one ends)
+                if (Math.abs(duty.start - lastDuty.end) < 0.01) {
+                  currentGroup.push(duty);
+                } else {
+                  groups.push(currentGroup);
+                  currentGroup = [duty];
+                }
+              }
+            });
+            if (currentGroup.length > 0) {
+              groups.push(currentGroup);
             }
-          });
-          
-          blocksHTML += `
-            <div class="shift-bar ${shiftTypeClass}" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
-              ${segmentsHTML}
-              <div class="shift-label">${shift.name}</div>
-              <div class="vehicle-strip">${vehicleStripHTML}</div>
-              ${renderShiftTooltip(shift)}
-            </div>
-          `;
+            
+            // Render each group as a separate shift bar
+            groups.forEach((group, groupIdx) => {
+              const groupStart = Math.min(...group.map(d => d.start));
+              const groupEnd = Math.max(...group.map(d => d.end));
+              const groupLeft = timeToPercent(groupStart);
+              const groupWidth = timeToPercent(groupEnd) - groupLeft;
+              const groupDuration = groupEnd - groupStart;
+              
+              let segmentsHTML = '';
+              let vehicleStripHTML = '';
+              
+              group.forEach(duty => {
+                const dutyWidth = ((duty.end - duty.start) / groupDuration) * 100;
+                const dutyLeft = ((duty.start - groupStart) / groupDuration) * 100;
+                
+                segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                if (duty.vehicle) {
+                  vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+                } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                  vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+                } else {
+                  vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                }
+              });
+              
+              // Only show shift name on first group
+              const label = groupIdx === 0 ? shift.name : '';
+              
+              blocksHTML += `
+                <div class="shift-bar ${shiftTypeClass}" style="left: ${groupLeft}%; width: ${groupWidth}%;">
+                  ${segmentsHTML}
+                  ${label ? `<div class="shift-label">${label}</div>` : ''}
+                  <div class="vehicle-strip">${vehicleStripHTML}</div>
+                  ${groupIdx === 0 ? renderShiftTooltip(shift) : ''}
+                </div>
+              `;
+            });
+          }
         });
       }
       
@@ -7512,36 +7235,113 @@
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
         (driver.shifts || []).forEach(shift => {
-          const shiftLeft = timeToPercent(shift.start);
-          const shiftWidth = timeToPercent(shift.end) - shiftLeft;
-          const shiftDuration = shift.end - shift.start;
+          const allDuties = shift.duties || [];
+          const activeDuties = allDuties.filter(d => !d.cancelled);
           
-          let segmentsHTML = '';
-          let vehicleStripHTML = '';
+          if (activeDuties.length === 0 && !showCancelledDuties) return;
+          if (allDuties.length === 0) return;
           
-          (shift.duties || []).forEach(duty => {
-            const dutyLeft = ((duty.start - shift.start) / shiftDuration) * 100;
-            const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-            segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+          if (showCancelledDuties) {
+            // Show all duties in one bar
+            const dutiesToRender = [...allDuties].sort((a, b) => a.start - b.start);
+            const shiftStart = Math.min(...dutiesToRender.map(d => d.start));
+            const shiftEnd = Math.max(...dutiesToRender.map(d => d.end));
+            const shiftLeft = timeToPercent(shiftStart);
+            const shiftWidth = timeToPercent(shiftEnd) - shiftLeft;
+            const shiftDuration = shiftEnd - shiftStart;
             
-            // Build vehicle strip segments
-            if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
-            } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
-              vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
-            } else {
-              vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
+            let segmentsHTML = '';
+            let vehicleStripHTML = '';
+            
+            dutiesToRender.forEach(duty => {
+              const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
+              const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
+              const isCancelled = duty.cancelled;
+              const segmentClass = isCancelled ? 'segment cancelled-ghost' : `segment ${duty.type}`;
+              const tooltip = isCancelled ? ` title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"` : '';
+              
+              segmentsHTML += `<div class="${segmentClass}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"${tooltip}></div>`;
+              
+              if (!isCancelled) {
+                if (duty.vehicle) {
+                  vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+                } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                  vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+                } else {
+                  vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                }
+              } else {
+                vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%; opacity: 0.3;"></div>`;
+              }
+            });
+            
+            blocksHTML += `
+              <div class="shift-bar" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
+                ${segmentsHTML}
+                <div class="shift-label">${shift.name}</div>
+                <div class="vehicle-strip">${vehicleStripHTML}</div>
+                ${renderShiftTooltip(shift)}
+              </div>
+            `;
+          } else {
+            // Group contiguous active duties into separate bars
+            const sortedActive = [...activeDuties].sort((a, b) => a.start - b.start);
+            const groups = [];
+            let currentGroup = [];
+            
+            sortedActive.forEach(duty => {
+              if (currentGroup.length === 0) {
+                currentGroup.push(duty);
+              } else {
+                const lastDuty = currentGroup[currentGroup.length - 1];
+                if (Math.abs(duty.start - lastDuty.end) < 0.01) {
+                  currentGroup.push(duty);
+                } else {
+                  groups.push(currentGroup);
+                  currentGroup = [duty];
+                }
+              }
+            });
+            if (currentGroup.length > 0) {
+              groups.push(currentGroup);
             }
-          });
-          
-          blocksHTML += `
-            <div class="shift-bar" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
-              ${segmentsHTML}
-              <div class="shift-label">${shift.name}</div>
-              <div class="vehicle-strip">${vehicleStripHTML}</div>
-              ${renderShiftTooltip(shift)}
-            </div>
-          `;
+            
+            groups.forEach((group, groupIdx) => {
+              const groupStart = Math.min(...group.map(d => d.start));
+              const groupEnd = Math.max(...group.map(d => d.end));
+              const groupLeft = timeToPercent(groupStart);
+              const groupWidth = timeToPercent(groupEnd) - groupLeft;
+              const groupDuration = groupEnd - groupStart;
+              
+              let segmentsHTML = '';
+              let vehicleStripHTML = '';
+              
+              group.forEach(duty => {
+                const dutyWidth = ((duty.end - duty.start) / groupDuration) * 100;
+                const dutyLeft = ((duty.start - groupStart) / groupDuration) * 100;
+                
+                segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                if (duty.vehicle) {
+                  vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+                } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                  vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+                } else {
+                  vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                }
+              });
+              
+              const label = groupIdx === 0 ? shift.name : '';
+              
+              blocksHTML += `
+                <div class="shift-bar" style="left: ${groupLeft}%; width: ${groupWidth}%;">
+                  ${segmentsHTML}
+                  ${label ? `<div class="shift-label">${label}</div>` : ''}
+                  <div class="vehicle-strip">${vehicleStripHTML}</div>
+                  ${groupIdx === 0 ? renderShiftTooltip(shift) : ''}
+                </div>
+              `;
+            });
+          }
         });
       }
       
@@ -7586,13 +7386,37 @@
         
         if (currentStyle === 'style-a') {
           // Style A: Fragmented blocks showing duties
+          
+          // Helper to check if a synced duty's source is cancelled
+          const isDutyCancelled = (duty) => {
+            if (duty.cancelled) return true;
+            if (duty.syncedDutyId) {
+              for (const driver of drivers) {
+                for (const dShift of driver.shifts || []) {
+                  const sourceDuty = (dShift.duties || []).find(d => d.id === duty.syncedDutyId);
+                  if (sourceDuty) {
+                    return sourceDuty.cancelled === true;
+                  }
+                }
+              }
+            }
+            return false;
+          };
+          
           if (allocationMode === 'vehicle' && vehicle.shifts) {
             // Vehicle-centric: show duties with driver assignment indicators
             (vehicle.shifts || []).forEach(shift => {
+              const allDuties = shift.duties || [];
+              const activeDuties = allDuties.filter(d => !isDutyCancelled(d));
+              const cancelledDuties = allDuties.filter(d => isDutyCancelled(d));
+              
+              if (activeDuties.length === 0 && !showCancelledDuties) return;
+              
               const shiftLeft = timeToPercent(shift.start);
               blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
               
-              (shift.duties || []).forEach(duty => {
+              // Render active duties
+              activeDuties.forEach(duty => {
                 const left = timeToPercent(duty.start);
                 const width = Math.max(timeToPercent(duty.end) - left, 0.5);
                 const shortLabel = getDutyShortLabel(duty, width);
@@ -7606,10 +7430,24 @@
                   blocksHTML += `<div class="vehicle-status-bar" style="left: ${left}%; width: ${width}%;"></div>`;
                 }
               });
+              
+              // Render cancelled duties as ghost bars
+              if (showCancelledDuties) {
+                cancelledDuties.forEach(duty => {
+                  const left = timeToPercent(duty.start);
+                  const width = Math.max(timeToPercent(duty.end) - left, 0.5);
+                  blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${left}%; width: ${width}%;" title="CANCELLED: ${duty.description || ''}"></div>`;
+                });
+              }
             });
           } else {
             // Driver-centric: simple blocks with tooltip
             (vehicle.shifts || []).forEach(shift => {
+              const allDuties = shift.duties || [];
+              const hasActiveDuties = allDuties.some(d => !isDutyCancelled(d));
+              
+              if (!hasActiveDuties && !showCancelledDuties) return;
+              
               const left = timeToPercent(shift.start);
               const width = timeToPercent(shift.end) - left;
               const typeClass = shift.type === 'maintenance' ? 'maintenance' : 'driving';
@@ -7630,53 +7468,144 @@
         } else {
           // Styles B, C, D, E: Unified bars with driver strip
           (vehicle.shifts || []).forEach(shift => {
-            const left = timeToPercent(shift.start);
-            const width = timeToPercent(shift.end) - left;
-            const shiftDuration = shift.end - shift.start;
-            const typeClass = shift.type === 'maintenance' ? 'maintenance' : (shift.type === 'charter' ? 'charter' : 'regular');
+            const allDuties = shift.duties || [];
             
-            let segmentsHTML = '';
-            let driverStripHTML = '';
-            
-            // Show duty segments
-            (shift.duties || []).forEach(duty => {
-              const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-              const dutyLeft = ((duty.start - shift.start) / shiftDuration) * 100;
-              
-              if (currentStyle === 'style-b') {
-                segmentsHTML += `<div class="segment ${duty.type}" style="width: ${dutyWidth}%;"></div>`;
-              } else {
-                segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
-              }
-              
-              // Build driver strip segments (similar to vehicle strip on driver rows)
-              // Check both duty.driver (name) and duty.driverId (ID)
-              const hasDriver = duty.driver || duty.driverId;
-              if (hasDriver) {
-                // Get driver display name - duty.driver is the name, duty.driverId is the ID
-                let driverName = duty.driver;
-                if (!driverName && duty.driverId) {
-                  const driverObj = drivers.find(d => d.id === duty.driverId);
-                  driverName = driverObj ? driverObj.name : duty.driverId;
+            // Helper to check if a synced duty's source is cancelled
+            const isDutyCancelled = (duty) => {
+              if (duty.cancelled) return true;
+              // Check if the source duty on a driver is cancelled
+              if (duty.syncedDutyId) {
+                for (const driver of drivers) {
+                  for (const dShift of driver.shifts || []) {
+                    const sourceDuty = (dShift.duties || []).find(d => d.id === duty.syncedDutyId);
+                    if (sourceDuty) {
+                      return sourceDuty.cancelled === true;
+                    }
+                  }
                 }
-                driverStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${driverName}">${driverName}</div>`;
-              } else if (DRIVER_REQUIRED_TYPES.includes(duty.type)) {
-                driverStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No driver">—</div>`;
-              } else {
-                driverStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
               }
-            });
+              return false;
+            };
             
+            const activeDuties = allDuties.filter(d => !isDutyCancelled(d));
+            const typeClass = shift.type === 'maintenance' ? 'maintenance' : (shift.type === 'charter' ? 'charter' : 'regular');
             const label = shift.type === 'maintenance' ? 'MAINT' : shift.name;
             
-            blocksHTML += `
-              <div class="shift-bar ${typeClass}" style="left: ${left}%; width: ${width}%;">
-                ${segmentsHTML}
-                <div class="shift-label">${label}</div>
-                <div class="vehicle-strip">${driverStripHTML}</div>
-                ${renderShiftTooltip(shift)}
-              </div>
-            `;
+            if (activeDuties.length === 0 && !showCancelledDuties) return;
+            if (allDuties.length === 0) return;
+            
+            if (showCancelledDuties) {
+              // Show all duties in one bar
+              const dutiesToRender = [...allDuties].sort((a, b) => a.start - b.start);
+              const shiftStart = Math.min(...dutiesToRender.map(d => d.start));
+              const shiftEnd = Math.max(...dutiesToRender.map(d => d.end));
+              const left = timeToPercent(shiftStart);
+              const width = timeToPercent(shiftEnd) - left;
+              const shiftDuration = shiftEnd - shiftStart;
+              
+              let segmentsHTML = '';
+              let driverStripHTML = '';
+              
+              dutiesToRender.forEach(duty => {
+                const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
+                const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
+                const isCancelled = isDutyCancelled(duty);
+                
+                if (isCancelled) {
+                  segmentsHTML += `<div class="segment cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description || ''}"></div>`;
+                  driverStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%; opacity: 0.3;"></div>`;
+                } else {
+                  segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                  const hasDriver = duty.driver || duty.driverId;
+                  if (hasDriver) {
+                    let driverName = duty.driver;
+                    if (!driverName && duty.driverId) {
+                      const driverObj = drivers.find(d => d.id === duty.driverId);
+                      driverName = driverObj ? driverObj.name : duty.driverId;
+                    }
+                    driverStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${driverName}">${driverName}</div>`;
+                  } else if (DRIVER_REQUIRED_TYPES.includes(duty.type)) {
+                    driverStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No driver">—</div>`;
+                  } else {
+                    driverStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                  }
+                }
+              });
+              
+              blocksHTML += `
+                <div class="shift-bar ${typeClass}" style="left: ${left}%; width: ${width}%;">
+                  ${segmentsHTML}
+                  <div class="shift-label">${label}</div>
+                  <div class="vehicle-strip">${driverStripHTML}</div>
+                  ${renderShiftTooltip(shift)}
+                </div>
+              `;
+            } else {
+              // Group contiguous active duties into separate bars
+              const sortedActive = [...activeDuties].sort((a, b) => a.start - b.start);
+              const groups = [];
+              let currentGroup = [];
+              
+              sortedActive.forEach(duty => {
+                if (currentGroup.length === 0) {
+                  currentGroup.push(duty);
+                } else {
+                  const lastDuty = currentGroup[currentGroup.length - 1];
+                  if (Math.abs(duty.start - lastDuty.end) < 0.01) {
+                    currentGroup.push(duty);
+                  } else {
+                    groups.push(currentGroup);
+                    currentGroup = [duty];
+                  }
+                }
+              });
+              if (currentGroup.length > 0) {
+                groups.push(currentGroup);
+              }
+              
+              groups.forEach((group, groupIdx) => {
+                const groupStart = Math.min(...group.map(d => d.start));
+                const groupEnd = Math.max(...group.map(d => d.end));
+                const groupLeft = timeToPercent(groupStart);
+                const groupWidth = timeToPercent(groupEnd) - groupLeft;
+                const groupDuration = groupEnd - groupStart;
+                
+                let segmentsHTML = '';
+                let driverStripHTML = '';
+                
+                group.forEach(duty => {
+                  const dutyWidth = ((duty.end - duty.start) / groupDuration) * 100;
+                  const dutyLeft = ((duty.start - groupStart) / groupDuration) * 100;
+                  
+                  segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                  
+                  const hasDriver = duty.driver || duty.driverId;
+                  if (hasDriver) {
+                    let driverName = duty.driver;
+                    if (!driverName && duty.driverId) {
+                      const driverObj = drivers.find(d => d.id === duty.driverId);
+                      driverName = driverObj ? driverObj.name : duty.driverId;
+                    }
+                    driverStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${driverName}">${driverName}</div>`;
+                  } else if (DRIVER_REQUIRED_TYPES.includes(duty.type)) {
+                    driverStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No driver">—</div>`;
+                  } else {
+                    driverStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+                  }
+                });
+                
+                const groupLabel = groupIdx === 0 ? label : '';
+                
+                blocksHTML += `
+                  <div class="shift-bar ${typeClass}" style="left: ${groupLeft}%; width: ${groupWidth}%;">
+                    ${segmentsHTML}
+                    ${groupLabel ? `<div class="shift-label">${groupLabel}</div>` : ''}
+                    <div class="vehicle-strip">${driverStripHTML}</div>
+                    ${groupIdx === 0 ? renderShiftTooltip(shift) : ''}
+                  </div>
+                `;
+              });
+            }
           });
         }
         
@@ -7698,17 +7627,72 @@
       const filtered = getFilteredJobs();
       
       container.innerHTML = filtered.map(job => {
+        // Filter out cancelled duties for display
+        const allDuties = job.duties || [];
+        const activeDuties = allDuties.filter(d => !d.cancelled);
+        const cancelledDuties = allDuties.filter(d => d.cancelled);
+        
+        if (activeDuties.length === 0 && !showCancelledDuties) return ''; // Skip job entirely if all duties cancelled
+        
         const idx = unassignedJobs.indexOf(job);
-        const left = timeToPercent(job.start);
-        const width = timeToPercent(job.end) - left;
+        
+        let blocksHTML = '';
+        
+        if (showCancelledDuties && allDuties.length > 0) {
+          // Show all duties in one bar
+          const allStart = Math.min(...allDuties.map(d => d.start));
+          const allEnd = Math.max(...allDuties.map(d => d.end));
+          const left = timeToPercent(allStart);
+          const width = timeToPercent(allEnd) - left;
+          
+          blocksHTML = `<div class="time-block unassigned-job" style="left: ${left}%; width: ${width}%;">${job.name}</div>`;
+          
+          // Show cancelled ghost overlays
+          cancelledDuties.forEach(duty => {
+            const dutyLeft = timeToPercent(duty.start);
+            const dutyWidth = timeToPercent(duty.end) - dutyLeft;
+            blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description || ''}"></div>`;
+          });
+        } else if (activeDuties.length > 0) {
+          // Group contiguous active duties into separate bars
+          const sortedActive = [...activeDuties].sort((a, b) => a.start - b.start);
+          const groups = [];
+          let currentGroup = [];
+          
+          sortedActive.forEach(duty => {
+            if (currentGroup.length === 0) {
+              currentGroup.push(duty);
+            } else {
+              const lastDuty = currentGroup[currentGroup.length - 1];
+              if (Math.abs(duty.start - lastDuty.end) < 0.01) {
+                currentGroup.push(duty);
+              } else {
+                groups.push(currentGroup);
+                currentGroup = [duty];
+              }
+            }
+          });
+          if (currentGroup.length > 0) {
+            groups.push(currentGroup);
+          }
+          
+          // Render each group as a separate bar
+          groups.forEach((group, groupIdx) => {
+            const groupStart = Math.min(...group.map(d => d.start));
+            const groupEnd = Math.max(...group.map(d => d.end));
+            const left = timeToPercent(groupStart);
+            const width = timeToPercent(groupEnd) - left;
+            const label = groupIdx === 0 ? job.name : '';
+            
+            blocksHTML += `<div class="time-block unassigned-job" style="left: ${left}%; width: ${width}%;">${label}</div>`;
+          });
+        }
         
         return `
           <div class="heatmap-row ${selectedItem?.type === 'job' && selectedItem?.index === idx ? 'selected' : ''}"
                onclick="selectItem('job', ${idx})">
             <div class="row-label"><span class="row-name">${job.name}</span></div>
-            <div class="row-timeline">
-              <div class="time-block unassigned-job" style="left: ${left}%; width: ${width}%;">${job.name}</div>
-            </div>
+            <div class="row-timeline">${blocksHTML}</div>
           </div>
         `;
       }).join('');
@@ -7894,6 +7878,7 @@
               <div class="shift-block-actions">
                 ${vehicleStatus.status !== 'complete' ? `<button class="shift-action-btn primary" onclick="showBulkAssignVehicle('${driver.id}', '${shift.id}')" title="Assign vehicle to all unassigned duties">Assign All</button>` : ''}
                 <button class="shift-action-btn" onclick="showTransferDriverShift('${driver.id}', ${shiftIdx})" title="Transfer to another driver">Transfer</button>
+                <button class="shift-action-btn danger" onclick="cancelAllDuties('${driver.id}', '${shift.id}')" title="Cancel all duties in this shift">Cancel All</button>
                 <button class="shift-action-btn danger" onclick="unassignDriverShift('${driver.id}', ${shiftIdx})" title="Remove and move to unassigned">Unassign</button>
               </div>
               ${bulkAssigning && bulkAssigning.type === 'vehicle' && bulkAssigning.driverId === driver.id && bulkAssigning.shiftId === shift.id ? renderBulkAssignVehiclePanel() : ''}
@@ -8090,24 +8075,22 @@
         `<option value="${key}" ${payType === key ? 'selected' : ''}>${val.code}</option>`
       ).join('');
       
-      // If cancelled, show simplified view with reinstate button
+      // For cancelled duties, show simplified row with reinstate button
       if (isCancelled) {
         return `
           <div class="duty-item-inline cancelled">
-            <div class="duty-type-bar ${duty.type}"></div>
+            <div class="duty-type-bar ${duty.type}" style="opacity: 0.4;"></div>
             <div class="duty-inline-content">
-              <span class="duty-inline-time">${formatTimeCompact(duty.start)}</span>
-              <span class="duty-time-sep">-</span>
-              <span class="duty-inline-time">${formatTimeCompact(duty.end)}</span>
-              <span style="margin-left: 8px; color: var(--text-muted);">${dt.label}</span>
-              <span style="flex: 1; color: var(--text-muted); margin-left: 8px;">${duty.description || ''}</span>
-              <span class="cancelled-badge">CANCELLED</span>
+              <span class="duty-cancelled-badge">CANCELLED</span>
+              <span style="color: var(--text-muted); margin-right: 8px;">${formatTimeCompact(duty.start)} - ${formatTimeCompact(duty.end)}</span>
+              <span style="color: var(--text-muted); flex: 1;">${duty.description}${duty.cancelReason ? ` (${duty.cancelReason})` : ''}</span>
               <button class="duty-reinstate-btn" onclick="event.stopPropagation(); reinstateDutyLine('${duty.id}', '${driverId}', '${shiftId}')" title="Reinstate this duty">Reinstate</button>
             </div>
           </div>
         `;
       }
       
+      // Active duty - full editing with cancel button
       return `
         <div class="duty-item-inline">
           <div class="duty-insert-arrows">
@@ -8708,7 +8691,8 @@
         byType: {}
       };
       
-      shift.duties.forEach(duty => {
+      // Only count active (non-cancelled) duties
+      shift.duties.filter(d => !d.cancelled).forEach(duty => {
         const hours = duty.end - duty.start;
         totals.total += hours;
         
@@ -9198,6 +9182,7 @@
       for (const shift of driver.shifts || []) {
         for (const duty of shift.duties || []) {
           if (excludeDutyId && duty.id === excludeDutyId) continue;
+          if (duty.cancelled) continue; // Skip cancelled duties
           // Check for overlap
           if (start < duty.end && end > duty.start) {
             return false;
@@ -9616,6 +9601,7 @@
         
         for (const shift of driver.shifts) {
           for (const duty of shift.duties) {
+            if (duty.cancelled) continue; // Skip cancelled duties
             const dStartMins = toMinutes(duty.start);
             const dEndMins = toMinutes(duty.end);
             if (jobStartMins < dEndMins && jobEndMins > dStartMins) {
@@ -9626,20 +9612,24 @@
         return true;
       };
       
-      // Helper to get total hours for a driver
+      // Helper to get total hours for a driver (excluding cancelled)
       const getTotalHours = (driver) => {
         return driver.shifts.reduce((total, shift) => {
-          return total + shift.duties.reduce((sum, duty) => sum + (duty.end - duty.start), 0);
+          return total + shift.duties.filter(d => !d.cancelled).reduce((sum, duty) => sum + (duty.end - duty.start), 0);
         }, 0);
+      };
+      
+      // Helper to check if driver has active duties
+      const hasActiveDuties = (driver) => {
+        return driver.shifts.some(s => s.duties.some(d => !d.cancelled));
       };
       
       // Apply availability filter
       if (filter === 'no-duties') {
-        filteredDrivers = filteredDrivers.filter(d => d.shifts.length === 0 || d.shifts.every(s => s.duties.length === 0));
+        filteredDrivers = filteredDrivers.filter(d => !hasActiveDuties(d));
       } else if (filter === 'has-duties') {
         filteredDrivers = filteredDrivers.filter(d => {
-          const hasDuties = d.shifts.some(s => s.duties.length > 0);
-          return hasDuties && isAvailableForJob(d);
+          return hasActiveDuties(d) && isAvailableForJob(d);
         });
       } else if (filter === 'not-available') {
         filteredDrivers = filteredDrivers.filter(d => !isAvailableForJob(d));
@@ -9699,7 +9689,7 @@
             const driverIdx = drivers.indexOf(d);
             const totalHours = getTotalHours(d);
             const available = isAvailableForJob(d);
-            const shiftCount = d.shifts.filter(s => s.duties.length > 0).length;
+            const shiftCount = d.shifts.filter(s => s.duties.some(duty => !duty.cancelled)).length;
             
             // Build detail text
             let detailText = '';
@@ -10734,10 +10724,14 @@
     function updateShiftBounds(shift) {
       if (!shift.duties || shift.duties.length === 0) return;
       
-      const minStart = Math.min(...shift.duties.map(d => d.start));
-      const maxEnd = Math.max(...shift.duties.map(d => d.end));
+      // Only consider active (non-cancelled) duties for bounds
+      const activeDuties = shift.duties.filter(d => !d.cancelled);
+      if (activeDuties.length === 0) return;
       
-      // Always update to actual bounds of duties
+      const minStart = Math.min(...activeDuties.map(d => d.start));
+      const maxEnd = Math.max(...activeDuties.map(d => d.end));
+      
+      // Always update to actual bounds of active duties
       shift.start = minStart;
       shift.end = maxEnd;
     }
@@ -10756,6 +10750,12 @@
       showToast('Duty deleted');
       renderAll();
     }
+
+    // ============================================
+    // DUTY CANCELLATION
+    // ============================================
+    
+    let pendingCancelDuty = null;
     
     function openCancelDutyModal(dutyId, driverId, shiftId, dutyIdx) {
       const driver = drivers.find(d => d.id === driverId);
@@ -10826,6 +10826,7 @@
               duty.cancelled = true;
               duty.cancelReason = 'Bulk cancel';
               duty.cancelledAt = new Date().toISOString();
+              // Unsync from vehicle schedule
               if (duty.vehicle) {
                 unsyncVehicleSchedule(duty.vehicle, duty.id);
               }
@@ -10837,9 +10838,11 @@
             failed++;
           }
         } else {
+          // Demo mode
           duty.cancelled = true;
           duty.cancelReason = 'Bulk cancel';
           duty.cancelledAt = new Date().toISOString();
+          // Unsync from vehicle schedule
           if (duty.vehicle) {
             unsyncVehicleSchedule(duty.vehicle, duty.id);
           }
@@ -10864,6 +10867,7 @@
       const { dutyId, driverId, shiftId, dutyIdx, duty } = pendingCancelDuty;
       const reason = document.getElementById('cancelDutyReason').value.trim() || null;
       
+      // Call API to cancel
       if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/cancel-duty-line', {
@@ -10879,14 +10883,17 @@
             return;
           }
           
+          // Update local state
           duty.cancelled = true;
           duty.cancelReason = reason;
           duty.cancelledAt = new Date().toISOString();
           
+          // Unsync from vehicle schedule
           if (duty.vehicle) {
             unsyncVehicleSchedule(duty.vehicle, duty.id);
           }
           
+          // Recalculate shift bounds based on remaining active duties
           const driver = drivers.find(d => d.id === driverId);
           const shift = driver?.shifts.find(s => s.id === shiftId);
           if (shift) {
@@ -10900,10 +10907,12 @@
           showToast(err.message || 'Cancel failed', 'error');
         }
       } else {
+        // Demo mode - just update local state
         duty.cancelled = true;
         duty.cancelReason = reason;
         duty.cancelledAt = new Date().toISOString();
         
+        // Unsync from vehicle schedule
         if (duty.vehicle) {
           unsyncVehicleSchedule(duty.vehicle, duty.id);
         }
@@ -10933,9 +10942,10 @@
       // Check for overlap with ALL active duties across ALL shifts for this driver
       for (const s of driver.shifts) {
         for (const d of s.duties) {
-          if (d.id === duty.id) continue;
-          if (d.cancelled) continue;
+          if (d.id === duty.id) continue; // Skip self
+          if (d.cancelled) continue; // Skip cancelled duties
           
+          // Check for time overlap
           if (duty.start < d.end && duty.end > d.start) {
             showToast(`Cannot reinstate: overlaps with ${d.description || 'duty'} (${formatTimeCompact(d.start)}-${formatTimeCompact(d.end)})`, 'error');
             return;
@@ -10943,6 +10953,7 @@
         }
       }
       
+      // Call API to reinstate
       if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/reinstate-duty-line', {
@@ -10957,14 +10968,17 @@
             return;
           }
           
+          // Update local state
           duty.cancelled = false;
           duty.cancelReason = null;
           duty.cancelledAt = null;
           
+          // Re-sync to vehicle schedule if vehicle assigned
           if (duty.vehicle) {
             syncVehicleSchedule(duty.vehicle, duty, driver, shift);
           }
           
+          // Recalculate shift bounds
           updateShiftBounds(shift);
           
           showToast('Duty reinstated');
@@ -10973,10 +10987,12 @@
           showToast(err.message || 'Reinstate failed', 'error');
         }
       } else {
+        // Demo mode - just update local state
         duty.cancelled = false;
         duty.cancelReason = null;
         duty.cancelledAt = null;
         
+        // Re-sync to vehicle schedule if vehicle assigned
         if (duty.vehicle) {
           syncVehicleSchedule(duty.vehicle, duty, driver, shift);
         }
@@ -11839,6 +11855,7 @@
       
       for (const shift of driver.shifts) {
         for (const duty of shift.duties) {
+          if (duty.cancelled) continue; // Skip cancelled duties
           const dStartMins = toMinutes(duty.start);
           const dEndMins = toMinutes(duty.end);
           if (dStartMins < endMins && dEndMins > startMins) {
@@ -12671,49 +12688,14 @@ Guidelines:
       loadEmployees();
     }
     
-    // Custom fields state
-    let customFieldDefinitions = [];
-    let editingCustomFieldId = null;
-    
-    // Switch employee modal tabs
-    function switchEmployeeTab(tabName) {
-      // Update tab buttons
-      document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      event.target.classList.add('active');
-      
-      // Update tab content
-      document.querySelectorAll('#employeeModalOverlay .modal-tab-content').forEach(content => {
-        content.classList.remove('active');
-      });
-      
-      if (tabName === 'general') {
-        document.getElementById('empTabGeneral').classList.add('active');
-      } else if (tabName === 'custom') {
-        document.getElementById('empTabCustom').classList.add('active');
-      }
-    }
-    
-    async function showAddEmployeeModal() {
+    function showAddEmployeeModal() {
       editingEmployeeId = null;
       document.getElementById('employeeModalTitle').textContent = 'Add Employee';
       document.getElementById('employeeForm').reset();
-      
-      // Reset to General tab
-      document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
-        tab.classList.toggle('active', i === 0);
-      });
-      document.getElementById('empTabGeneral').classList.add('active');
-      document.getElementById('empTabCustom').classList.remove('active');
-      
-      // Load custom fields (empty for new employee)
-      await loadCustomFieldsForEmployee(null);
-      
       document.getElementById('employeeModalOverlay').classList.add('show');
     }
     
-    async function editEmployee(id) {
+    function editEmployee(id) {
       const emp = employeesData.find(e => e.id === id);
       if (!emp) return;
       
@@ -12727,17 +12709,6 @@ Guidelines:
       document.getElementById('empLicence').value = emp.licence_number || '';
       document.getElementById('empRole').value = emp.role || 'driver';
       document.getElementById('empStatus').value = emp.status || 'active';
-      
-      // Reset to General tab
-      document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
-        tab.classList.toggle('active', i === 0);
-      });
-      document.getElementById('empTabGeneral').classList.add('active');
-      document.getElementById('empTabCustom').classList.remove('active');
-      
-      // Load custom fields with values for this employee
-      await loadCustomFieldsForEmployee(id);
-      
       document.getElementById('employeeModalOverlay').classList.add('show');
     }
     
@@ -12758,532 +12729,19 @@ Guidelines:
         status: document.getElementById('empStatus').value,
       };
       
-      // Validate required custom fields
-      const requiredFields = document.querySelectorAll('.custom-field-input[data-required="true"]');
-      for (const field of requiredFields) {
-        const value = field.type === 'checkbox' ? field.checked : field.value;
-        if (!value || value === '') {
-          const fieldName = field.getAttribute('data-field-name') || 'Field';
-          showToast(`${fieldName} is required`, 'error');
-          // Switch to Custom Fields tab
-          document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
-            tab.classList.toggle('active', i === 1);
-          });
-          document.getElementById('empTabGeneral').classList.remove('active');
-          document.getElementById('empTabCustom').classList.add('active');
-          field.focus();
-          return;
-        }
-      }
-      
       try {
-        let employeeId = editingEmployeeId;
-        
         if (editingEmployeeId) {
           await apiRequest(`/employees/${editingEmployeeId}`, { method: 'PUT', body: data });
+          showToast('Employee updated');
         } else {
-          const result = await apiRequest('/employees', { method: 'POST', body: data });
-          employeeId = result.data?.id;
+          await apiRequest('/employees', { method: 'POST', body: data });
+          showToast('Employee added');
         }
-        
-        // Save custom field values
-        if (employeeId) {
-          await saveCustomFieldValues(employeeId);
-        }
-        
-        showToast(editingEmployeeId ? 'Employee updated' : 'Employee added');
         closeEmployeeModal();
         loadEmployees();
       } catch (err) {
         showToast(err.message || 'Failed to save', 'error');
       }
-    }
-    
-    // ============================================
-    // CUSTOM FIELDS - EMPLOYEE VALUES
-    // ============================================
-    
-    async function loadCustomFieldsForEmployee(employeeId) {
-      const container = document.getElementById('empCustomFieldsContainer');
-      
-      try {
-        // Load field definitions
-        const defsResult = await apiRequest('/employee-fields/definitions');
-        customFieldDefinitions = defsResult.data || [];
-        
-        if (customFieldDefinitions.length === 0) {
-          container.innerHTML = `
-            <div style="padding: 20px; text-align: center; color: var(--text-muted);">
-              <p>No custom fields defined yet.</p>
-              <p style="font-size: 12px; margin-top: 8px;">Click the ⚙️ settings button to add custom fields.</p>
-            </div>
-          `;
-          return;
-        }
-        
-        // Load values if editing existing employee
-        let fieldValues = {};
-        if (employeeId) {
-          const valuesResult = await apiRequest(`/employee-fields/values/${employeeId}`);
-          if (valuesResult.data) {
-            for (const field of valuesResult.data) {
-              fieldValues[field.id] = field.value;
-            }
-          }
-        }
-        
-        // Render custom field inputs with grid layout
-        let html = '<div class="custom-fields-grid">';
-        
-        // Group fields by row
-        const fieldsByRow = {};
-        for (const field of customFieldDefinitions) {
-          const row = field.display_row || 0;
-          if (!fieldsByRow[row]) fieldsByRow[row] = [];
-          fieldsByRow[row].push(field);
-        }
-        
-        // Sort rows and render
-        const rowNumbers = Object.keys(fieldsByRow).map(Number).sort((a, b) => a - b);
-        
-        for (const rowNum of rowNumbers) {
-          const rowFields = fieldsByRow[rowNum];
-          html += `<div class="custom-fields-row">`;
-          
-          for (const field of rowFields) {
-            const value = fieldValues[field.id] || '';
-            const required = field.is_required ? ' *' : '';
-            const requiredAttr = field.is_required ? 'data-required="true"' : '';
-            const fieldWidth = field.field_width || 'full';
-            const widthClass = fieldWidth === 'half' ? 'half-width' : 'full-width';
-            
-            html += `<div class="form-group custom-field-group ${widthClass}">`;
-            html += `<label class="form-label">${escapeHtml(field.field_name)}${required}</label>`;
-            
-            switch (field.field_type) {
-              case 'text':
-                html += `<input type="text" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
-                break;
-              case 'number':
-                html += `<input type="number" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
-                break;
-              case 'date':
-                html += `<div class="date-input-wrapper">`;
-                html += `<input type="date" class="form-input custom-field-input" id="cf_${field.id}" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
-                html += `<button type="button" class="date-picker-btn" onclick="document.getElementById('cf_${field.id}').showPicker()">📅</button>`;
-                html += `</div>`;
-                break;
-              case 'boolean':
-                const checked = value === 'true' || value === '1' ? 'checked' : '';
-                html += `<label class="checkbox-wrapper"><input type="checkbox" class="custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${checked}><span class="checkbox-label">Yes</span></label>`;
-                break;
-              case 'select':
-                html += `<select class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${requiredAttr}>`;
-                html += `<option value="">-- Select --</option>`;
-                if (field.field_options && Array.isArray(field.field_options)) {
-                  for (const opt of field.field_options) {
-                    const selected = value === opt ? 'selected' : '';
-                    html += `<option value="${escapeHtml(opt)}" ${selected}>${escapeHtml(opt)}</option>`;
-                  }
-                }
-                html += `</select>`;
-                break;
-            }
-            
-            html += `</div>`;
-          }
-          html += `</div>`;
-        }
-        html += '</div>';
-        
-        container.innerHTML = html;
-      } catch (err) {
-        console.error('Failed to load custom fields:', err);
-        container.innerHTML = `<div style="padding: 20px; color: var(--accent-red);">Failed to load custom fields</div>`;
-      }
-    }
-    
-    async function saveCustomFieldValues(employeeId) {
-      const inputs = document.querySelectorAll('.custom-field-input');
-      const values = [];
-      
-      for (const input of inputs) {
-        const fieldId = input.getAttribute('data-field-id');
-        let value;
-        
-        if (input.type === 'checkbox') {
-          value = input.checked ? 'true' : 'false';
-        } else {
-          value = input.value || null;
-        }
-        
-        values.push({
-          field_definition_id: fieldId,
-          value: value
-        });
-      }
-      
-      if (values.length > 0) {
-        await apiRequest('/employee-fields/values/bulk', {
-          method: 'POST',
-          body: {
-            employee_id: employeeId,
-            values: values
-          }
-        });
-      }
-    }
-    
-    // ============================================
-    // CUSTOM FIELDS - SETTINGS/DEFINITIONS
-    // ============================================
-    
-    async function showEmployeeFieldsSettings() {
-      await loadCustomFieldDefinitions();
-      document.getElementById('employeeFieldsSettingsOverlay').classList.add('show');
-    }
-    
-    function closeEmployeeFieldsSettings() {
-      document.getElementById('employeeFieldsSettingsOverlay').classList.remove('show');
-    }
-    
-    // Switch tabs in settings modal
-    function switchFieldsSettingsTab(tabName) {
-      document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      event.target.classList.add('active');
-      
-      document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab-content').forEach(content => {
-        content.classList.remove('active');
-      });
-      
-      if (tabName === 'fields') {
-        document.getElementById('fieldsTabFields').classList.add('active');
-      } else if (tabName === 'layout') {
-        document.getElementById('fieldsTabLayout').classList.add('active');
-        // Initialize row count based on existing fields
-        layoutRowCount = 0;
-        for (const field of customFieldDefinitions) {
-          layoutRowCount = Math.max(layoutRowCount, (field.display_row ?? 0) + 1);
-        }
-        if (layoutRowCount === 0) layoutRowCount = 1;
-        renderLayoutEditor();
-      }
-    }
-    
-    // Layout editor state
-    let layoutRows = [];
-    let draggedFieldId = null;
-    let layoutRowCount = 0; // Track total rows including empty ones
-    
-    function renderLayoutEditor() {
-      const container = document.getElementById('layoutPreview');
-      
-      if (customFieldDefinitions.length === 0) {
-        container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);">No fields to arrange. Add fields first.</div>`;
-        return;
-      }
-      
-      // Group fields by row
-      const fieldsByRow = {};
-      let maxRow = -1;
-      
-      for (const field of customFieldDefinitions) {
-        const row = field.display_row ?? 0;
-        if (!fieldsByRow[row]) fieldsByRow[row] = [];
-        fieldsByRow[row].push(field);
-        maxRow = Math.max(maxRow, row);
-      }
-      
-      // Ensure we show at least as many rows as layoutRowCount
-      maxRow = Math.max(maxRow, layoutRowCount - 1);
-      if (maxRow < 0) maxRow = 0;
-      
-      const typeLabels = {
-        text: 'Text',
-        number: 'Number',
-        date: 'Date',
-        boolean: 'Yes/No',
-        select: 'Dropdown'
-      };
-      
-      let html = '';
-      for (let rowNum = 0; rowNum <= maxRow; rowNum++) {
-        const rowFields = fieldsByRow[rowNum] || [];
-        html += `<div class="layout-row" data-row="${rowNum}" ondragover="handleLayoutDragOver(event)" ondrop="handleLayoutDrop(event, ${rowNum})" ondragleave="handleLayoutDragLeave(event)">`;
-        
-        if (rowFields.length === 0) {
-          html += `<div style="flex: 1; padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">Drop fields here (Row ${rowNum + 1})</div>`;
-        } else {
-          for (const field of rowFields) {
-            const width = field.field_width || 'full';
-            const typeLabel = typeLabels[field.field_type] || field.field_type;
-            html += `
-              <div class="layout-field ${width}-width" draggable="true" data-field-id="${field.id}"
-                   ondragstart="handleLayoutDragStart(event, '${field.id}')" ondragend="handleLayoutDragEnd(event)">
-                <div>
-                  <span class="layout-field-name">${escapeHtml(field.field_name)}</span>
-                  <span class="layout-field-type">${typeLabel}</span>
-                </div>
-                <div class="layout-field-controls">
-                  <button onclick="toggleFieldWidth('${field.id}')" title="Toggle width">${width === 'half' ? '◧' : '▣'}</button>
-                  <button onclick="moveFieldUp('${field.id}')" title="Move up">↑</button>
-                  <button onclick="moveFieldDown('${field.id}')" title="Move down">↓</button>
-                </div>
-              </div>
-            `;
-          }
-        }
-        html += `</div>`;
-      }
-      
-      container.innerHTML = html;
-    }
-    
-    function handleLayoutDragStart(event, fieldId) {
-      draggedFieldId = fieldId;
-      event.target.classList.add('dragging');
-      event.dataTransfer.effectAllowed = 'move';
-    }
-    
-    function handleLayoutDragEnd(event) {
-      event.target.classList.remove('dragging');
-      draggedFieldId = null;
-      document.querySelectorAll('.layout-row').forEach(row => row.classList.remove('drop-target'));
-    }
-    
-    function handleLayoutDragOver(event) {
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      event.currentTarget.classList.add('drop-target');
-    }
-    
-    function handleLayoutDrop(event, targetRow) {
-      event.preventDefault();
-      event.currentTarget.classList.remove('drop-target');
-      
-      if (!draggedFieldId) return;
-      
-      // Update the field's row
-      const field = customFieldDefinitions.find(f => f.id === draggedFieldId);
-      if (field) {
-        field.display_row = targetRow;
-        renderLayoutEditor();
-      }
-    }
-    
-    function toggleFieldWidth(fieldId) {
-      const field = customFieldDefinitions.find(f => f.id === fieldId);
-      if (field) {
-        field.field_width = field.field_width === 'half' ? 'full' : 'half';
-        renderLayoutEditor();
-      }
-    }
-    
-    function moveFieldUp(fieldId) {
-      const field = customFieldDefinitions.find(f => f.id === fieldId);
-      if (field && field.display_row > 0) {
-        field.display_row--;
-        renderLayoutEditor();
-      }
-    }
-    
-    function moveFieldDown(fieldId) {
-      const field = customFieldDefinitions.find(f => f.id === fieldId);
-      if (field) {
-        field.display_row = (field.display_row ?? 0) + 1;
-        renderLayoutEditor();
-      }
-    }
-    
-    function addLayoutRow() {
-      // Find max row with fields
-      let maxRow = -1;
-      for (const field of customFieldDefinitions) {
-        maxRow = Math.max(maxRow, field.display_row ?? 0);
-      }
-      // Increment row count to add an empty row
-      layoutRowCount = Math.max(layoutRowCount, maxRow + 1) + 1;
-      renderLayoutEditor();
-      showToast('New row added - drag fields into it');
-    }
-    
-    function handleLayoutDragLeave(event) {
-      event.currentTarget.classList.remove('drop-target');
-    }
-    
-    async function saveFieldLayouts() {
-      const layouts = customFieldDefinitions.map((field, index) => ({
-        id: field.id,
-        display_row: field.display_row ?? 0,
-        field_width: field.field_width || 'full',
-        display_order: index
-      }));
-      
-      try {
-        await apiRequest('/employee-fields/definitions/update-layouts', {
-          method: 'POST',
-          body: { layouts }
-        });
-        showToast('Layout saved');
-      } catch (err) {
-        showToast(err.message || 'Failed to save layout', 'error');
-      }
-    }
-    
-    async function loadCustomFieldDefinitions() {
-      const container = document.getElementById('customFieldsList');
-      
-      try {
-        const result = await apiRequest('/employee-fields/definitions');
-        customFieldDefinitions = result.data || [];
-        
-        if (customFieldDefinitions.length === 0) {
-          container.innerHTML = `<div class="custom-fields-empty">No custom fields defined yet.</div>`;
-          return;
-        }
-        
-        const typeLabels = {
-          text: 'Text',
-          number: 'Number',
-          date: 'Date',
-          boolean: 'Yes/No',
-          select: 'Dropdown'
-        };
-        
-        const widthLabels = {
-          full: 'Full',
-          half: 'Half'
-        };
-        
-        let html = '';
-        for (const field of customFieldDefinitions) {
-          const typeLabel = typeLabels[field.field_type] || field.field_type;
-          const widthLabel = widthLabels[field.field_width] || 'Full';
-          const requiredBadge = field.is_required ? '<span class="field-type-badge required">Required</span>' : '';
-          
-          html += `
-            <div class="custom-field-item" data-field-id="${field.id}">
-              <div class="custom-field-drag">⋮⋮</div>
-              <div class="custom-field-info">
-                <div class="custom-field-name">
-                  ${escapeHtml(field.field_name)}
-                  <span class="field-type-badge">${typeLabel}</span>
-                  ${requiredBadge}
-                </div>
-                <div class="custom-field-meta">Key: ${field.field_key} • Width: ${widthLabel}</div>
-              </div>
-              <div class="custom-field-actions">
-                <button onclick="editCustomField('${field.id}')" title="Edit">✏️</button>
-                <button class="delete" onclick="deleteCustomField('${field.id}', '${escapeHtml(field.field_name)}')" title="Delete">🗑️</button>
-              </div>
-            </div>
-          `;
-        }
-        
-        container.innerHTML = html;
-      } catch (err) {
-        console.error('Failed to load custom field definitions:', err);
-        container.innerHTML = `<div class="custom-fields-empty" style="color: var(--accent-red);">Failed to load custom fields</div>`;
-      }
-    }
-    
-    function showAddCustomFieldModal() {
-      editingCustomFieldId = null;
-      document.getElementById('customFieldModalTitle').textContent = 'Add Custom Field';
-      document.getElementById('customFieldForm').reset();
-      document.getElementById('customFieldOptionsGroup').style.display = 'none';
-      document.getElementById('customFieldModalOverlay').classList.add('show');
-    }
-    
-    async function editCustomField(id) {
-      const field = customFieldDefinitions.find(f => f.id === id);
-      if (!field) return;
-      
-      editingCustomFieldId = id;
-      document.getElementById('customFieldModalTitle').textContent = 'Edit Custom Field';
-      document.getElementById('customFieldId').value = id;
-      document.getElementById('customFieldName').value = field.field_name;
-      document.getElementById('customFieldKey').value = field.field_key;
-      document.getElementById('customFieldType').value = field.field_type;
-      document.getElementById('customFieldWidth').value = field.field_width || 'full';
-      document.getElementById('customFieldRequired').checked = field.is_required;
-      
-      // Handle options for select type
-      if (field.field_type === 'select' && field.field_options) {
-        document.getElementById('customFieldOptions').value = field.field_options.join('\n');
-        document.getElementById('customFieldOptionsGroup').style.display = 'block';
-      } else {
-        document.getElementById('customFieldOptions').value = '';
-        document.getElementById('customFieldOptionsGroup').style.display = 'none';
-      }
-      
-      document.getElementById('customFieldModalOverlay').classList.add('show');
-    }
-    
-    function closeCustomFieldModal() {
-      document.getElementById('customFieldModalOverlay').classList.remove('show');
-      editingCustomFieldId = null;
-    }
-    
-    function toggleFieldOptions() {
-      const type = document.getElementById('customFieldType').value;
-      document.getElementById('customFieldOptionsGroup').style.display = type === 'select' ? 'block' : 'none';
-    }
-    
-    async function saveCustomField() {
-      const data = {
-        field_name: document.getElementById('customFieldName').value,
-        field_key: document.getElementById('customFieldKey').value,
-        field_type: document.getElementById('customFieldType').value,
-        field_width: document.getElementById('customFieldWidth').value,
-        is_required: document.getElementById('customFieldRequired').checked,
-      };
-      
-      // Add options for select type
-      if (data.field_type === 'select') {
-        const optionsText = document.getElementById('customFieldOptions').value;
-        data.field_options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
-        if (data.field_options.length === 0) {
-          showToast('Please add at least one option for dropdown field', 'error');
-          return;
-        }
-      }
-      
-      try {
-        if (editingCustomFieldId) {
-          await apiRequest(`/employee-fields/definitions/${editingCustomFieldId}`, { method: 'PUT', body: data });
-          showToast('Custom field updated');
-        } else {
-          await apiRequest('/employee-fields/definitions', { method: 'POST', body: data });
-          showToast('Custom field added');
-        }
-        closeCustomFieldModal();
-        loadCustomFieldDefinitions();
-      } catch (err) {
-        showToast(err.message || 'Failed to save custom field', 'error');
-      }
-    }
-    
-    async function deleteCustomField(id, name) {
-      if (!confirm(`Delete custom field "${name}"?\n\nThis will also delete all stored values for this field across all employees.`)) return;
-      
-      try {
-        await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
-        showToast('Custom field deleted');
-        loadCustomFieldDefinitions();
-      } catch (err) {
-        showToast(err.message || 'Failed to delete', 'error');
-      }
-    }
-    
-    // Helper function to escape HTML
-    function escapeHtml(text) {
-      if (!text) return '';
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
     }
     
     async function deleteEmployee(id, name) {
@@ -15099,72 +14557,58 @@ Guidelines:
   
   <!-- Employee Modal -->
   <div class="crud-modal-overlay" id="employeeModalOverlay">
-    <div class="crud-modal crud-modal-tabbed">
+    <div class="crud-modal">
       <div class="crud-modal-header">
         <span class="crud-modal-title" id="employeeModalTitle">Add Employee</span>
         <button class="crud-modal-close" onclick="closeEmployeeModal()">&times;</button>
       </div>
-      <div class="modal-tabs">
-        <button class="modal-tab active" onclick="switchEmployeeTab('general')">General</button>
-        <button class="modal-tab" onclick="switchEmployeeTab('custom')">Custom Fields</button>
-      </div>
-      <div class="crud-modal-body" style="padding: 0;">
+      <div class="crud-modal-body">
         <form id="employeeForm" onsubmit="event.preventDefault(); saveEmployee();">
-          <!-- General Tab -->
-          <div class="modal-tab-content active" id="empTabGeneral">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Employee Number *</label>
-                <input type="text" id="empNumber" class="form-input" required>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Role</label>
-                <select id="empRole" class="form-input">
-                  <option value="driver">Driver</option>
-                  <option value="dispatcher">Dispatcher</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Employee Number *</label>
+              <input type="text" id="empNumber" class="form-input" required>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">First Name *</label>
-                <input type="text" id="empFirstName" class="form-input" required>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Last Name *</label>
-                <input type="text" id="empLastName" class="form-input" required>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" id="empEmail" class="form-input">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Phone</label>
-                <input type="tel" id="empPhone" class="form-input">
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Licence Number</label>
-                <input type="text" id="empLicence" class="form-input">
-              </div>
-              <div class="form-group">
-                <label class="form-label">Status</label>
-                <select id="empStatus" class="form-input">
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
+            <div class="form-group">
+              <label class="form-label">Role</label>
+              <select id="empRole" class="form-input">
+                <option value="driver">Driver</option>
+                <option value="dispatcher">Dispatcher</option>
+                <option value="admin">Admin</option>
+              </select>
             </div>
           </div>
-          
-          <!-- Custom Fields Tab -->
-          <div class="modal-tab-content" id="empTabCustom">
-            <div id="empCustomFieldsContainer">
-              <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading custom fields...</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">First Name *</label>
+              <input type="text" id="empFirstName" class="form-input" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name *</label>
+              <input type="text" id="empLastName" class="form-input" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input type="email" id="empEmail" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input type="tel" id="empPhone" class="form-input">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Licence Number</label>
+              <input type="text" id="empLicence" class="form-input">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="empStatus" class="form-input">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
           </div>
         </form>
@@ -15172,111 +14616,6 @@ Guidelines:
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeEmployeeModal()">Cancel</button>
         <button class="btn-primary" onclick="saveEmployee()">Save</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Employee Custom Fields Settings Modal -->
-  <div class="crud-modal-overlay" id="employeeFieldsSettingsOverlay">
-    <div class="crud-modal crud-modal-wide">
-      <div class="crud-modal-header">
-        <span class="crud-modal-title">Custom Fields Settings</span>
-        <button class="crud-modal-close" onclick="closeEmployeeFieldsSettings()">&times;</button>
-      </div>
-      <div class="modal-tabs">
-        <button class="modal-tab active" onclick="switchFieldsSettingsTab('fields')">Fields</button>
-        <button class="modal-tab" onclick="switchFieldsSettingsTab('layout')">Layout Designer</button>
-      </div>
-      <div class="crud-modal-body" style="padding: 0;">
-        <!-- Fields Tab -->
-        <div class="modal-tab-content active" id="fieldsTabFields">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-            <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
-              Define custom fields that will appear on all employee records.
-            </p>
-            <button class="btn-primary" onclick="showAddCustomFieldModal()">+ Add Field</button>
-          </div>
-          <div class="custom-fields-list" id="customFieldsList">
-            <div class="custom-fields-empty">No custom fields defined yet.</div>
-          </div>
-        </div>
-        
-        <!-- Layout Tab -->
-        <div class="modal-tab-content" id="fieldsTabLayout">
-          <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px 0;">
-            Drag fields to arrange them on the form. Use the width buttons to set half or full width.
-          </p>
-          <div class="layout-editor">
-            <div class="layout-preview" id="layoutPreview">
-              <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading layout...</div>
-            </div>
-            <div class="layout-add-row">
-              <button onclick="addLayoutRow()">+ Add Row</button>
-            </div>
-          </div>
-          <div style="margin-top: 16px; text-align: right;">
-            <button class="btn-primary" onclick="saveFieldLayouts()">Save Layout</button>
-          </div>
-        </div>
-      </div>
-      <div class="crud-modal-footer">
-        <button class="btn-secondary" onclick="closeEmployeeFieldsSettings()">Close</button>
-      </div>
-    </div>
-  </div>
-  
-  <!-- Add/Edit Custom Field Modal -->
-  <div class="crud-modal-overlay" id="customFieldModalOverlay">
-    <div class="crud-modal">
-      <div class="crud-modal-header">
-        <span class="crud-modal-title" id="customFieldModalTitle">Add Custom Field</span>
-        <button class="crud-modal-close" onclick="closeCustomFieldModal()">&times;</button>
-      </div>
-      <div class="crud-modal-body">
-        <form id="customFieldForm" onsubmit="event.preventDefault(); saveCustomField();">
-          <input type="hidden" id="customFieldId">
-          <div class="form-group">
-            <label class="form-label">Field Name *</label>
-            <input type="text" id="customFieldName" class="form-input" placeholder="e.g., Training Date" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Field Key *</label>
-            <input type="text" id="customFieldKey" class="form-input" placeholder="e.g., training_date" required>
-            <small style="color: var(--text-muted); font-size: 11px;">Lowercase, no spaces. Used for data storage.</small>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Field Type *</label>
-            <select id="customFieldType" class="form-input" onchange="toggleFieldOptions()">
-              <option value="text">Text</option>
-              <option value="number">Number</option>
-              <option value="date">Date</option>
-              <option value="boolean">Yes/No (Checkbox)</option>
-              <option value="select">Dropdown (Select)</option>
-            </select>
-          </div>
-          <div class="form-group" id="customFieldOptionsGroup" style="display: none;">
-            <label class="form-label">Options (one per line) *</label>
-            <textarea id="customFieldOptions" class="form-input" rows="4" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Field Width</label>
-              <select id="customFieldWidth" class="form-input">
-                <option value="full">Full Width</option>
-                <option value="half">Half Width</option>
-              </select>
-            </div>
-            <div class="form-group" style="display: flex; align-items: center; padding-top: 22px;">
-              <label class="form-label" style="margin-bottom: 0;">
-                <input type="checkbox" id="customFieldRequired"> Required field
-              </label>
-            </div>
-          </div>
-        </form>
-      </div>
-      <div class="crud-modal-footer">
-        <button class="btn-secondary" onclick="closeCustomFieldModal()">Cancel</button>
-        <button class="btn-primary" onclick="saveCustomField()">Save Field</button>
       </div>
     </div>
   </div>
