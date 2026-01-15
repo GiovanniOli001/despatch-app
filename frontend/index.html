@@ -12234,7 +12234,10 @@ Guidelines:
             end_time: line.end_time,
             description: line.description || null,
             vehicle_id: line.vehicle_id || null,
-            pay_type: line.pay_type || 'STD'
+            pay_type: line.pay_type || 'STD',
+            location_name: line.location_name || null,
+            location_lat: line.location_lat || null,
+            location_lng: line.location_lng || null
           }))
         }))
       };
