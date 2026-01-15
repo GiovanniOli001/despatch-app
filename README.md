@@ -2,7 +2,7 @@
 
 Bus and coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch.
 
-**Version:** 1.4.0 | **Last Updated:** January 15, 2026
+**Version:** 1.5.0 | **Last Updated:** January 16, 2026
 
 ## Live App
 
@@ -19,7 +19,7 @@ Bus and coach dispatch operations system for managing drivers, vehicles, shifts,
 ## Features
 
 ### Completed ✅
-- **HRM** - Employee management with CRUD operations
+- **HRM** - Employee management with custom fields and layout designer
 - **Vehicles** - Fleet management with capacity tracking
 - **Shift Templates** - Reusable shift definitions with duty blocks/lines
 - **Roster** - Gantt-style drag-drop shift assignment
@@ -30,6 +30,7 @@ Bus and coach dispatch operations system for managing drivers, vehicles, shifts,
 - **Location Autocomplete** - Nominatim integration
 - **Published Roster Protection** - Blocks editing when published
 - **Duty Cancellation** - Cancel/reinstate duties with reason tracking
+- **Custom Fields** - Configurable employee fields with layout designer
 
 ### Planned
 - Charters module (quote-to-invoice)
@@ -50,6 +51,9 @@ rosters
             └── roster_duty_lines (FK: roster_entry_id)
 
 employees (referenced by duty_blocks.driver_id, roster_entries.driver_id)
+    └── employee_custom_field_values (FK: employee_id, field_definition_id)
+
+employee_custom_field_definitions (custom field schema)
 vehicles (referenced by duty_lines.vehicle_id)
 ```
 
@@ -124,6 +128,7 @@ dispatch-app/
         ├── index.ts        # Main router
         ├── routes/
         │   ├── employees.ts
+        │   ├── employee-fields.ts
         │   ├── vehicles.ts
         │   ├── shifts.ts
         │   ├── roster.ts
@@ -142,6 +147,7 @@ dispatch-app/
 | Roster | `GET/POST /api/roster/containers`, publish, unpublish, assign, unassign |
 | Shifts | `GET/POST /api/shifts`, lock-status, duplicate |
 | Employees | Full CRUD at `/api/employees` |
+| Employee Fields | `/api/employee-fields/definitions`, `/api/employee-fields/values/:id` |
 | Vehicles | Full CRUD at `/api/vehicles` |
 
 ## Roster Workflow
@@ -159,7 +165,35 @@ When published:
 - Roster details cannot be modified
 - Must unpublish first to make changes
 
+## HRM Custom Fields
+
+The HRM module supports configurable custom fields for employees:
+
+### Field Types
+- **Text** - Free text input
+- **Number** - Numeric input
+- **Date** - Date picker with calendar button
+- **Boolean** - Yes/No checkbox
+- **Select** - Dropdown with custom options
+
+### Layout Designer
+- Arrange fields in rows via drag-and-drop
+- Set field width (half or full)
+- Fields automatically rendered in employee modal
+
+### Access
+- Click ⚙️ button in HRM screen header
+- "Fields" tab to add/edit field definitions
+- "Layout Designer" tab to arrange fields
+
 ## Version History
+
+### v1.5.0 (January 16, 2026)
+- HRM custom fields with configurable types (text, number, date, boolean, select)
+- Layout Designer for arranging custom fields
+- Employee modal tabs (General / Custom Fields)
+- Date picker button for date fields
+- Required field validation
 
 ### v1.4.0 (January 15, 2026)
 - Duty cancellation with visual indicators and reason tracking
@@ -191,6 +225,7 @@ See [PROJECT-MD.txt](PROJECT-MD.txt) for complete technical documentation includ
 - API endpoint details
 - Troubleshooting guide
 - Deployment procedures
+- **Critical rules for AI assistants modifying the codebase**
 
 ## License
 

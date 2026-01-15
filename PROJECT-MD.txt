@@ -1,7 +1,7 @@
 # Dispatch App - Complete Project Reference
 
-**Version:** 1.4.0  
-**Last Updated:** January 15, 2026  
+**Version:** 1.5.0  
+**Last Updated:** January 16, 2026  
 **CRITICAL: Claude must read this entire file before making any changes or suggestions.**
 
 ---
@@ -28,6 +28,7 @@ C:\Users\Giovanni\Downloads\despatch-app\
         ├── index.ts            ← Main router, CORS, helpers
         ├── routes\
         │   ├── employees.ts    ← Employee/HRM API
+        │   ├── employee-fields.ts ← Custom fields API
         │   ├── vehicles.ts     ← Vehicle fleet API
         │   ├── shifts.ts       ← Shift templates API
         │   ├── roster.ts       ← Roster management API
@@ -40,10 +41,37 @@ C:\Users\Giovanni\Downloads\despatch-app\
 
 ---
 
-## SECTION 2: DEPLOYMENT PROCEDURES
+## SECTION 2: CRITICAL RULES FOR CLAUDE
 
-**CRITICAL: On Windows, NEVER chain commands with && or ;**
+### ⚠️ FILE MODIFICATION RULES (MUST FOLLOW)
+
+**NEVER regenerate or rebuild entire files or large sections.**
+
+When adding features to `index.html`:
+1. **Start with the user's CURRENT working file** - This is the untouchable base
+2. **Identify ONLY the specific additions needed** - CSS blocks, JS functions, HTML elements
+3. **Use surgical str_replace** - Insert new code at specific locations
+4. **VERIFY existing features still exist** - Use grep to count key function references
+5. **Never overwrite** - Only add, never remove or regenerate
+
+**Why this matters:**
+The frontend is a 15,000+ line single file. Regenerating sections loses existing features. Previous incident: HRM custom fields addition accidentally removed the dispatch cancel/reinstate system because the file was rebuilt instead of surgically modified.
+
+**Verification checklist before providing file:**
+```bash
+# Check critical features still exist
+grep -c "openCancelDutyModal\|confirmCancelDuty" index.html  # Should be 10+
+grep -c "loadCustomFieldsForEmployee\|customFieldDefinitions" index.html  # Should be 10+
+grep -c "renderDispatchDay\|loadDispatchData" index.html  # Should be 5+
+```
+
+### Windows Command Rules
+**NEVER chain commands with && or ;**
 **Give each command in a SEPARATE code block.**
+
+---
+
+## SECTION 3: DEPLOYMENT PROCEDURES
 
 ### Workflow
 1. Claude provides downloadable files
@@ -65,6 +93,9 @@ npx wrangler deploy
 cd C:\Users\Giovanni\Downloads\despatch-app
 ```
 ```
+copy C:\Users\Giovanni\Downloads\index.html frontend\index.html
+```
+```
 git add .
 ```
 ```
@@ -83,7 +114,7 @@ npx wrangler d1 execute dispatch-db --remote --command="SELECT name FROM sqlite_
 
 ---
 
-## SECTION 3: DATABASE SCHEMA (CRITICAL)
+## SECTION 4: DATABASE SCHEMA (CRITICAL)
 
 **IMPORTANT: Understand foreign key relationships before modifying data!**
 
@@ -94,6 +125,8 @@ audit_log
 customers
 depots
 duty_types
+employee_custom_field_definitions  ← Custom field definitions
+employee_custom_field_values       ← Custom field values per employee
 employee_daily_status
 employees
 locations
@@ -127,6 +160,12 @@ shift_template_duty_lines          roster_entries
                                           │ roster_entry_id
                                           │
                                    roster_duty_lines
+
+employee_custom_field_definitions
+    ↑
+    │ field_definition_id
+    │
+employee_custom_field_values ──→ employees (employee_id)
 ```
 
 **DELETION ORDER (must follow to avoid FK errors):**
@@ -279,6 +318,39 @@ CREATE TABLE employees (
 );
 ```
 
+**employee_custom_field_definitions**
+```sql
+CREATE TABLE employee_custom_field_definitions (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    field_name TEXT NOT NULL,        -- Display name
+    field_key TEXT NOT NULL,         -- Internal key (lowercase, no spaces)
+    field_type TEXT NOT NULL,        -- text, number, date, boolean, select
+    field_options TEXT,              -- JSON array for select options
+    field_width TEXT DEFAULT 'full', -- full or half
+    display_row INTEGER DEFAULT 0,   -- Row position in layout
+    is_required INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+**employee_custom_field_values**
+```sql
+CREATE TABLE employee_custom_field_values (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    employee_id TEXT NOT NULL REFERENCES employees(id),
+    field_definition_id TEXT NOT NULL REFERENCES employee_custom_field_definitions(id),
+    value TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(employee_id, field_definition_id)
+);
+```
+
 **vehicles**
 ```sql
 CREATE TABLE vehicles (
@@ -321,7 +393,7 @@ npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM shift_templa
 
 ---
 
-## SECTION 4: ROSTER & DISPATCH WORKFLOW
+## SECTION 5: ROSTER & DISPATCH WORKFLOW
 
 ### Roster Statuses
 - **draft** - Initial state, editable
@@ -367,7 +439,7 @@ When updating a shift template that has been used in rosters:
 
 ---
 
-## SECTION 5: API ENDPOINTS
+## SECTION 6: API ENDPOINTS
 
 ### Dispatch
 - `GET /api/dispatch/:date` - Get day's dispatch data
@@ -409,6 +481,14 @@ When updating a shift template that has been used in rosters:
 - `PUT /api/employees/:id` - Update
 - `DELETE /api/employees/:id` - Soft delete
 
+### Employee Custom Fields
+- `GET /api/employee-fields/definitions` - List field definitions
+- `POST /api/employee-fields/definitions` - Create field definition
+- `PUT /api/employee-fields/definitions/:id` - Update field definition
+- `DELETE /api/employee-fields/definitions/:id` - Delete field definition
+- `GET /api/employee-fields/values/:employeeId` - Get field values for employee
+- `POST /api/employee-fields/values/bulk` - Save multiple field values
+
 ### Vehicles
 - `GET /api/vehicles` - List
 - `POST /api/vehicles` - Create
@@ -417,7 +497,38 @@ When updating a shift template that has been used in rosters:
 
 ---
 
-## SECTION 6: TIME FORMAT & TYPES
+## SECTION 7: HRM CUSTOM FIELDS
+
+### Feature Overview
+- **Custom field definitions** - Admin defines fields (text, number, date, boolean, select)
+- **Layout designer** - Drag-drop to arrange fields in rows, set half/full width
+- **Per-employee values** - Each employee can have values for each field
+- **Validation** - Required field enforcement on save
+
+### UI Components
+- Employee modal has tabs: General | Custom Fields
+- Settings modal (⚙️ button) has tabs: Fields | Layout Designer
+- Date fields have 📅 picker button
+- Checkbox fields render as Yes/No toggles
+
+### Field Types
+| Type | Input | Storage |
+|------|-------|---------|
+| text | Text input | String |
+| number | Number input | String (parsed) |
+| date | Date picker | ISO date string |
+| boolean | Checkbox | "true" / "false" |
+| select | Dropdown | Selected option string |
+
+### Layout System
+- Fields grouped by `display_row` (0-indexed)
+- `field_width`: "full" (100%) or "half" (50%)
+- Drag fields between rows in Layout Designer
+- Click width toggle (◧/▣) to switch half/full
+
+---
+
+## SECTION 8: TIME FORMAT & TYPES
 
 ### Time Format
 - **Decimal hours**: 6.5 = 06:30, 14.25 = 14:15, 23.75 = 23:45
@@ -443,7 +554,7 @@ When updating a shift template that has been used in rosters:
 
 ---
 
-## SECTION 7: CONFLICT DETECTION
+## SECTION 9: CONFLICT DETECTION
 
 ### Roster Assignment Conflicts
 When assigning a driver to a duty block, check for:
@@ -456,21 +567,31 @@ When assigning a driver to a duty block, check for:
 
 ---
 
-## SECTION 8: REMINDERS FOR CLAUDE
+## SECTION 10: REMINDERS FOR CLAUDE
 
-1. **ALWAYS give Windows commands LINE BY LINE** - Never use && or ;
-2. **Frontend is ONE file** - `frontend/index.html`
-3. **UNDERSTAND FK RELATIONSHIPS** before modifying/deleting data
-4. **Deletion order matters** - roster_duty_lines → roster_entries → etc.
-5. **Published rosters block edits** - Check status before modifications
-6. **Soft deletes only** - Set deleted_at, never hard delete
-7. **Always check deleted_at IS NULL** in queries
-8. **Times are decimal hours** - 6.5 = 06:30
-9. **User is in Brisbane, QLD** - Australian context
+1. **NEVER regenerate entire files** - Surgical additions only (see Section 2)
+2. **ALWAYS verify features exist** after modifications (grep counts)
+3. **ALWAYS give Windows commands LINE BY LINE** - Never use && or ;
+4. **Frontend is ONE file** - `frontend/index.html`
+5. **UNDERSTAND FK RELATIONSHIPS** before modifying/deleting data
+6. **Deletion order matters** - roster_duty_lines → roster_entries → etc.
+7. **Published rosters block edits** - Check status before modifications
+8. **Soft deletes only** - Set deleted_at, never hard delete
+9. **Always check deleted_at IS NULL** in queries
+10. **Times are decimal hours** - 6.5 = 06:30
+11. **User is in Brisbane, QLD** - Australian context
 
 ---
 
-## SECTION 9: VERSION HISTORY
+## SECTION 11: VERSION HISTORY
+
+### v1.5.0 (January 16, 2026)
+- HRM custom fields with configurable field types (text, number, date, boolean, select)
+- Layout Designer for arranging custom fields in rows with half/full width
+- Employee modal tabs (General / Custom Fields)
+- Custom Fields Settings modal with Fields and Layout tabs
+- Date picker button (📅) for date fields
+- Required field validation
 
 ### v1.4.0 (January 15, 2026)
 - Duty cancellation system with visual indicators (strikethrough + ghost overlay)
