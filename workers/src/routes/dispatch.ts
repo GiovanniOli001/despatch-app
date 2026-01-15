@@ -34,6 +34,9 @@ interface DispatchDuty {
   locationName: string | null;  // Free text or selected location
   locationLat: number | null;   // For smart assignment
   locationLng: number | null;   // For smart assignment
+  cancelled: boolean;           // Cancellation status
+  cancelReason: string | null;  // Reason for cancellation
+  cancelledAt: string | null;   // When cancelled
 }
 
 interface DispatchShift {
@@ -169,6 +172,25 @@ export async function handleDispatch(
       }>(request);
       if (!body) return error('Invalid request body');
       return createAdhocShift(env, body);
+    }
+
+    // POST /api/dispatch/cancel-duty-line - Cancel a duty line
+    if (method === 'POST' && seg1 === 'cancel-duty-line') {
+      const body = await parseBody<{
+        duty_line_id: string;
+        reason?: string;
+      }>(request);
+      if (!body) return error('Invalid request body');
+      return cancelDutyLine(env, body);
+    }
+
+    // POST /api/dispatch/reinstate-duty-line - Reinstate a cancelled duty line
+    if (method === 'POST' && seg1 === 'reinstate-duty-line') {
+      const body = await parseBody<{
+        duty_line_id: string;
+      }>(request);
+      if (!body) return error('Invalid request body');
+      return reinstateDutyLine(env, body);
     }
 
     return error('Not found', 404);
@@ -333,10 +355,14 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
           dt.code as duty_type_code,
           dt.name as duty_type_name,
           dt.color as duty_type_color,
-          COALESCE(rdl.vehicle_number, v.fleet_number) as vehicle_number
+          COALESCE(rdl.vehicle_number, v.fleet_number) as vehicle_number,
+          CASE WHEN ddc.id IS NOT NULL THEN 1 ELSE 0 END as cancelled,
+          ddc.reason as cancel_reason,
+          ddc.cancelled_at
         FROM roster_duty_lines rdl
         LEFT JOIN duty_types dt ON rdl.duty_type = dt.code OR rdl.duty_type = dt.id
         LEFT JOIN vehicles v ON rdl.vehicle_id = v.id
+        LEFT JOIN dispatch_duty_cancellations ddc ON rdl.id = ddc.roster_duty_line_id
         WHERE rdl.roster_entry_id IN (${placeholders}) AND rdl.deleted_at IS NULL
         ORDER BY rdl.roster_entry_id, rdl.sequence
       `).bind(...entryIds).all();
@@ -451,7 +477,10 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       payType: line.pay_type || 'STD',
       locationName: line.location_name || null,
       locationLat: line.location_lat || null,
-      locationLng: line.location_lng || null
+      locationLng: line.location_lng || null,
+      cancelled: line.cancelled === 1,
+      cancelReason: line.cancel_reason || null,
+      cancelledAt: line.cancelled_at || null
     }));
 
     // If no duty lines, create a placeholder
@@ -470,7 +499,10 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
         payType: 'STD',
         locationName: null,
         locationLat: null,
-        locationLng: null
+        locationLng: null,
+        cancelled: false,
+        cancelReason: null,
+        cancelledAt: null
       });
     }
 
@@ -1157,5 +1189,91 @@ async function createAdhocShift(
     entry_id: entryId,
     duty_line_id: dutyLineId,
     adhoc_code: shiftName
+  });
+}
+
+// ============================================
+// CANCEL DUTY LINE
+// ============================================
+
+async function cancelDutyLine(
+  env: Env,
+  input: {
+    duty_line_id: string;
+    reason?: string;
+  }
+): Promise<Response> {
+  const { duty_line_id, reason } = input;
+
+  if (!duty_line_id) {
+    return error('duty_line_id is required');
+  }
+
+  // Verify duty line exists
+  const dutyLine = await env.DB.prepare(`
+    SELECT id, roster_entry_id FROM roster_duty_lines 
+    WHERE id = ? AND deleted_at IS NULL
+  `).bind(duty_line_id).first() as { id: string; roster_entry_id: string } | null;
+
+  if (!dutyLine) {
+    return error('Duty line not found', 404);
+  }
+
+  // Check if already cancelled
+  const existingCancel = await env.DB.prepare(`
+    SELECT id FROM dispatch_duty_cancellations 
+    WHERE roster_duty_line_id = ?
+  `).bind(duty_line_id).first();
+
+  if (existingCancel) {
+    return error('Duty line is already cancelled');
+  }
+
+  const now = new Date().toISOString();
+  const cancelId = crypto.randomUUID();
+
+  // Create cancellation record
+  await env.DB.prepare(`
+    INSERT INTO dispatch_duty_cancellations (
+      id, tenant_id, roster_duty_line_id, reason, cancelled_at, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).bind(cancelId, TENANT_ID, duty_line_id, reason || null, now, now).run();
+
+  return json({
+    success: true,
+    message: 'Duty line cancelled',
+    cancellation_id: cancelId
+  });
+}
+
+// ============================================
+// REINSTATE DUTY LINE
+// ============================================
+
+async function reinstateDutyLine(
+  env: Env,
+  input: {
+    duty_line_id: string;
+  }
+): Promise<Response> {
+  const { duty_line_id } = input;
+
+  if (!duty_line_id) {
+    return error('duty_line_id is required');
+  }
+
+  // Find and delete the cancellation record
+  const result = await env.DB.prepare(`
+    DELETE FROM dispatch_duty_cancellations 
+    WHERE roster_duty_line_id = ?
+  `).bind(duty_line_id).run();
+
+  if (result.meta.changes === 0) {
+    return error('No cancellation found for this duty line', 404);
+  }
+
+  return json({
+    success: true,
+    message: 'Duty line reinstated'
   });
 }
