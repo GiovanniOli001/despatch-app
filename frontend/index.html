@@ -3245,6 +3245,66 @@
       gap: 16px;
     }
     
+    /* Location autocomplete styles */
+    .location-input-wrapper {
+      position: relative;
+    }
+    
+    .location-autocomplete {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 6px 6px;
+      max-height: 200px;
+      overflow-y: auto;
+      z-index: 1000;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    
+    .location-suggestion {
+      padding: 10px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    
+    .location-suggestion:last-child {
+      border-bottom: none;
+    }
+    
+    .location-suggestion:hover {
+      background: var(--bg-hover);
+    }
+    
+    .location-suggestion-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    
+    .location-suggestion-address {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    .location-loading {
+      padding: 10px 12px;
+      color: var(--text-muted);
+      font-size: 12px;
+      text-align: center;
+    }
+    
+    .location-coords {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    
     .btn-secondary {
       background: var(--bg-tertiary);
       border: 1px solid var(--border);
@@ -4551,6 +4611,151 @@
       };
     }
     
+    // ============================================
+    // NOMINATIM LOCATION AUTOCOMPLETE
+    // ============================================
+    
+    let locationSearchTimeout = null;
+    let currentLocationInput = null;
+    
+    // Search for locations using Nominatim (OpenStreetMap free geocoding)
+    async function searchLocations(query, inputId) {
+      if (!query || query.length < 3) {
+        hideLocationSuggestions(inputId);
+        return;
+      }
+      
+      currentLocationInput = inputId;
+      showLocationLoading(inputId);
+      
+      try {
+        // Bias search towards Australia
+        const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&countrycodes=au`;
+        
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'DispatchApp/1.0'  // Required by Nominatim
+          }
+        });
+        
+        if (!response.ok) throw new Error('Nominatim request failed');
+        
+        const results = await response.json();
+        
+        if (currentLocationInput === inputId) {
+          showLocationSuggestions(inputId, results);
+        }
+      } catch (error) {
+        console.warn('Location search failed:', error);
+        hideLocationSuggestions(inputId);
+      }
+    }
+    
+    // Debounced location search
+    function onLocationInput(inputId) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      
+      const query = input.value;
+      
+      // Clear any existing location coords when typing new text
+      const latInput = document.getElementById(inputId + 'Lat');
+      const lngInput = document.getElementById(inputId + 'Lng');
+      if (latInput) latInput.value = '';
+      if (lngInput) lngInput.value = '';
+      
+      // Debounce the search
+      if (locationSearchTimeout) {
+        clearTimeout(locationSearchTimeout);
+      }
+      
+      locationSearchTimeout = setTimeout(() => {
+        searchLocations(query, inputId);
+      }, 300);
+    }
+    
+    function showLocationLoading(inputId) {
+      const wrapper = document.getElementById(inputId)?.parentElement;
+      if (!wrapper) return;
+      
+      let dropdown = wrapper.querySelector('.location-autocomplete');
+      if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'location-autocomplete';
+        wrapper.appendChild(dropdown);
+      }
+      
+      dropdown.innerHTML = '<div class="location-loading">🔍 Searching...</div>';
+      dropdown.style.display = 'block';
+    }
+    
+    function showLocationSuggestions(inputId, results) {
+      const wrapper = document.getElementById(inputId)?.parentElement;
+      if (!wrapper) return;
+      
+      let dropdown = wrapper.querySelector('.location-autocomplete');
+      if (!dropdown) {
+        dropdown = document.createElement('div');
+        dropdown.className = 'location-autocomplete';
+        wrapper.appendChild(dropdown);
+      }
+      
+      if (results.length === 0) {
+        dropdown.innerHTML = '<div class="location-loading">No locations found</div>';
+        return;
+      }
+      
+      dropdown.innerHTML = results.map((r, idx) => {
+        const name = r.name || r.display_name.split(',')[0];
+        const address = r.display_name;
+        return `
+          <div class="location-suggestion" onclick="selectLocation('${inputId}', ${idx}, '${name.replace(/'/g, "\\'")}', ${r.lat}, ${r.lon})">
+            <div class="location-suggestion-name">${name}</div>
+            <div class="location-suggestion-address">${address}</div>
+          </div>
+        `;
+      }).join('');
+      
+      dropdown.style.display = 'block';
+    }
+    
+    function hideLocationSuggestions(inputId) {
+      const wrapper = document.getElementById(inputId)?.parentElement;
+      if (!wrapper) return;
+      
+      const dropdown = wrapper.querySelector('.location-autocomplete');
+      if (dropdown) {
+        dropdown.style.display = 'none';
+      }
+    }
+    
+    function selectLocation(inputId, idx, name, lat, lng) {
+      const input = document.getElementById(inputId);
+      if (input) {
+        input.value = name;
+      }
+      
+      // Store lat/lng in hidden fields
+      const latInput = document.getElementById(inputId + 'Lat');
+      const lngInput = document.getElementById(inputId + 'Lng');
+      if (latInput) latInput.value = lat;
+      if (lngInput) lngInput.value = lng;
+      
+      hideLocationSuggestions(inputId);
+      
+      // Trigger form change if applicable
+      if (typeof onFormChange === 'function') {
+        onFormChange();
+      }
+    }
+    
+    // Close suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.location-input-wrapper')) {
+        document.querySelectorAll('.location-autocomplete').forEach(d => d.style.display = 'none');
+      }
+    });
+    
     // Get route with caching and fallback
     async function getRoute(loc1, loc2) {
       // Same location check
@@ -4655,7 +4860,28 @@
       const suggestions = [];
       
       for (const job of availableJobs) {
-        const pickupLoc = job.pickupLocation || getLocation(job.duties?.[0]?.description?.split('→')[0]?.trim()) || LOCATIONS[0];
+        // Try to get location from:
+        // 1. First duty's actual location coords (from API)
+        // 2. job.pickupLocation (if set)
+        // 3. Parse from description (legacy)
+        // 4. Default to first LOCATION
+        let pickupLoc = null;
+        
+        const firstDuty = job.duties?.[0];
+        if (firstDuty?.locationLat && firstDuty?.locationLng) {
+          // Use real coordinates from duty
+          pickupLoc = {
+            id: 'duty-loc',
+            name: firstDuty.locationName || 'Duty Location',
+            lat: firstDuty.locationLat,
+            lng: firstDuty.locationLng
+          };
+        } else if (job.pickupLocation) {
+          pickupLoc = job.pickupLocation;
+        } else {
+          // Try to parse from description (legacy fake data)
+          pickupLoc = getLocation(firstDuty?.description?.split('→')[0]?.trim()) || LOCATIONS[0];
+        }
         
         // Use async route fetching
         const route = await getRoute(currentLocation, pickupLoc);
@@ -4665,8 +4891,10 @@
         const canMakeIt = arrivalTime <= jobStartTime - 0.25;
         const waitTime = Math.max(0, jobStartTime - arrivalTime);
         
+        // Jobs without coordinates get a penalty in scoring
+        const hasCoords = !!(firstDuty?.locationLat && firstDuty?.locationLng);
         const score = canMakeIt 
-          ? (route.distance * 0.5) + (waitTime * 10)
+          ? (route.distance * 0.5) + (waitTime * 10) + (hasCoords ? 0 : 100)
           : 9999;
         
         suggestions.push({
@@ -4678,7 +4906,8 @@
           waitTime,
           canMakeIt,
           score,
-          routeSource: route.source
+          routeSource: route.source,
+          hasRealLocation: hasCoords
         });
       }
       
@@ -4692,7 +4921,28 @@
       const suggestions = [];
       
       for (const job of availableJobs) {
-        const pickupLoc = job.pickupLocation || getLocation(job.duties?.[0]?.description?.split('→')[0]?.trim()) || LOCATIONS[0];
+        // Try to get location from:
+        // 1. First duty's actual location coords (from API)
+        // 2. job.pickupLocation (if set)
+        // 3. Parse from description (legacy)
+        // 4. Default to first LOCATION
+        let pickupLoc = null;
+        
+        const firstDuty = job.duties?.[0];
+        if (firstDuty?.locationLat && firstDuty?.locationLng) {
+          // Use real coordinates from duty
+          pickupLoc = {
+            id: 'duty-loc',
+            name: firstDuty.locationName || 'Duty Location',
+            lat: firstDuty.locationLat,
+            lng: firstDuty.locationLng
+          };
+        } else if (job.pickupLocation) {
+          pickupLoc = job.pickupLocation;
+        } else {
+          // Try to parse from description (legacy fake data)
+          pickupLoc = getLocation(firstDuty?.description?.split('→')[0]?.trim()) || LOCATIONS[0];
+        }
         
         const distance = calculateDistance(currentLocation, pickupLoc);
         const travelTime = estimateTravelTime(currentLocation, pickupLoc);
@@ -4702,8 +4952,10 @@
         const canMakeIt = arrivalTime <= jobStartTime - 0.25;
         const waitTime = Math.max(0, jobStartTime - arrivalTime);
         
+        // Jobs without coordinates get a penalty in scoring
+        const hasCoords = !!(firstDuty?.locationLat && firstDuty?.locationLng);
         const score = canMakeIt 
-          ? (distance * 0.5) + (waitTime * 10)
+          ? (distance * 0.5) + (waitTime * 10) + (hasCoords ? 0 : 100)
           : 9999;
         
         suggestions.push({
@@ -4714,7 +4966,8 @@
           arrivalTime,
           waitTime,
           canMakeIt,
-          score
+          score,
+          hasRealLocation: hasCoords
         });
       }
       
@@ -7144,6 +7397,46 @@
       }
     }
     
+    async function updateDutyLocation(driverId, shiftId, dutyIdx, locationName, locationLat, locationLng) {
+      const driver = drivers.find(d => d.id === driverId);
+      if (!driver) return;
+      
+      const shift = driver.shifts.find(s => s.id === shiftId);
+      if (!shift || !shift.duties[dutyIdx]) return;
+      
+      const duty = shift.duties[dutyIdx];
+      
+      // Call API in real mode
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+        try {
+          const result = await apiRequest('/dispatch/update-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: duty.id,
+              location_name: locationName || null,
+              location_lat: locationLat || null,
+              location_lng: locationLng || null
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+        } catch (err) {
+          showToast(err.message || 'Update failed', 'error');
+          return;
+        }
+      }
+      
+      // Update local duty
+      duty.locationName = locationName;
+      duty.locationLat = locationLat;
+      duty.locationLng = locationLng;
+      
+      showToast('Location updated');
+    }
+    
     async function updateDutyType(driverId, shiftId, dutyIdx, value) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
@@ -7605,6 +7898,24 @@
             <div class="form-group">
               <label class="form-label">Description</label>
               <input type="text" class="form-input" id="editDesc" value="${duty.description}" placeholder="Enter description...">
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Location <span style="font-size: 10px; color: var(--text-muted);">(optional - for smart assignment)</span></label>
+              <div class="location-input-wrapper">
+                <input type="text" class="form-input" id="editLocation" 
+                       value="${duty.locationName || ''}" 
+                       placeholder="Start typing to search or enter free text..."
+                       oninput="onLocationInput('editLocation')"
+                       onfocus="onLocationInput('editLocation')">
+                <input type="hidden" id="editLocationLat" value="${duty.locationLat || ''}">
+                <input type="hidden" id="editLocationLng" value="${duty.locationLng || ''}">
+              </div>
+              ${duty.locationLat && duty.locationLng ? 
+                `<div class="location-coords">📍 ${Number(duty.locationLat).toFixed(4)}, ${Number(duty.locationLng).toFixed(4)}</div>` : 
+                ''}
             </div>
           </div>
           
@@ -9168,6 +9479,9 @@
       const type = document.getElementById('editType')?.value;
       const vehicle = document.getElementById('editVehicle')?.value || null;
       const description = document.getElementById('editDesc')?.value || '';
+      const locationName = document.getElementById('editLocation')?.value || null;
+      const locationLat = parseFloat(document.getElementById('editLocationLat')?.value) || null;
+      const locationLng = parseFloat(document.getElementById('editLocationLng')?.value) || null;
       
       const start = parseTime(startStr);
       const end = parseTime(endStr);
@@ -9204,7 +9518,10 @@
         start, 
         end, 
         description, 
-        vehicle 
+        vehicle,
+        locationName,
+        locationLat,
+        locationLng
       };
       
       if (editingDuty.isNew) {

@@ -695,7 +695,8 @@ async function copyDutyLinesToRosterEntry(env: Env, entryId: string, dutyBlockId
   try {
     // Get duty lines from the shift template
     const templateLines = await env.DB.prepare(`
-      SELECT id, sequence, start_time, end_time, duty_type, description, vehicle_id, pay_type
+      SELECT id, sequence, start_time, end_time, duty_type, description, vehicle_id, pay_type,
+             location_name, location_lat, location_lng
       FROM shift_template_duty_lines
       WHERE duty_block_id = ?
       ORDER BY sequence
@@ -722,12 +723,14 @@ async function copyDutyLinesToRosterEntry(env: Env, entryId: string, dutyBlockId
         INSERT INTO roster_duty_lines (
           id, tenant_id, roster_entry_id, source_duty_line_id, sequence,
           start_time, end_time, duty_type, description, vehicle_id, vehicle_number, pay_type,
+          location_name, location_lat, location_lng,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         newId, TENANT_ID, entryId, line.id, line.sequence,
         line.start_time, line.end_time, line.duty_type, line.description,
         line.vehicle_id, vehicleNumber, line.pay_type || 'STD',
+        line.location_name || null, line.location_lat || null, line.location_lng || null,
         now, now
       ).run();
     }

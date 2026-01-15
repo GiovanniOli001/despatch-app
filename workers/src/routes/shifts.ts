@@ -19,6 +19,9 @@ interface DutyLineInput {
   description?: string;
   vehicle_id?: string;
   pay_type?: string;      // 'STD', 'OT', 'DT', 'PEN', 'UNP'
+  location_name?: string; // Free text or selected location name
+  location_lat?: number;  // Latitude (optional, for smart assignment)
+  location_lng?: number;  // Longitude (optional, for smart assignment)
 }
 
 interface DutyBlockInput {
@@ -354,12 +357,14 @@ async function updateDutyLines(env: Env, blockId: string, lines: DutyLineInput[]
         UPDATE shift_template_duty_lines SET
           sequence = ?, start_time = ?, end_time = ?,
           duty_type = ?, description = ?, vehicle_id = ?, pay_type = ?,
+          location_name = ?, location_lat = ?, location_lng = ?,
           updated_at = ?
         WHERE id = ?
       `).bind(
         line.sequence, line.start_time, line.end_time,
         line.duty_type || 'driving', line.description || null,
         line.vehicle_id || null, line.pay_type || 'STD',
+        line.location_name || null, line.location_lat || null, line.location_lng || null,
         now, lineId
       ).run();
     } else {
@@ -368,8 +373,9 @@ async function updateDutyLines(env: Env, blockId: string, lines: DutyLineInput[]
         INSERT INTO shift_template_duty_lines (
           id, duty_block_id, sequence, start_time, end_time,
           duty_type, description, vehicle_id, pay_type,
+          location_name, location_lat, location_lng,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         lineId, blockId, line.sequence,
         line.start_time, line.end_time,
@@ -377,6 +383,9 @@ async function updateDutyLines(env: Env, blockId: string, lines: DutyLineInput[]
         line.description || null,
         line.vehicle_id || null,
         line.pay_type || 'STD',
+        line.location_name || null,
+        line.location_lat || null,
+        line.location_lng || null,
         now, now
       ).run();
     }
@@ -409,8 +418,9 @@ async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInp
           INSERT INTO shift_template_duty_lines (
             id, duty_block_id, sequence, start_time, end_time,
             duty_type, description, vehicle_id, pay_type,
+            location_name, location_lat, location_lng,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           uuid(), blockId, line.sequence,
           line.start_time, line.end_time,
@@ -418,6 +428,9 @@ async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInp
           line.description || null,
           line.vehicle_id || null,
           line.pay_type || 'STD',
+          line.location_name || null,
+          line.location_lat || null,
+          line.location_lng || null,
           now, now
         ).run();
       }

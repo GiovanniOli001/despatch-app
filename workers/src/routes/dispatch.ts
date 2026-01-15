@@ -31,6 +31,9 @@ interface DispatchDuty {
   fromLocationId: string | null;
   toLocationId: string | null;
   payType: string;
+  locationName: string | null;  // Free text or selected location
+  locationLat: number | null;   // For smart assignment
+  locationLng: number | null;   // For smart assignment
 }
 
 interface DispatchShift {
@@ -120,6 +123,9 @@ export async function handleDispatch(
         vehicle_id?: string | null;
         vehicle_number?: string | null;
         pay_type?: string;
+        location_name?: string | null;
+        location_lat?: number | null;
+        location_lng?: number | null;
       }>(request);
       if (!body) return error('Invalid request body');
       return updateDutyLine(env, body);
@@ -247,6 +253,9 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
           rdl.vehicle_id,
           rdl.pay_type,
           rdl.description,
+          rdl.location_name,
+          rdl.location_lat,
+          rdl.location_lng,
           dt.code as duty_type_code,
           dt.name as duty_type_name,
           dt.color as duty_type_color,
@@ -289,6 +298,9 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
           dl.vehicle_id,
           dl.pay_type,
           dl.description,
+          dl.location_name,
+          dl.location_lat,
+          dl.location_lng,
           dt.code as duty_type_code,
           dt.name as duty_type_name,
           dt.color as duty_type_color,
@@ -359,10 +371,13 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       description: line.description || `${line.duty_type_name || line.duty_type || 'Duty'}`,
       vehicle: line.vehicle_number || null,
       vehicleId: line.vehicle_id || null,
-      locationId: null,  // TODO: Add location support
+      locationId: null,  // Legacy field
       fromLocationId: null,
       toLocationId: null,
-      payType: line.pay_type || 'STD'
+      payType: line.pay_type || 'STD',
+      locationName: line.location_name || null,
+      locationLat: line.location_lat || null,
+      locationLng: line.location_lng || null
     }));
 
     // If no duty lines, create a placeholder
@@ -378,7 +393,10 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
         locationId: null,
         fromLocationId: null,
         toLocationId: null,
-        payType: 'STD'
+        payType: 'STD',
+        locationName: null,
+        locationLat: null,
+        locationLng: null
       });
     }
 
@@ -745,9 +763,12 @@ async function updateDutyLine(
     vehicle_id?: string | null;
     vehicle_number?: string | null;  // Accept fleet number too
     pay_type?: string;
+    location_name?: string | null;
+    location_lat?: number | null;
+    location_lng?: number | null;
   }
 ): Promise<Response> {
-  const { duty_line_id, start_time, end_time, duty_type, description, vehicle_id, vehicle_number, pay_type } = input;
+  const { duty_line_id, start_time, end_time, duty_type, description, vehicle_id, vehicle_number, pay_type, location_name, location_lat, location_lng } = input;
   
   if (!duty_line_id) {
     return error('duty_line_id is required');
@@ -783,6 +804,20 @@ async function updateDutyLine(
   if (description !== undefined) {
     updates.push('description = ?');
     bindings.push(description);
+  }
+
+  // Handle location fields
+  if (location_name !== undefined) {
+    updates.push('location_name = ?');
+    bindings.push(location_name);
+  }
+  if (location_lat !== undefined) {
+    updates.push('location_lat = ?');
+    bindings.push(location_lat);
+  }
+  if (location_lng !== undefined) {
+    updates.push('location_lng = ?');
+    bindings.push(location_lng);
   }
 
   // Handle vehicle - accept either vehicle_id (UUID) or vehicle_number (fleet number)
