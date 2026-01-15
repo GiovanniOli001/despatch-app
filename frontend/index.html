@@ -12745,7 +12745,7 @@ Guidelines:
             badgesHtml += `<div class="calendar-holiday-badge" title="${day.holidayName}">${day.holidayName}</div>`;
           }
           if (day.isSchoolHoliday) {
-            badgesHtml += `<div class="calendar-school-badge" title="${day.schoolHolidayName}">🎒 School Hols</div>`;
+            badgesHtml += `<div class="calendar-school-badge" title="${day.schoolHolidayName}">School Hols</div>`;
           }
           badgesHtml += '</div>';
         }
@@ -13147,7 +13147,7 @@ Guidelines:
         holidayBadge.style.background = 'rgba(239, 68, 68, 0.15)';
         holidayBadge.style.color = 'var(--accent-red)';
       } else if (schoolHol) {
-        holidayBadge.textContent = '🎒 ' + schoolHol;
+        holidayBadge.textContent = schoolHol;
         holidayBadge.style.display = 'inline';
         holidayBadge.style.background = 'rgba(139, 92, 246, 0.15)';
         holidayBadge.style.color = '#8b5cf6';
