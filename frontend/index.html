@@ -6349,6 +6349,15 @@
     
     // Sync all existing vehicle assignments from driver duties to vehicle schedules
     function syncAllVehicleAssignments() {
+      // First, clear all non-maintenance shifts from vehicles
+      // This removes both 'synced' type and any other work shifts from API
+      vehicles.forEach(vehicle => {
+        if (vehicle.shifts) {
+          vehicle.shifts = vehicle.shifts.filter(s => s.type === 'maintenance');
+        }
+      });
+      
+      // Then rebuild synced shifts from driver duties (skip cancelled)
       drivers.forEach(driver => {
         if (!driver.shifts) return;
         driver.shifts.forEach(shift => {
