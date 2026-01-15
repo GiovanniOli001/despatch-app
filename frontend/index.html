@@ -1615,6 +1615,72 @@
       background: rgba(239, 68, 68, 0.2);
       color: var(--accent-red);
     }
+    
+    /* Cancelled duty styling */
+    .duty-item-inline.cancelled {
+      opacity: 0.5;
+      background: rgba(239, 68, 68, 0.1);
+    }
+    
+    .duty-item-inline.cancelled .duty-inline-content {
+      text-decoration: line-through;
+    }
+    
+    .duty-item-inline.cancelled .duty-inline-time,
+    .duty-item-inline.cancelled .duty-inline-desc,
+    .duty-item-inline.cancelled .duty-inline-select {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+    
+    .duty-cancel-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 4px;
+      font-size: 11px;
+      border-radius: 3px;
+      opacity: 0.5;
+      transition: all 0.15s;
+      flex-shrink: 0;
+      margin-right: 2px;
+    }
+    
+    .duty-item-inline:hover .duty-cancel-btn {
+      opacity: 1;
+    }
+    
+    .duty-cancel-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--accent-red);
+    }
+    
+    .duty-reinstate-btn {
+      background: var(--accent-green);
+      border: none;
+      color: white;
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 3px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    
+    .duty-reinstate-btn:hover {
+      background: #22c55e;
+    }
+    
+    .cancelled-badge {
+      background: var(--accent-red);
+      color: white;
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      margin-left: 8px;
+      font-weight: 500;
+    }
 
     /* Vehicle schedule item (driver-centric mode) */
     .vehicle-schedule-item {
@@ -7908,6 +7974,7 @@
     function renderDutyItem(duty, driverId, shiftId, dutyIdx) {
       const dt = DUTY_TYPES[duty.type] || DUTY_TYPES.driving;
       const needsVehicle = VEHICLE_REQUIRED_TYPES.includes(duty.type);
+      const isCancelled = duty.cancelled === true;
       
       // Calculate hours for this duty
       const hours = duty.end - duty.start;
@@ -7941,6 +8008,24 @@
       const payTypeOptions = Object.entries(PAY_TYPES).map(([key, val]) => 
         `<option value="${key}" ${payType === key ? 'selected' : ''}>${val.code}</option>`
       ).join('');
+      
+      // If cancelled, show simplified view with reinstate button
+      if (isCancelled) {
+        return `
+          <div class="duty-item-inline cancelled">
+            <div class="duty-type-bar ${duty.type}"></div>
+            <div class="duty-inline-content">
+              <span class="duty-inline-time">${formatTimeCompact(duty.start)}</span>
+              <span class="duty-time-sep">-</span>
+              <span class="duty-inline-time">${formatTimeCompact(duty.end)}</span>
+              <span style="margin-left: 8px; color: var(--text-muted);">${dt.label}</span>
+              <span style="flex: 1; color: var(--text-muted); margin-left: 8px;">${duty.description || ''}</span>
+              <span class="cancelled-badge">CANCELLED</span>
+              <button class="duty-reinstate-btn" onclick="event.stopPropagation(); reinstateDuty('${driverId}', '${shiftId}', ${dutyIdx}, '${duty.id}')" title="Reinstate this duty">Reinstate</button>
+            </div>
+          </div>
+        `;
+      }
       
       return `
         <div class="duty-item-inline">
@@ -7981,7 +8066,7 @@
               ${payTypeOptions}
             </select>
             <span class="duty-inline-hours">${hoursStr}</span>
-            <button class="duty-delete-btn" onclick="deleteDuty('${driverId}', '${shiftId}', ${dutyIdx})" title="Delete duty"></button>
+            <button class="duty-cancel-btn" onclick="event.stopPropagation(); cancelDuty('${driverId}', '${shiftId}', ${dutyIdx}, '${duty.id}')" title="Cancel duty">✕</button>
           </div>
         </div>
       `;
@@ -10588,6 +10673,101 @@
       
       shift.duties.splice(dutyIdx, 1);
       showToast('Duty deleted');
+      renderAll();
+    }
+    
+    async function cancelDuty(driverId, shiftId, dutyIdx, dutyId) {
+      const driver = drivers.find(d => d.id === driverId);
+      if (!driver) return;
+      
+      const shift = driver.shifts.find(s => s.id === shiftId);
+      if (!shift || !shift.duties[dutyIdx]) return;
+      
+      const duty = shift.duties[dutyIdx];
+      
+      // Prompt for reason
+      const reason = prompt('Reason for cancellation (optional):');
+      
+      // Call API in real mode
+      if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
+        try {
+          const result = await apiRequest('/dispatch/cancel-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: dutyId,
+              reason: reason || null
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+          
+          showToast('Duty cancelled');
+          await loadDispatchData();  // Reload from API
+          return;
+        } catch (err) {
+          showToast(err.message || 'Cancel failed', 'error');
+          return;
+        }
+      }
+      
+      // Demo mode - just update local state
+      duty.cancelled = true;
+      duty.cancelReason = reason || null;
+      duty.cancelledAt = new Date().toISOString();
+      
+      // Unsync vehicle if assigned
+      if (duty.vehicle) {
+        unsyncVehicleSchedule(duty.vehicle, duty.id);
+      }
+      
+      showToast('Duty cancelled');
+      renderDetailPanel();
+      renderAll();
+    }
+    
+    async function reinstateDuty(driverId, shiftId, dutyIdx, dutyId) {
+      const driver = drivers.find(d => d.id === driverId);
+      if (!driver) return;
+      
+      const shift = driver.shifts.find(s => s.id === shiftId);
+      if (!shift || !shift.duties[dutyIdx]) return;
+      
+      const duty = shift.duties[dutyIdx];
+      
+      // Call API in real mode
+      if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
+        try {
+          const result = await apiRequest('/dispatch/reinstate-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: dutyId
+            }
+          });
+          
+          if (result.error) {
+            showToast(result.error, 'error');
+            return;
+          }
+          
+          showToast('Duty reinstated');
+          await loadDispatchData();  // Reload from API
+          return;
+        } catch (err) {
+          showToast(err.message || 'Reinstate failed', 'error');
+          return;
+        }
+      }
+      
+      // Demo mode - just update local state
+      duty.cancelled = false;
+      duty.cancelReason = null;
+      duty.cancelledAt = null;
+      
+      showToast('Duty reinstated');
+      renderDetailPanel();
       renderAll();
     }
 
