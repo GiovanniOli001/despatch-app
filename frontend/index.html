@@ -1200,6 +1200,7 @@
     .duty-header-sep { width: 6px; flex-shrink: 0; }
     .duty-header-type { width: 70px; flex-shrink: 0; }
     .duty-header-desc { flex: 1; min-width: 60px; }
+    .duty-header-location { width: 100px; flex-shrink: 0; }
     .duty-header-vehicle { width: 76px; flex-shrink: 0; }
     .duty-header-pay { width: 60px; flex-shrink: 0; }
     .duty-header-hours { width: 40px; text-align: right; flex-shrink: 0; }
@@ -1328,6 +1329,42 @@
       outline: none;
       border-color: var(--accent-blue);
       background: var(--bg-primary);
+    }
+    
+    .duty-inline-location-wrapper {
+      position: relative;
+      flex: 0 0 100px;
+    }
+    
+    .duty-inline-location {
+      width: 100%;
+      padding: 2px 6px;
+      font-size: 11px;
+      background: var(--bg-secondary);
+      border: 1px solid transparent;
+      border-radius: 3px;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    
+    .duty-inline-location:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      background: var(--bg-primary);
+    }
+    
+    .duty-inline-location-wrapper .location-autocomplete {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 220px;
+      z-index: 1001;
+      font-size: 11px;
+    }
+    
+    .duty-inline-location-wrapper .location-suggestion {
+      padding: 6px 8px;
     }
     
     .duty-inline-select {
@@ -7059,6 +7096,7 @@
                   <span class="duty-header-time">End</span>
                   <span class="duty-header-type">Type</span>
                   <span class="duty-header-desc">Desc</span>
+                  <span class="duty-header-location">Location</span>
                   <span class="duty-header-vehicle">Vehicle</span>
                   <span class="duty-header-pay">Pay</span>
                   <span class="duty-header-hours">Hours</span>
@@ -7264,6 +7302,16 @@
             <input type="text" class="duty-inline-desc" value="${duty.description}" 
                    onchange="updateDutyDesc('${driverId}', '${shiftId}', ${dutyIdx}, this.value)"
                    placeholder="Description..." title="Description">
+            <div class="duty-inline-location-wrapper">
+              <input type="text" class="duty-inline-location" 
+                     id="dutyLoc_${driverId}_${shiftId}_${dutyIdx}"
+                     value="${duty.locationName || ''}" 
+                     oninput="onLocationInput('dutyLoc_${driverId}_${shiftId}_${dutyIdx}')"
+                     onblur="setTimeout(() => saveDutyLocation('${driverId}', '${shiftId}', ${dutyIdx}), 200)"
+                     placeholder="Location..." title="Location (for smart assignment)">
+              <input type="hidden" id="dutyLoc_${driverId}_${shiftId}_${dutyIdx}Lat" value="${duty.locationLat || ''}">
+              <input type="hidden" id="dutyLoc_${driverId}_${shiftId}_${dutyIdx}Lng" value="${duty.locationLng || ''}">
+            </div>
             <select class="duty-inline-select vehicle ${!duty.vehicle && needsVehicle ? 'missing' : ''}" 
                     onchange="updateDutyVehicle('${driverId}', '${shiftId}', ${dutyIdx}, this.value)" title="Vehicle">
               ${vehicleOptions}
@@ -7454,6 +7502,22 @@
       duty.locationLng = locationLng;
       
       showToast('Location updated');
+    }
+    
+    // Wrapper for inline location input - reads from DOM and calls updateDutyLocation
+    function saveDutyLocation(driverId, shiftId, dutyIdx) {
+      const inputId = `dutyLoc_${driverId}_${shiftId}_${dutyIdx}`;
+      const nameInput = document.getElementById(inputId);
+      const latInput = document.getElementById(inputId + 'Lat');
+      const lngInput = document.getElementById(inputId + 'Lng');
+      
+      if (!nameInput) return;
+      
+      const locationName = nameInput.value || null;
+      const locationLat = parseFloat(latInput?.value) || null;
+      const locationLng = parseFloat(lngInput?.value) || null;
+      
+      updateDutyLocation(driverId, shiftId, dutyIdx, locationName, locationLat, locationLng);
     }
     
     async function updateDutyType(driverId, shiftId, dutyIdx, value) {
