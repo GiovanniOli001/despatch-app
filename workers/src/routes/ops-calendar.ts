@@ -47,6 +47,41 @@ const QLD_HOLIDAYS: Record<string, string> = {
   '2027-12-27': 'Boxing Day (observed)',
 };
 
+// QLD School Holidays 2025-2027 (date ranges)
+// Format: { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD', name: 'Holiday Name' }
+const QLD_SCHOOL_HOLIDAYS: Array<{ start: string; end: string; name: string }> = [
+  // 2025
+  { start: '2025-01-01', end: '2025-01-27', name: 'Summer Holidays' },
+  { start: '2025-04-05', end: '2025-04-21', name: 'Autumn Holidays' },
+  { start: '2025-06-28', end: '2025-07-13', name: 'Winter Holidays' },
+  { start: '2025-09-20', end: '2025-10-06', name: 'Spring Holidays' },
+  { start: '2025-12-13', end: '2025-12-31', name: 'Summer Holidays' },
+  // 2026
+  { start: '2026-01-01', end: '2026-01-26', name: 'Summer Holidays' },
+  { start: '2026-04-03', end: '2026-04-19', name: 'Autumn Holidays' },
+  { start: '2026-06-27', end: '2026-07-12', name: 'Winter Holidays' },
+  { start: '2026-09-19', end: '2026-10-05', name: 'Spring Holidays' },
+  { start: '2026-12-12', end: '2026-12-31', name: 'Summer Holidays' },
+  // 2027
+  { start: '2027-01-01', end: '2027-01-26', name: 'Summer Holidays' },
+  { start: '2027-03-26', end: '2027-04-11', name: 'Autumn Holidays' },
+  { start: '2027-06-26', end: '2027-07-11', name: 'Winter Holidays' },
+  { start: '2027-09-18', end: '2027-10-04', name: 'Spring Holidays' },
+  { start: '2027-12-11', end: '2027-12-31', name: 'Summer Holidays' },
+  // 2028 (partial - for summer continuation)
+  { start: '2028-01-01', end: '2028-01-23', name: 'Summer Holidays' },
+];
+
+// Helper function to check if a date falls within school holidays
+function getSchoolHoliday(dateStr: string): string | null {
+  for (const holiday of QLD_SCHOOL_HOLIDAYS) {
+    if (dateStr >= holiday.start && dateStr <= holiday.end) {
+      return holiday.name;
+    }
+  }
+  return null;
+}
+
 export async function handleOpsCalendar(
   request: Request,
   env: Env,
@@ -159,29 +194,72 @@ async function getMonthView(env: Env, year: number, month: number): Promise<Resp
       .filter(r => r.calendarStartDate <= dateStr && r.calendarEndDate >= dateStr)
       .map(r => r.id);
 
+    // Check for public holiday
+    const publicHoliday = QLD_HOLIDAYS[dateStr] || null;
+    
+    // Check for school holiday
+    const schoolHoliday = getSchoolHoliday(dateStr);
+
     days.push({
       date: dateStr,
       dayOfWeek,
       isToday: dateStr === today,
       isWeekend: dayOfWeek === 0 || dayOfWeek === 6,
-      isHoliday: !!QLD_HOLIDAYS[dateStr],
-      holidayName: QLD_HOLIDAYS[dateStr] || null,
+      isHoliday: !!publicHoliday,
+      holidayName: publicHoliday,
+      isSchoolHoliday: !!schoolHoliday,
+      schoolHolidayName: schoolHoliday,
       rosters: rostersOnDay
     });
   }
 
   return json({
+    success: true,
     data: {
       year,
       month,
       monthName: monthNames[month - 1],
+      daysInMonth,
       days,
       rosters: calendarRosters
     }
   });
 }
 
-// Get ALL rosters (for sidebar - includes unscheduled ones)
+async function checkOverlap(
+  env: Env, 
+  startDate: string, 
+  endDate: string, 
+  excludeRosterId: string | null
+): Promise<Response> {
+  let query = `
+    SELECT id, code, name, calendar_start_date, calendar_end_date, status
+    FROM rosters
+    WHERE tenant_id = ?
+      AND deleted_at IS NULL
+      AND calendar_start_date IS NOT NULL
+      AND calendar_end_date IS NOT NULL
+      AND calendar_start_date <= ?
+      AND calendar_end_date >= ?
+  `;
+  const params: any[] = [TENANT_ID, endDate, startDate];
+
+  if (excludeRosterId) {
+    query += ` AND id != ?`;
+    params.push(excludeRosterId);
+  }
+
+  const overlapping = await env.DB.prepare(query).bind(...params).all();
+
+  return json({
+    success: true,
+    data: {
+      hasOverlap: overlapping.results.length > 0,
+      overlappingRosters: overlapping.results
+    }
+  });
+}
+
 async function getAllRosters(env: Env): Promise<Response> {
   const rosters = await env.DB.prepare(`
     SELECT 
@@ -199,11 +277,10 @@ async function getAllRosters(env: Env): Promise<Response> {
     FROM rosters r
     WHERE r.tenant_id = ? 
       AND r.deleted_at IS NULL
-      AND r.status != 'archived'
-    ORDER BY r.start_date DESC, r.code
+    ORDER BY r.calendar_start_date DESC NULLS LAST, r.start_date DESC, r.code
   `).bind(TENANT_ID).all();
 
-  const result = (rosters.results as any[]).map(r => ({
+  const data = (rosters.results as any[]).map(r => ({
     id: r.id,
     code: r.code,
     name: r.name,
@@ -216,57 +293,11 @@ async function getAllRosters(env: Env): Promise<Response> {
     assignedCount: r.assigned_count,
     unassignedCount: r.entry_count - r.assigned_count,
     notes: r.notes,
-    isScheduled: !!(r.calendar_start_date && r.calendar_end_date)
+    isScheduled: !!r.calendar_start_date && !!r.calendar_end_date
   }));
 
-  return json({ data: result });
-}
-
-async function checkOverlap(
-  env: Env, 
-  startDate: string, 
-  endDate: string,
-  excludeRosterId: string | null
-): Promise<Response> {
-  // Check against calendar dates of published rosters
-  let query = `
-    SELECT r.id, r.code, r.name, r.calendar_start_date, r.calendar_end_date
-    FROM rosters r
-    WHERE r.tenant_id = ? 
-      AND r.deleted_at IS NULL
-      AND r.status = 'published'
-      AND r.calendar_start_date IS NOT NULL
-      AND r.calendar_end_date IS NOT NULL
-      AND r.calendar_start_date <= ?
-      AND r.calendar_end_date >= ?
-  `;
-  
-  const bindings: any[] = [TENANT_ID, endDate, startDate];
-  
-  if (excludeRosterId) {
-    query += ` AND r.id != ?`;
-    bindings.push(excludeRosterId);
-  }
-
-  const overlapping = await env.DB.prepare(query).bind(...bindings).all();
-
-  const conflicts = (overlapping.results as any[]).map(roster => {
-    const overlapStart = startDate > roster.calendar_start_date ? startDate : roster.calendar_start_date;
-    const overlapEnd = endDate < roster.calendar_end_date ? endDate : roster.calendar_end_date;
-    
-    return {
-      rosterId: roster.id,
-      rosterCode: roster.code,
-      rosterName: roster.name,
-      overlapStart,
-      overlapEnd
-    };
-  });
-
   return json({
-    data: {
-      hasOverlap: conflicts.length > 0,
-      conflicts
-    }
+    success: true,
+    data
   });
 }

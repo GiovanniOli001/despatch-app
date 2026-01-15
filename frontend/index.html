@@ -3205,6 +3205,26 @@
       text-overflow: ellipsis;
     }
     
+    .calendar-day.school-holiday {
+      background: rgba(139, 92, 246, 0.06);
+    }
+    
+    .calendar-school-badge {
+      font-size: 8px;
+      padding: 1px 4px;
+      background: rgba(139, 92, 246, 0.15);
+      color: #8b5cf6;
+      border-radius: 3px;
+      white-space: nowrap;
+    }
+    
+    .calendar-badges {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    
     .calendar-roster-bars {
       display: flex;
       flex-direction: column;
@@ -12715,12 +12735,26 @@ Guidelines:
         if (day.isWeekend) classes.push('weekend');
         if (day.isToday) classes.push('today');
         if (day.isHoliday) classes.push('holiday');
+        if (day.isSchoolHoliday && !day.isHoliday) classes.push('school-holiday');
+        
+        // Build badges for holidays
+        let badgesHtml = '';
+        if (day.isHoliday || day.isSchoolHoliday) {
+          badgesHtml = '<div class="calendar-badges">';
+          if (day.isHoliday) {
+            badgesHtml += `<div class="calendar-holiday-badge" title="${day.holidayName}">${day.holidayName}</div>`;
+          }
+          if (day.isSchoolHoliday) {
+            badgesHtml += `<div class="calendar-school-badge" title="${day.schoolHolidayName}">🎒 School Hols</div>`;
+          }
+          badgesHtml += '</div>';
+        }
         
         html += `
           <div class="${classes.join(' ')}">
             <div class="calendar-day-header">
               <div class="calendar-day-number">${parseInt(day.date.split('-')[2])}</div>
-              ${day.isHoliday ? `<div class="calendar-holiday-badge" title="${day.holidayName}">${day.holidayName}</div>` : ''}
+              ${badgesHtml}
             </div>
             <div class="calendar-roster-bars">
         `;
@@ -13102,12 +13136,21 @@ Guidelines:
       document.getElementById('rosterDayLabel').textContent = 
         `${dayNames[currentRosterDate.getDay()]}, ${formatDateShort(currentRosterDate)}`;
       
-      // Check for holiday
+      // Check for public holiday and school holiday
       const holidayBadge = document.getElementById('rosterDayHoliday');
       const holiday = getAustralianHoliday(dateStr);
+      const schoolHol = getSchoolHoliday(dateStr);
+      
       if (holiday) {
         holidayBadge.textContent = holiday;
         holidayBadge.style.display = 'inline';
+        holidayBadge.style.background = 'rgba(239, 68, 68, 0.15)';
+        holidayBadge.style.color = 'var(--accent-red)';
+      } else if (schoolHol) {
+        holidayBadge.textContent = '🎒 ' + schoolHol;
+        holidayBadge.style.display = 'inline';
+        holidayBadge.style.background = 'rgba(139, 92, 246, 0.15)';
+        holidayBadge.style.color = '#8b5cf6';
       } else {
         holidayBadge.style.display = 'none';
       }
@@ -13165,6 +13208,39 @@ Guidelines:
         '2027-12-28': "Boxing Day (Observed)",
       };
       return holidays[dateStr] || null;
+    }
+    
+    function getSchoolHoliday(dateStr) {
+      // QLD School Holidays 2025-2028
+      const schoolHolidays = [
+        // 2025
+        { start: '2025-01-01', end: '2025-01-27', name: 'Summer Holidays' },
+        { start: '2025-04-05', end: '2025-04-21', name: 'Autumn Holidays' },
+        { start: '2025-06-28', end: '2025-07-13', name: 'Winter Holidays' },
+        { start: '2025-09-20', end: '2025-10-06', name: 'Spring Holidays' },
+        { start: '2025-12-13', end: '2025-12-31', name: 'Summer Holidays' },
+        // 2026
+        { start: '2026-01-01', end: '2026-01-26', name: 'Summer Holidays' },
+        { start: '2026-04-03', end: '2026-04-19', name: 'Autumn Holidays' },
+        { start: '2026-06-27', end: '2026-07-12', name: 'Winter Holidays' },
+        { start: '2026-09-19', end: '2026-10-05', name: 'Spring Holidays' },
+        { start: '2026-12-12', end: '2026-12-31', name: 'Summer Holidays' },
+        // 2027
+        { start: '2027-01-01', end: '2027-01-26', name: 'Summer Holidays' },
+        { start: '2027-03-26', end: '2027-04-11', name: 'Autumn Holidays' },
+        { start: '2027-06-26', end: '2027-07-11', name: 'Winter Holidays' },
+        { start: '2027-09-18', end: '2027-10-04', name: 'Spring Holidays' },
+        { start: '2027-12-11', end: '2027-12-31', name: 'Summer Holidays' },
+        // 2028 (partial - for summer continuation)
+        { start: '2028-01-01', end: '2028-01-23', name: 'Summer Holidays' },
+      ];
+      
+      for (const holiday of schoolHolidays) {
+        if (dateStr >= holiday.start && dateStr <= holiday.end) {
+          return holiday.name;
+        }
+      }
+      return null;
     }
     
     // ============================================
