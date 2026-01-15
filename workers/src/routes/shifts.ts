@@ -85,6 +85,11 @@ export async function handleShifts(
     return duplicateShiftTemplate(env, id);
   }
 
+  // GET /api/shifts/:id/lock-status - Check if shift is locked by published rosters
+  if (method === 'GET' && id && subResource === 'lock-status') {
+    return getShiftLockStatus(env, id);
+  }
+
   return error('Method not allowed', 405);
 }
 
@@ -210,6 +215,21 @@ async function updateShiftTemplate(env: Env, id: string, input: ShiftTemplateInp
     `).bind(id, TENANT_ID).first();
 
     if (!existing) return error('Shift template not found', 404);
+
+    // Check if shift is locked by published rosters
+    const publishedRoster = await env.DB.prepare(`
+      SELECT r.code FROM rosters r
+      JOIN roster_entries re ON re.roster_id = r.id
+      WHERE re.shift_template_id = ?
+      AND r.status = 'published'
+      AND r.deleted_at IS NULL
+      AND re.deleted_at IS NULL
+      LIMIT 1
+    `).bind(id).first();
+    
+    if (publishedRoster) {
+      return error(`Cannot edit shift - it is used in published roster "${(publishedRoster as any).code}". Unpublish the roster first.`, 403);
+    }
 
     const now = new Date().toISOString();
 
@@ -387,6 +407,21 @@ async function saveDutyBlocks(env: Env, templateId: string, blocks: DutyBlockInp
 }
 
 async function deleteShiftTemplate(env: Env, id: string): Promise<Response> {
+  // Check if shift is locked by published rosters
+  const publishedRoster = await env.DB.prepare(`
+    SELECT r.code FROM rosters r
+    JOIN roster_entries re ON re.roster_id = r.id
+    WHERE re.shift_template_id = ?
+    AND r.status = 'published'
+    AND r.deleted_at IS NULL
+    AND re.deleted_at IS NULL
+    LIMIT 1
+  `).bind(id).first();
+  
+  if (publishedRoster) {
+    return error(`Cannot delete shift - it is used in published roster "${(publishedRoster as any).code}". Unpublish the roster first.`, 403);
+  }
+
   const result = await env.DB.prepare(`
     UPDATE shift_templates SET deleted_at = ?, updated_at = ?
     WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
@@ -462,4 +497,25 @@ async function duplicateShiftTemplate(env: Env, sourceId: string): Promise<Respo
   }
 
   return getShiftTemplate(env, newId);
+}
+
+async function getShiftLockStatus(env: Env, id: string): Promise<Response> {
+  // Check if this shift template is used in any published rosters
+  const publishedRosters = await env.DB.prepare(`
+    SELECT DISTINCT r.id, r.code, r.name, r.start_date, r.end_date
+    FROM rosters r
+    JOIN roster_entries re ON re.roster_id = r.id
+    WHERE re.shift_template_id = ?
+    AND r.status = 'published'
+    AND r.deleted_at IS NULL
+    AND re.deleted_at IS NULL
+  `).bind(id).all();
+  
+  const isLocked = publishedRosters.results.length > 0;
+  
+  return json({
+    locked: isLocked,
+    reason: isLocked ? 'This shift is used in published roster(s) and cannot be edited.' : null,
+    published_rosters: publishedRosters.results
+  });
 }

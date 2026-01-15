@@ -275,6 +275,17 @@ async function createRoster(env: Env, input: RosterInput): Promise<Response> {
 }
 
 async function updateRoster(env: Env, id: string, input: Partial<RosterInput>): Promise<Response> {
+  // Check if roster is published
+  const roster = await env.DB.prepare(`
+    SELECT status FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(id, TENANT_ID).first();
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  if ((roster as any).status === 'published') {
+    return error('Cannot edit a published roster. Unpublish it first to make changes.', 403);
+  }
+  
   const updates: string[] = [];
   const bindings: any[] = [];
   
@@ -633,7 +644,7 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
       
       // Only exclude if same roster AND same block (we're updating an existing entry)
       // Different rosters with same block SHOULD conflict
-      // Also exclude deleted rosters
+      // Also exclude deleted rosters AND deleted shift templates
       const overlap = await env.DB.prepare(`
         SELECT re.id, db.name as block_name, st.code as shift_code, r.code as roster_code
         FROM roster_entries re
@@ -643,6 +654,7 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
         WHERE re.date = ? AND re.driver_id = ? 
         AND re.deleted_at IS NULL
         AND r.deleted_at IS NULL
+        AND st.deleted_at IS NULL
         AND NOT (re.roster_id = ? AND re.duty_block_id = ?)
         AND (
           (re.start_time < ? AND re.end_time > ?) OR

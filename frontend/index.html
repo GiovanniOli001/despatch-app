@@ -12193,6 +12193,18 @@ Guidelines:
     }
     
     async function editShift(id) {
+      // Check if shift is locked by published rosters
+      try {
+        const lockStatus = await apiRequest(`/shifts/${id}/lock-status`);
+        if (lockStatus.locked) {
+          const rosterNames = lockStatus.published_rosters.map(r => r.code).join(', ');
+          showToast(`This shift cannot be edited - it is used in published roster(s): ${rosterNames}. Unpublish the roster(s) first.`, 'error');
+          return;
+        }
+      } catch (err) {
+        console.error('Lock check failed:', err);
+      }
+      
       // Fetch full shift data with duty blocks
       try {
         await loadShiftFormData();
@@ -12901,11 +12913,12 @@ Guidelines:
     }
     
     async function unpublishRosterFromCalendar(rosterId) {
-      if (!confirm('Unpublish this roster? It will be removed from Dispatch.')) return;
+      const confirmMsg = 'WARNING: Unpublishing this roster will remove ALL duties from this roster from Dispatch.\n\nDrivers will no longer see these assignments until the roster is published again.\n\nContinue?';
+      if (!confirm(confirmMsg)) return;
       
       try {
         await apiRequest(`/roster/containers/${rosterId}/unpublish`, { method: 'POST' });
-        showToast('Roster unpublished', 'success');
+        showToast('Roster unpublished - duties removed from dispatch', 'success');
         loadOpsCalendar();
       } catch (err) {
         showToast(err.message || 'Failed to unpublish', 'error');
@@ -13558,6 +13571,12 @@ Guidelines:
     function editRosterDetails(id) {
       const roster = rostersData.find(r => r.id === id);
       if (!roster) return;
+      
+      // Block editing if roster is published
+      if (roster.status === 'published') {
+        showToast('This roster cannot be edited as it is published to the Ops calendar. Unpublish the roster to make changes.', 'error');
+        return;
+      }
       
       document.getElementById('rosterModalTitle').textContent = 'Edit Roster';
       document.getElementById('rosterCode').value = roster.code;
