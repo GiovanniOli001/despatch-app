@@ -688,7 +688,6 @@
       top: 2px;
       height: 32px;
       border-radius: 4px;
-      display: flex;
     }
 
     .style-b .shift-bar.regular { background: #1e3a5f; }
@@ -697,12 +696,10 @@
     .style-b .shift-bar.adhoc { background: #065f46; }
 
     .style-b .shift-bar .segment {
+      position: absolute;
+      top: 0;
       height: calc(100% - 10px);
-      position: relative;
-      border-right: 1px solid rgba(255,255,255,0.1);
     }
-
-    .style-b .shift-bar .segment:last-child { border-right: none; }
 
     .style-b .shift-bar .segment.driving { background: rgba(59, 130, 246, 0.6); }
     .style-b .shift-bar .segment.oov { background: rgba(245, 158, 11, 0.3); }
@@ -825,13 +822,14 @@
       left: 0;
       right: 0;
       height: 10px;
-      display: flex;
       background: rgba(0,0,0,0.4);
       border-radius: 0 0 4px 4px;
       overflow: hidden;
     }
     
     .style-b .shift-bar .vehicle-segment {
+      position: absolute;
+      top: 0;
       height: 100%;
       display: flex;
       align-items: center;
@@ -7117,50 +7115,26 @@
           let segmentsHTML = '';
           let vehicleStripHTML = '';
           
-          if (style === 'style-b') {
-            // Style B: Flexbox layout - duties flow sequentially
-            dutiesToRender.forEach(duty => {
-              const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-              const isCancelled = duty.cancelled;
-              
-              if (isCancelled) {
-                // Show cancelled ghost (only when showCancelledDuties is true)
-                segmentsHTML += `<div class="segment cancelled-ghost" style="width: ${dutyWidth}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
-                vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%; opacity: 0.3;"></div>`;
+          // All styles now use absolute positioning for segments
+          dutiesToRender.forEach(duty => {
+            const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
+            const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
+            const isCancelled = duty.cancelled;
+            
+            if (isCancelled) {
+              segmentsHTML += `<div class="segment cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
+              vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%; opacity: 0.3;"></div>`;
+            } else {
+              segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
+              if (duty.vehicle) {
+                vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
               } else {
-                // Active duty
-                segmentsHTML += `<div class="segment ${duty.type}" style="width: ${dutyWidth}%;"></div>`;
-                if (duty.vehicle) {
-                  vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
-                } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
-                  vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
-                } else {
-                  vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
-                }
+                vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
               }
-            });
-          } else {
-            // Styles C/D: Absolute positioning
-            dutiesToRender.forEach(duty => {
-              const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-              const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
-              const isCancelled = duty.cancelled;
-              
-              if (isCancelled) {
-                segmentsHTML += `<div class="segment cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
-                vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%; opacity: 0.3;"></div>`;
-              } else {
-                segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
-                if (duty.vehicle) {
-                  vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
-                } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
-                  vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
-                } else {
-                  vehicleStripHTML += `<div class="vehicle-segment none" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
-                }
-              }
-            });
-          }
+            }
+          });
           
           blocksHTML += `
             <div class="shift-bar ${shiftTypeClass}" style="left: ${shiftLeft}%; width: ${shiftWidth}%;">
