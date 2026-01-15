@@ -1,5 +1,7 @@
 # Dispatch App - Complete Project Reference
 
+**Version:** 1.2.0  
+**Last Updated:** January 15, 2026  
 **CRITICAL: Claude must read this entire file before making any changes or suggestions.**
 
 ---
@@ -138,6 +140,9 @@ Shift Templates (reusable definitions)
 Rosters (date range containers, e.g., "Week 3 Jan 2026")
   └── Roster Entries (assignments: block + date + driver)
        └── Roster Duty Lines (instance-specific duty line data)
+
+Adhoc Entries (created directly in Dispatch, no template)
+  └── Roster Duty Lines (same structure as rostered entries)
 ```
 
 ### Key Tables
@@ -183,19 +188,36 @@ status TEXT DEFAULT 'draft'  -- draft, published, archived
 **roster_entries**
 ```sql
 id TEXT PRIMARY KEY,
-roster_id TEXT,
-shift_template_id TEXT,
+roster_id TEXT,              -- NULL for adhoc entries
+shift_template_id TEXT,      -- NULL for adhoc entries
 duty_block_id TEXT,
 date TEXT NOT NULL,
+name TEXT NOT NULL,          -- Shift name or adhoc description
+shift_type TEXT DEFAULT 'regular',  -- 'regular', 'adhoc', etc.
 driver_id TEXT,
 vehicle_id TEXT,
 start_time REAL,
-end_time REAL
+end_time REAL,
+status TEXT DEFAULT 'scheduled',
+source TEXT DEFAULT 'manual'  -- 'manual', 'template', 'copied'
 ```
 
 **roster_duty_lines**
-- Instance-specific duty lines (created when dispatch edits are made)
-- Overrides template duty lines for specific roster entries
+```sql
+id TEXT PRIMARY KEY,
+roster_entry_id TEXT NOT NULL,
+sequence INTEGER NOT NULL,
+start_time REAL NOT NULL,
+end_time REAL NOT NULL,
+duty_type TEXT NOT NULL DEFAULT 'driving',
+description TEXT,
+vehicle_id TEXT,
+vehicle_number TEXT,
+pay_type TEXT NOT NULL DEFAULT 'STD',
+location_name TEXT,
+location_lat REAL,
+location_lng REAL
+```
 
 ### Time Format
 - **Decimal hours**: 6.5 = 06:30, 14.25 = 14:15, 23.75 = 23:45
@@ -231,21 +253,24 @@ Holidays display as orange badge on roster grid.
 - **Vehicle-centric**: Rows are vehicles, shows their assignments
 
 ### Data Sources
-- **Real mode**: Loads from published rosters via API
+- **Real mode**: Loads from published rosters AND adhoc entries via API
 - **Fake mode**: Generated test data for demos
 
 ### Inline Duty Editing
 Each duty line in dispatch can be edited inline:
-- Start/end time
+- Start/end time (via up/down arrows or direct edit)
 - Duty type (driving, OOV, break, etc.)
 - Description
 - Location (with autocomplete)
 - Vehicle assignment
 - Pay type
 
+Changes save immediately via API.
+
 ### Location Functionality
-- **Autocomplete**: Uses Nominatim geocoding service
+- **Autocomplete**: Uses Nominatim geocoding service with debounced search
 - **Storage**: location_name (text), location_lat (decimal), location_lng (decimal)
+- **z-index**: Autocomplete dropdown appears above other rows (z-index: 9999)
 - **Smart Assignment**: Prioritizes jobs with real coordinates for proximity matching
 
 ### Smart Vehicle Assignment
@@ -256,8 +281,18 @@ Algorithm for suggesting vehicles:
 4. Prioritize vehicles with real coordinate data over description parsing
 
 ### Duty Creation
-- **Existing entries**: Can add duty lines via API (`create-duty-line`)
-- **Adhoc duties**: Created locally but need backend support for full persistence
+
+**Adding to existing roster entries:**
+- Use inline + button or up/down arrows
+- Calls `POST /api/dispatch/create-duty-line`
+- Duty is added within the shift boundaries
+
+**Adhoc duties (no roster/template):**
+- Use "+ Add Duty" button on driver row
+- Calls `POST /api/dispatch/create-adhoc-shift`
+- Creates new roster_entry with shift_template_id = NULL
+- Shift name uses user's description (or auto-generates "ADHOC-xxx")
+- Persists to database and loads on refresh
 
 ---
 
@@ -270,6 +305,7 @@ Algorithm for suggesting vehicles:
 - `POST /api/dispatch/unassign` - Remove assignment
 - `POST /api/dispatch/update-duty-line` - Update existing duty line
 - `POST /api/dispatch/create-duty-line` - Create new duty line for existing entry
+- `POST /api/dispatch/create-adhoc-shift` - Create adhoc roster entry with duty
 
 ### Roster
 - `GET /api/roster/containers` - List all rosters
@@ -284,9 +320,10 @@ Algorithm for suggesting vehicles:
 ### Shift Templates
 - `GET /api/shifts` - List templates
 - `GET /api/shifts/:id` - Get template with blocks/lines
-- `POST /api/shifts` - Create template
+- `POST /api/shifts` - Create template (includes location fields)
 - `PUT /api/shifts/:id` - Update template (replaces all blocks/lines)
 - `DELETE /api/shifts/:id` - Soft delete
+- `POST /api/shifts/:id/duplicate` - Duplicate template
 
 ### Employees
 - `GET /api/employees` - List (with search, status, role filters)
@@ -337,17 +374,25 @@ Algorithm for suggesting vehicles:
 ### Completed Modules
 - ✅ HRM (Employees) - Full CRUD with modal forms
 - ✅ Vehicles - Full CRUD with modal forms
-- ✅ Shift Templates - Builder with duty blocks/lines, visual Gantt preview
+- ✅ Shift Templates - Builder with duty blocks/lines, visual Gantt preview, location support
 - ✅ Roster - Gantt-style drag-drop assignment
 - ✅ Dispatch - Day view with driver/vehicle centric modes
+- ✅ Inline duty editing - All fields editable with persistence
+- ✅ Adhoc shifts - Create duties without templates, persist to database
+- ✅ Location autocomplete - Nominatim integration for shift templates and dispatch
 
-### In Progress
-- Location functionality across all modules
-- Adhoc shift/duty creation (shifts not from templates)
-- Charters module (quote-to-invoice workflow)
+### Recently Completed (v1.2.0)
+- ✅ Location autocomplete z-index fix (dropdown appears above other rows)
+- ✅ PAY dropdown width fix (no longer cut off)
+- ✅ Add Duty prioritizes slots within existing shifts
+- ✅ Shift template location fields save correctly
+- ✅ Adhoc shift creation with full database persistence
+- ✅ Adhoc shifts load on dispatch day view refresh
+- ✅ Adhoc shift name respects user's description
 
 ### Planned
 - Operations Calendar (week/month view)
+- Charters module (quote-to-invoice workflow)
 - Maintenance tracking
 - Reporting/exports
 - Mobile optimization
@@ -385,6 +430,12 @@ git push
 ### Location autocomplete not working
 - Nominatim has rate limits, wait and retry
 - Check browser console for errors
+- Ensure z-index is high enough (9999)
+
+### Adhoc duties not saving
+- Check browser Network tab for API response
+- Verify `create-adhoc-shift` endpoint returns success
+- Check `roster_entries` table has entry with `shift_template_id = NULL`
 
 ---
 
@@ -414,6 +465,12 @@ A: Uses Nominatim (OpenStreetMap) geocoding. User types, debounced search querie
 ### Q: How does smart assignment work?
 A: For vehicle assignment, system finds available vehicles, calculates distance from duty location to vehicle's last location, sorts by proximity.
 
+### Q: How do adhoc shifts work?
+A: Created via `POST /api/dispatch/create-adhoc-shift`. Creates a roster_entry with shift_template_id = NULL. The dispatch day view queries both rostered entries (via JOIN on templates) and adhoc entries (shift_template_id IS NULL) separately, then merges them.
+
+### Q: What's the difference between create-duty-line and create-adhoc-shift?
+A: `create-duty-line` adds a duty to an EXISTING roster entry. `create-adhoc-shift` creates a NEW roster entry (with no template) AND its first duty line.
+
 ---
 
 ## SECTION 12: REMINDERS FOR CLAUDE
@@ -428,3 +485,29 @@ A: For vehicle assignment, system finds available vehicles, calculates distance 
 8. **After changes, remind user to hard refresh** - Ctrl+Shift+R
 9. **Times are decimal hours** - 6.5 = 06:30, not 6:50
 10. **Soft deletes only** - Set deleted_at timestamp, never hard delete
+11. **Adhoc entries have shift_template_id = NULL** - Query them separately
+12. **Location fields**: location_name, location_lat, location_lng in both template and roster duty lines
+
+---
+
+## SECTION 13: VERSION HISTORY
+
+### v1.2.0 (January 15, 2026)
+- Added adhoc shift creation API (`create-adhoc-shift`)
+- Adhoc shifts now persist to database and load on refresh
+- Fixed location autocomplete z-index (appears above other rows)
+- Fixed PAY dropdown width (no longer cut off)
+- Add Duty button prioritizes slots within existing shifts
+- Shift template location fields now save correctly
+- Adhoc shift name uses user's description
+
+### v1.1.0 (January 2026)
+- Roster module complete with drag-drop assignment
+- Dispatch day view with inline editing
+- Location autocomplete with Nominatim
+- Inline duty editing with persistence
+
+### v1.0.0 (December 2025)
+- Initial release
+- HRM, Vehicles, Shift Templates modules
+- Basic roster structure
