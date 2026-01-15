@@ -1,6 +1,6 @@
 # Dispatch App - Complete Project Reference
 
-**Version:** 1.2.0  
+**Version:** 1.3.0  
 **Last Updated:** January 15, 2026  
 **CRITICAL: Claude must read this entire file before making any changes or suggestions.**
 
@@ -32,6 +32,7 @@ C:\Users\Giovanni\Downloads\despatch-app\
         │   ├── shifts.ts       ← Shift templates API
         │   ├── roster.ts       ← Roster management API
         │   ├── dispatch.ts     ← Daily dispatch API
+        │   ├── ops-calendar.ts ← Operations calendar API
         │   └── config.ts       ← Config endpoints
         └── db\
             └── schema.sql      ← Database schema
@@ -50,28 +51,6 @@ C:\Users\Giovanni\Downloads\despatch-app\
 3. User runs copy commands (one at a time)
 4. User deploys backend (if changed): `npx wrangler deploy`
 5. User deploys frontend (if changed): `git add . && git commit && git push`
-
-### Copy Commands (ONE AT A TIME):
-
-For index.html:
-```
-copy C:\Users\Giovanni\Downloads\index.html C:\Users\Giovanni\Downloads\despatch-app\frontend\index.html
-```
-
-For dispatch.ts:
-```
-copy C:\Users\Giovanni\Downloads\dispatch.ts C:\Users\Giovanni\Downloads\despatch-app\workers\src\routes\dispatch.ts
-```
-
-For roster.ts:
-```
-copy C:\Users\Giovanni\Downloads\roster.ts C:\Users\Giovanni\Downloads\despatch-app\workers\src\routes\roster.ts
-```
-
-For shifts.ts:
-```
-copy C:\Users\Giovanni\Downloads\shifts.ts C:\Users\Giovanni\Downloads\despatch-app\workers\src\routes\shifts.ts
-```
 
 ### Backend Deploy (ONE AT A TIME):
 ```
@@ -95,213 +74,302 @@ git commit -m "Your message here"
 git push
 ```
 
-### Database Migration (ONE AT A TIME):
-```
-cd C:\Users\Giovanni\Downloads\despatch-app\workers
-```
-```
-npx wrangler d1 execute dispatch-db --remote --file=src/db/migration_xyz.sql
-```
+### Database Commands (ONE AT A TIME):
 
-### If Git Push Rejected:
+List all tables:
 ```
-git pull --rebase
-```
-```
-git push
+npx wrangler d1 execute dispatch-db --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
 ```
 
 ---
 
-## SECTION 3: ARCHITECTURE
+## SECTION 3: DATABASE SCHEMA (CRITICAL)
 
+**IMPORTANT: Understand foreign key relationships before modifying data!**
+
+### Complete Table List
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Cloudflare    │     │   Cloudflare    │     │   Cloudflare    │
-│     Pages       │────▶│    Workers      │────▶│       D1        │
-│   (Frontend)    │     │   (API)         │     │   (Database)    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-```
-
-### External Services
-- **Nominatim** - Free geocoding/location autocomplete (OpenStreetMap)
-- **OSRM** - Free routing/distance calculations (planned)
-
----
-
-## SECTION 4: DATA MODEL
-
-### Hierarchy
-```
-Shift Templates (reusable definitions)
-  └── Duty Blocks (assignable units, e.g., "AM Block", "PM Block")
-       └── Duty Lines (time segments within a block)
-
-Rosters (date range containers, e.g., "Week 3 Jan 2026")
-  └── Roster Entries (assignments: block + date + driver)
-       └── Roster Duty Lines (instance-specific duty line data)
-
-Adhoc Entries (created directly in Dispatch, no template)
-  └── Roster Duty Lines (same structure as rostered entries)
+_cf_KV                         (Cloudflare internal)
+audit_log
+customers
+depots
+duty_types
+employee_daily_status
+employees
+locations
+pay_types
+roster_duties                  (legacy - may be empty)
+roster_duty_lines              ← Instance-specific duty data
+roster_entries                 ← Assignments (block + date + driver)
+rosters                        ← Roster containers
+routes
+shift_template_duty_blocks     ← Duty blocks within templates
+shift_template_duty_lines      ← Duty lines within blocks
+shift_templates                ← Reusable shift definitions
+tenants
+vehicle_daily_status
+vehicles
 ```
 
-### Key Tables
+### Foreign Key Relationships (CRITICAL!)
+
+```
+shift_templates
+    ↑
+    │ shift_template_id
+    │
+shift_template_duty_blocks ←───────────────┐
+    ↑                                      │
+    │ duty_block_id                        │ duty_block_id
+    │                                      │
+shift_template_duty_lines          roster_entries
+                                          ↑
+                                          │ roster_entry_id
+                                          │
+                                   roster_duty_lines
+```
+
+**DELETION ORDER (must follow to avoid FK errors):**
+1. `roster_duty_lines` (references roster_entries)
+2. `roster_entries` (references shift_template_duty_blocks, rosters)
+3. `rosters`
+4. `shift_template_duty_lines` (references shift_template_duty_blocks)
+5. `shift_template_duty_blocks` (references shift_templates)
+6. `shift_templates`
+
+### Table Definitions
 
 **shift_templates**
-- Reusable shift definitions (e.g., "Early Shift", "School Run AM")
+```sql
+CREATE TABLE shift_templates (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    code TEXT NOT NULL,              -- e.g., "EARLY-001"
+    name TEXT NOT NULL,              -- e.g., "Early Morning Shift"
+    shift_type TEXT DEFAULT 'regular',
+    default_start REAL,              -- Decimal hours
+    default_end REAL,
+    notes TEXT,
+    is_active INTEGER DEFAULT 1,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
 
 **shift_template_duty_blocks**
 ```sql
-id TEXT PRIMARY KEY,
-shift_template_id TEXT NOT NULL,
-sequence INTEGER NOT NULL,
-name TEXT NOT NULL,
-driver_id TEXT  -- Default driver (optional)
+CREATE TABLE shift_template_duty_blocks (
+    id TEXT PRIMARY KEY,
+    shift_template_id TEXT NOT NULL REFERENCES shift_templates(id),
+    sequence INTEGER NOT NULL,
+    name TEXT NOT NULL,              -- e.g., "Duty 1", "AM Block"
+    driver_id TEXT REFERENCES employees(id),  -- Default driver (optional)
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ```
 
 **shift_template_duty_lines**
 ```sql
-id TEXT PRIMARY KEY,
-duty_block_id TEXT NOT NULL,
-sequence INTEGER NOT NULL,
-start_time REAL NOT NULL,  -- Decimal hours (6.5 = 06:30)
-end_time REAL NOT NULL,
-duty_type TEXT NOT NULL DEFAULT 'driving',
-description TEXT,
-vehicle_id TEXT,
-pay_type TEXT NOT NULL DEFAULT 'STD',
-location_name TEXT,
-location_lat REAL,
-location_lng REAL
+CREATE TABLE shift_template_duty_lines (
+    id TEXT PRIMARY KEY,
+    duty_block_id TEXT NOT NULL REFERENCES shift_template_duty_blocks(id),
+    sequence INTEGER NOT NULL,
+    start_time REAL NOT NULL,        -- Decimal hours (6.5 = 06:30)
+    end_time REAL NOT NULL,
+    duty_type TEXT NOT NULL DEFAULT 'driving',
+    description TEXT,
+    vehicle_id TEXT REFERENCES vehicles(id),
+    pay_type TEXT NOT NULL DEFAULT 'STD',
+    location_name TEXT,
+    location_lat REAL,
+    location_lng REAL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ```
 
 **rosters**
 ```sql
-id TEXT PRIMARY KEY,
-code TEXT NOT NULL UNIQUE,  -- e.g., "WK03-JAN26"
-name TEXT NOT NULL,
-start_date TEXT NOT NULL,
-end_date TEXT NOT NULL,
-status TEXT DEFAULT 'draft'  -- draft, published, archived
+CREATE TABLE rosters (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,       -- e.g., "WK03-JAN26"
+    name TEXT NOT NULL,
+    start_date TEXT NOT NULL,        -- ISO date
+    end_date TEXT NOT NULL,
+    status TEXT DEFAULT 'draft',     -- draft, scheduled, published
+    calendar_start_date TEXT,        -- When scheduled to ops calendar
+    calendar_end_date TEXT,
+    notes TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ```
 
 **roster_entries**
 ```sql
-id TEXT PRIMARY KEY,
-roster_id TEXT,              -- NULL for adhoc entries
-shift_template_id TEXT,      -- NULL for adhoc entries
-duty_block_id TEXT,
-date TEXT NOT NULL,
-name TEXT NOT NULL,          -- Shift name or adhoc description
-shift_type TEXT DEFAULT 'regular',  -- 'regular', 'adhoc', etc.
-driver_id TEXT,
-vehicle_id TEXT,
-start_time REAL,
-end_time REAL,
-status TEXT DEFAULT 'scheduled',
-source TEXT DEFAULT 'manual'  -- 'manual', 'template', 'copied'
+CREATE TABLE roster_entries (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    roster_id TEXT REFERENCES rosters(id),           -- NULL for adhoc
+    shift_template_id TEXT REFERENCES shift_templates(id),  -- NULL for adhoc
+    duty_block_id TEXT REFERENCES shift_template_duty_blocks(id),
+    date TEXT NOT NULL,
+    name TEXT NOT NULL,
+    shift_type TEXT DEFAULT 'regular',
+    start_time REAL,
+    end_time REAL,
+    driver_id TEXT REFERENCES employees(id),
+    status TEXT DEFAULT 'scheduled',
+    source TEXT DEFAULT 'manual',
+    include_in_dispatch INTEGER DEFAULT 0,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ```
 
 **roster_duty_lines**
 ```sql
-id TEXT PRIMARY KEY,
-roster_entry_id TEXT NOT NULL,
-sequence INTEGER NOT NULL,
-start_time REAL NOT NULL,
-end_time REAL NOT NULL,
-duty_type TEXT NOT NULL DEFAULT 'driving',
-description TEXT,
-vehicle_id TEXT,
-vehicle_number TEXT,
-pay_type TEXT NOT NULL DEFAULT 'STD',
-location_name TEXT,
-location_lat REAL,
-location_lng REAL
+CREATE TABLE roster_duty_lines (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    roster_entry_id TEXT NOT NULL REFERENCES roster_entries(id),
+    source_duty_line_id TEXT,        -- Original template line ID
+    sequence INTEGER NOT NULL,
+    start_time REAL NOT NULL,
+    end_time REAL NOT NULL,
+    duty_type TEXT NOT NULL DEFAULT 'driving',
+    description TEXT,
+    vehicle_id TEXT REFERENCES vehicles(id),
+    vehicle_number TEXT,             -- Denormalized for display
+    pay_type TEXT NOT NULL DEFAULT 'STD',
+    location_name TEXT,
+    location_lat REAL,
+    location_lng REAL,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 ```
 
-### Time Format
-- **Decimal hours**: 6.5 = 06:30, 14.25 = 14:15, 23.75 = 23:45
-- Stored as REAL in SQLite
+**employees**
+```sql
+CREATE TABLE employees (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    employee_number TEXT,
+    first_name TEXT NOT NULL,
+    last_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    role TEXT DEFAULT 'driver',      -- driver, admin, etc.
+    status TEXT DEFAULT 'active',
+    licence_number TEXT,
+    licence_expiry TEXT,
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+**vehicles**
+```sql
+CREATE TABLE vehicles (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    fleet_number TEXT NOT NULL,      -- e.g., "BUS-001"
+    registration TEXT,
+    make TEXT,
+    model TEXT,
+    year INTEGER,
+    capacity INTEGER,
+    status TEXT DEFAULT 'active',
+    deleted_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+```
+
+### Purge Data Commands (Safe Order)
+
+To purge all roster/shift data:
+```
+npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM roster_duty_lines;"
+```
+```
+npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM roster_entries;"
+```
+```
+npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM rosters;"
+```
+```
+npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM shift_template_duty_lines;"
+```
+```
+npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM shift_template_duty_blocks;"
+```
+```
+npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM shift_templates;"
+```
 
 ---
 
-## SECTION 5: ROSTER SYSTEM
+## SECTION 4: ROSTER & DISPATCH WORKFLOW
 
-### Design Principles
-- All shift duty blocks appear in "Unassigned" by default for every day
-- User drags blocks from Unassigned to Driver rows to create assignments
-- Each shift template gets its own row in the Unassigned section
-- Multi-block shifts prompt: "Move all connected blocks?" or "Just this one?"
-- Blocks with pre-assigned default drivers show ⚡ quick-assign button
+### Roster Statuses
+- **draft** - Initial state, editable
+- **scheduled** - Assigned to ops calendar dates, editable
+- **published** - Live in dispatch, NOT editable
 
-### Australian Public Holidays (QLD)
-Hardcoded for 2025-2027:
-- New Year's Day, Australia Day
-- Good Friday, Easter Saturday, Easter Monday
-- ANZAC Day, Labour Day (QLD), King's Birthday (QLD)
-- Royal Queensland Show (Brisbane area)
-- Christmas Day, Boxing Day
+### Published Roster Protections
+When a roster is **published**:
+1. **Shifts cannot be edited** - Frontend checks lock status, backend returns 403
+2. **Shifts cannot be deleted** - Backend returns 403
+3. **Roster cannot be edited** - Frontend blocks, backend returns 403
+4. **Roster cannot be opened** - Open button shows toast message
 
-Holidays display as orange badge on roster grid.
+### Unpublishing a Roster
+- Removes all duties from Dispatch view
+- Reverts status to 'draft'
+- User sees warning: "This will remove all duties from Dispatch"
 
----
+### Data Flow
+```
+1. Create Shift Template (with duty blocks/lines)
+           ↓
+2. Create Roster (date range container)
+           ↓
+3. Open Roster → Drag blocks to drivers (creates roster_entries)
+           ↓
+4. Schedule Roster to Ops Calendar
+           ↓
+5. Publish Roster → Duties appear in Dispatch
+           ↓
+6. Edit duties in Dispatch (updates roster_duty_lines)
+```
 
-## SECTION 6: DISPATCH SYSTEM
+### Editing Shifts with Roster References
+When updating a shift template that has been used in rosters:
+1. Delete roster_duty_lines for affected roster_entries
+2. Delete roster_entries referencing the duty blocks
+3. Delete shift_template_duty_lines
+4. Delete shift_template_duty_blocks
+5. Insert new blocks and lines
 
-### Views
-- **Driver-centric**: Rows are drivers, shows their shifts and duties
-- **Vehicle-centric**: Rows are vehicles, shows their assignments
-
-### Data Sources
-- **Real mode**: Loads from published rosters AND adhoc entries via API
-- **Fake mode**: Generated test data for demos
-
-### Inline Duty Editing
-Each duty line in dispatch can be edited inline:
-- Start/end time (via up/down arrows or direct edit)
-- Duty type (driving, OOV, break, etc.)
-- Description
-- Location (with autocomplete)
-- Vehicle assignment
-- Pay type
-
-Changes save immediately via API.
-
-### Location Functionality
-- **Autocomplete**: Uses Nominatim geocoding service with debounced search
-- **Storage**: location_name (text), location_lat (decimal), location_lng (decimal)
-- **z-index**: Autocomplete dropdown appears above other rows (z-index: 9999)
-- **Smart Assignment**: Prioritizes jobs with real coordinates for proximity matching
-
-### Smart Vehicle Assignment
-Algorithm for suggesting vehicles:
-1. Find vehicles available during duty time
-2. If duty has coordinates, calculate distance from vehicle's last known location
-3. Sort by proximity (closest first)
-4. Prioritize vehicles with real coordinate data over description parsing
-
-### Duty Creation
-
-**Adding to existing roster entries:**
-- Use inline + button or up/down arrows
-- Calls `POST /api/dispatch/create-duty-line`
-- Duty is added within the shift boundaries
-
-**Adhoc duties (no roster/template):**
-- Use "+ Add Duty" button on driver row
-- Calls `POST /api/dispatch/create-adhoc-shift`
-- Creates new roster_entry with shift_template_id = NULL
-- Shift name uses user's description (or auto-generates "ADHOC-xxx")
-- Persists to database and loads on refresh
+**This cascading delete is necessary due to foreign key constraints!**
 
 ---
 
-## SECTION 7: API ENDPOINTS
+## SECTION 5: API ENDPOINTS
 
 ### Dispatch
-- `GET /api/dispatch/:date` - Get day's dispatch data (drivers, vehicles, unassigned)
-- `POST /api/dispatch/assign` - Assign driver/vehicle to entry
-- `POST /api/dispatch/transfer` - Transfer entry to different driver/vehicle
+- `GET /api/dispatch/:date` - Get day's dispatch data
+- `POST /api/dispatch/assign` - Assign driver/vehicle
+- `POST /api/dispatch/transfer` - Transfer to different driver/vehicle
 - `POST /api/dispatch/unassign` - Remove assignment
 - `POST /api/dispatch/update-duty-line` - Update existing duty line
 - `POST /api/dispatch/create-duty-line` - Create new duty line for existing entry
@@ -309,10 +377,14 @@ Algorithm for suggesting vehicles:
 
 ### Roster
 - `GET /api/roster/containers` - List all rosters
-- `GET /api/roster/containers/:id` - Get roster with details
+- `GET /api/roster/containers/:id` - Get roster details
 - `POST /api/roster/containers` - Create roster
-- `PUT /api/roster/containers/:id` - Update roster
+- `PUT /api/roster/containers/:id` - Update roster (blocked if published)
 - `DELETE /api/roster/containers/:id` - Soft delete
+- `POST /api/roster/containers/:id/schedule` - Schedule to ops calendar
+- `POST /api/roster/containers/:id/unschedule` - Remove from ops calendar
+- `POST /api/roster/containers/:id/publish` - Publish to dispatch
+- `POST /api/roster/containers/:id/unpublish` - Remove from dispatch
 - `GET /api/roster/day/:rosterId/:date` - Get day view
 - `POST /api/roster/assign` - Assign block to driver
 - `POST /api/roster/unassign` - Remove assignment
@@ -320,42 +392,41 @@ Algorithm for suggesting vehicles:
 ### Shift Templates
 - `GET /api/shifts` - List templates
 - `GET /api/shifts/:id` - Get template with blocks/lines
-- `POST /api/shifts` - Create template (includes location fields)
-- `PUT /api/shifts/:id` - Update template (replaces all blocks/lines)
-- `DELETE /api/shifts/:id` - Soft delete
+- `GET /api/shifts/:id/lock-status` - Check if locked by published rosters
+- `POST /api/shifts` - Create template
+- `PUT /api/shifts/:id` - Update template (blocked if in published roster)
+- `DELETE /api/shifts/:id` - Soft delete (blocked if in published roster)
 - `POST /api/shifts/:id/duplicate` - Duplicate template
 
 ### Employees
-- `GET /api/employees` - List (with search, status, role filters)
-- `GET /api/employees/:id` - Get single
+- `GET /api/employees` - List
 - `POST /api/employees` - Create
 - `PUT /api/employees/:id` - Update
 - `DELETE /api/employees/:id` - Soft delete
 
 ### Vehicles
-- `GET /api/vehicles` - List (with search, capacity filters)
-- `GET /api/vehicles/:id` - Get single
+- `GET /api/vehicles` - List
 - `POST /api/vehicles` - Create
 - `PUT /api/vehicles/:id` - Update
 - `DELETE /api/vehicles/:id` - Soft delete
 
-### Config
-- `GET /api/config/duty-types` - List duty types
-- `GET /api/config/pay-types` - List pay types
-
 ---
 
-## SECTION 8: DUTY TYPES & PAY TYPES
+## SECTION 6: TIME FORMAT & TYPES
+
+### Time Format
+- **Decimal hours**: 6.5 = 06:30, 14.25 = 14:15, 23.75 = 23:45
+- Stored as REAL in SQLite
 
 ### Duty Types
-| Code | Label | Color | Description |
-|------|-------|-------|-------------|
-| driving | D | Blue | Driving with vehicle |
-| oov | OOV | Amber | Out of vehicle work |
-| break | BRK | Green | Meal/rest break |
-| waiting | WAIT | Gray | Waiting time |
-| charter | CHR | Purple | Charter work |
-| dead | DEAD | Red | Dead running |
+| Code | Label | Description |
+|------|-------|-------------|
+| driving | D | Driving with vehicle |
+| oov | OOV | Out of vehicle work |
+| break | BRK | Meal/rest break |
+| waiting | WAIT | Waiting time |
+| charter | CHR | Charter work |
+| dead | DEAD | Dead running |
 
 ### Pay Types
 | Code | Label | Multiplier |
@@ -364,150 +435,52 @@ Algorithm for suggesting vehicles:
 | OT | Overtime | 1.5x |
 | DT | Double Time | 2.0x |
 | PEN | Penalty Rate | 1.25x |
-| ALLOW | Allowance | 1.0x |
-| UNPAID | Unpaid | 0x |
 
 ---
 
-## SECTION 9: CURRENT STATE
+## SECTION 7: CONFLICT DETECTION
 
-### Completed Modules
-- ✅ HRM (Employees) - Full CRUD with modal forms
-- ✅ Vehicles - Full CRUD with modal forms
-- ✅ Shift Templates - Builder with duty blocks/lines, visual Gantt preview, location support
-- ✅ Roster - Gantt-style drag-drop assignment
-- ✅ Dispatch - Day view with driver/vehicle centric modes
-- ✅ Inline duty editing - All fields editable with persistence
-- ✅ Adhoc shifts - Create duties without templates, persist to database
-- ✅ Location autocomplete - Nominatim integration for shift templates and dispatch
-
-### Recently Completed (v1.2.0)
-- ✅ Location autocomplete z-index fix (dropdown appears above other rows)
-- ✅ PAY dropdown width fix (no longer cut off)
-- ✅ Add Duty prioritizes slots within existing shifts
-- ✅ Shift template location fields save correctly
-- ✅ Adhoc shift creation with full database persistence
-- ✅ Adhoc shifts load on dispatch day view refresh
-- ✅ Adhoc shift name respects user's description
-
-### Planned
-- Operations Calendar (week/month view)
-- Charters module (quote-to-invoice workflow)
-- Maintenance tracking
-- Reporting/exports
-- Mobile optimization
+### Roster Assignment Conflicts
+When assigning a driver to a duty block, check for:
+1. Same date
+2. Same driver  
+3. Overlapping times
+4. **Exclude deleted roster entries** (`re.deleted_at IS NULL`)
+5. **Exclude deleted rosters** (`r.deleted_at IS NULL`)
+6. **Exclude deleted shift templates** (`st.deleted_at IS NULL`)
 
 ---
 
-## SECTION 10: TROUBLESHOOTING
+## SECTION 8: REMINDERS FOR CLAUDE
 
-### "404 Not Found" on API calls
-- Check endpoint exists in appropriate route file
-- Check route is registered in `workers/src/index.ts`
-- Redeploy backend: `npx wrangler deploy`
-
-### Changes not showing in browser
-- Hard refresh: Ctrl+Shift+R
-- Clear cache if needed
-- Check deployment completed
-
-### Git push rejected
-```
-git pull --rebase
-```
-```
-git push
-```
-
-### Wrangler deploy fails
-- Check you're in `workers` directory
-- Run `npx wrangler login` if auth expired
-
-### Database errors
-- Check column exists in schema
-- Run migration if adding new columns
-
-### Location autocomplete not working
-- Nominatim has rate limits, wait and retry
-- Check browser console for errors
-- Ensure z-index is high enough (9999)
-
-### Adhoc duties not saving
-- Check browser Network tab for API response
-- Verify `create-adhoc-shift` endpoint returns success
-- Check `roster_entries` table has entry with `shift_template_id = NULL`
+1. **ALWAYS give Windows commands LINE BY LINE** - Never use && or ;
+2. **Frontend is ONE file** - `frontend/index.html`
+3. **UNDERSTAND FK RELATIONSHIPS** before modifying/deleting data
+4. **Deletion order matters** - roster_duty_lines → roster_entries → etc.
+5. **Published rosters block edits** - Check status before modifications
+6. **Soft deletes only** - Set deleted_at, never hard delete
+7. **Always check deleted_at IS NULL** in queries
+8. **Times are decimal hours** - 6.5 = 06:30
+9. **User is in Brisbane, QLD** - Australian context
 
 ---
 
-## SECTION 11: Q&A FOR CLAUDE
+## SECTION 9: VERSION HISTORY
 
-### Q: Where is the frontend code?
-A: ALL frontend code is in ONE file: `frontend/index.html`. This includes HTML, CSS (in `<style>` tags), and JavaScript (in `<script>` tags). There are NO separate .js or .css files.
-
-### Q: Where is the backend code?
-A: In `workers/src/routes/`. Each route file handles a different API area.
-
-### Q: How do I deploy?
-A: Backend: `cd workers && npx wrangler deploy`. Frontend: `git add . && git commit && git push`
-
-### Q: What's the API base URL?
-A: `https://dispatch-api.oliveri-john001.workers.dev/api`
-
-### Q: How are times stored?
-A: Decimal hours. 6.5 = 06:30, 14.25 = 14:15
-
-### Q: What's the tenant ID?
-A: `default` (hardcoded, single tenant for now)
-
-### Q: How does location autocomplete work?
-A: Uses Nominatim (OpenStreetMap) geocoding. User types, debounced search queries Nominatim, results shown in dropdown. Selected location stores name + lat + lng.
-
-### Q: How does smart assignment work?
-A: For vehicle assignment, system finds available vehicles, calculates distance from duty location to vehicle's last location, sorts by proximity.
-
-### Q: How do adhoc shifts work?
-A: Created via `POST /api/dispatch/create-adhoc-shift`. Creates a roster_entry with shift_template_id = NULL. The dispatch day view queries both rostered entries (via JOIN on templates) and adhoc entries (shift_template_id IS NULL) separately, then merges them.
-
-### Q: What's the difference between create-duty-line and create-adhoc-shift?
-A: `create-duty-line` adds a duty to an EXISTING roster entry. `create-adhoc-shift` creates a NEW roster entry (with no template) AND its first duty line.
-
----
-
-## SECTION 12: REMINDERS FOR CLAUDE
-
-1. **ALWAYS give Windows commands LINE BY LINE** - Never use && or ; to chain
-2. **Frontend is ONE file** - `frontend/index.html` contains everything
-3. **Backend files go in** `workers/src/routes/`
-4. **Deploy backend BEFORE frontend** if both changed
-5. **User is in Brisbane, QLD** - Australian context for holidays, time zones
-6. **Test on production** - No local dev environment
-7. **Provide downloadable files** - User downloads then copies manually
-8. **After changes, remind user to hard refresh** - Ctrl+Shift+R
-9. **Times are decimal hours** - 6.5 = 06:30, not 6:50
-10. **Soft deletes only** - Set deleted_at timestamp, never hard delete
-11. **Adhoc entries have shift_template_id = NULL** - Query them separately
-12. **Location fields**: location_name, location_lat, location_lng in both template and roster duty lines
-
----
-
-## SECTION 13: VERSION HISTORY
+### v1.3.0 (January 15, 2026)
+- Published roster protection (shifts, rosters locked when published)
+- Fixed shift editing foreign key errors (cascading delete)
+- Fixed bulk vehicle assignment (Assign All saves to database)
+- Fixed driver_id not saving on shift edit
+- Ops Calendar with publish/unpublish
 
 ### v1.2.0 (January 15, 2026)
-- Added adhoc shift creation API (`create-adhoc-shift`)
-- Adhoc shifts now persist to database and load on refresh
-- Fixed location autocomplete z-index (appears above other rows)
-- Fixed PAY dropdown width (no longer cut off)
-- Add Duty button prioritizes slots within existing shifts
-- Shift template location fields now save correctly
-- Adhoc shift name uses user's description
+- Adhoc shift creation with database persistence
+- Location autocomplete fixes
 
 ### v1.1.0 (January 2026)
-- Roster module complete with drag-drop assignment
+- Roster module with drag-drop
 - Dispatch day view with inline editing
-- Location autocomplete with Nominatim
-- Inline duty editing with persistence
 
 ### v1.0.0 (December 2025)
-- Initial release
-- HRM, Vehicles, Shift Templates modules
-- Basic roster structure
+- Initial release with HRM, Vehicles, Shift Templates

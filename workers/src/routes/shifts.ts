@@ -257,32 +257,66 @@ async function updateShiftTemplate(env: Env, id: string, input: ShiftTemplateInp
 
     // Replace duty blocks if provided
     if (input.duty_blocks !== undefined) {
-      // Step 1: Delete ALL existing lines first
+      // Step 1: Get existing block IDs
       const existingBlocks = await env.DB.prepare(`
         SELECT id FROM shift_template_duty_blocks WHERE shift_template_id = ?
       `).bind(id).all();
       
-      for (const block of existingBlocks.results as Record<string, unknown>[]) {
+      const existingBlockIds = (existingBlocks.results as Record<string, unknown>[]).map(b => b.id as string);
+      
+      // Step 2: Delete roster_duty_lines that reference roster_entries for these blocks
+      for (const blockId of existingBlockIds) {
+        // Get roster entries for this block
+        const entries = await env.DB.prepare(`
+          SELECT id FROM roster_entries WHERE duty_block_id = ?
+        `).bind(blockId).all();
+        
+        // Delete duty lines for each entry
+        for (const entry of entries.results as Record<string, unknown>[]) {
+          await env.DB.prepare(`
+            DELETE FROM roster_duty_lines WHERE roster_entry_id = ?
+          `).bind(entry.id).run();
+        }
+        
+        // Delete roster entries that reference this block
         await env.DB.prepare(`
-          DELETE FROM shift_template_duty_lines WHERE duty_block_id = ?
-        `).bind(block.id).run();
+          DELETE FROM roster_entries WHERE duty_block_id = ?
+        `).bind(blockId).run();
       }
       
-      // Step 2: Delete ALL existing blocks
+      // Step 3: Delete ALL existing duty lines
+      for (const blockId of existingBlockIds) {
+        await env.DB.prepare(`
+          DELETE FROM shift_template_duty_lines WHERE duty_block_id = ?
+        `).bind(blockId).run();
+      }
+      
+      // Step 4: Delete ALL existing blocks
       await env.DB.prepare(`
         DELETE FROM shift_template_duty_blocks WHERE shift_template_id = ?
       `).bind(id).run();
       
-      // Step 3: Insert new blocks and lines
+      // Step 5: Insert new blocks and lines
       for (const block of input.duty_blocks) {
         const blockId = uuid();
         
-        // Insert block (no driver_id foreign key - we'll skip it for now)
+        // Validate driver_id if provided
+        let driverId = null;
+        if (block.driver_id && block.driver_id.trim() !== '') {
+          const driverExists = await env.DB.prepare(`
+            SELECT id FROM employees WHERE id = ?
+          `).bind(block.driver_id).first();
+          if (driverExists) {
+            driverId = block.driver_id;
+          }
+        }
+        
+        // Insert block
         await env.DB.prepare(`
           INSERT INTO shift_template_duty_blocks (
-            id, shift_template_id, sequence, name, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `).bind(blockId, id, block.sequence, block.name, now, now).run();
+            id, shift_template_id, sequence, name, driver_id, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `).bind(blockId, id, block.sequence, block.name, driverId, now, now).run();
 
         // Insert lines
         if (block.lines && block.lines.length > 0) {

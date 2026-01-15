@@ -2,7 +2,7 @@
 
 Bus and coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch.
 
-**Version:** 1.2.0 | **Last Updated:** January 15, 2026
+**Version:** 1.3.0 | **Last Updated:** January 15, 2026
 
 ## Live App
 
@@ -23,16 +23,43 @@ Bus and coach dispatch operations system for managing drivers, vehicles, shifts,
 - **Vehicles** - Fleet management with capacity tracking
 - **Shift Templates** - Reusable shift definitions with duty blocks/lines
 - **Roster** - Gantt-style drag-drop shift assignment
+- **Ops Calendar** - Week/month view with publish/unpublish
 - **Dispatch** - Daily operations view (driver & vehicle centric)
 - **Inline Editing** - Edit duties directly in dispatch view
 - **Adhoc Shifts** - Create duties without templates
 - **Location Autocomplete** - Nominatim integration
+- **Published Roster Protection** - Blocks editing when published
 
 ### Planned
-- Operations Calendar (week/month view)
 - Charters module (quote-to-invoice)
 - Maintenance tracking
 - Reporting/exports
+
+## Database Schema
+
+### Key Tables & Relationships
+
+```
+shift_templates
+    └── shift_template_duty_blocks (FK: shift_template_id)
+            └── shift_template_duty_lines (FK: duty_block_id)
+
+rosters
+    └── roster_entries (FK: roster_id, shift_template_id, duty_block_id)
+            └── roster_duty_lines (FK: roster_entry_id)
+
+employees (referenced by duty_blocks.driver_id, roster_entries.driver_id)
+vehicles (referenced by duty_lines.vehicle_id)
+```
+
+### Foreign Key Deletion Order (CRITICAL!)
+When purging data, delete in this order to avoid FK constraint errors:
+1. `roster_duty_lines`
+2. `roster_entries`
+3. `rosters`
+4. `shift_template_duty_lines`
+5. `shift_template_duty_blocks`
+6. `shift_templates`
 
 ## Quick Start
 
@@ -100,6 +127,7 @@ dispatch-app/
         │   ├── shifts.ts
         │   ├── roster.ts
         │   ├── dispatch.ts
+        │   ├── ops-calendar.ts
         │   └── config.ts
         └── db/
             └── schema.sql
@@ -107,47 +135,55 @@ dispatch-app/
 
 ## API Endpoints
 
-| Resource | Endpoints |
-|----------|-----------|
-| Dispatch | `GET /api/dispatch/:date`, assign, transfer, unassign, create-duty-line, create-adhoc-shift |
-| Roster | `GET/POST /api/roster/containers`, day view, assign, unassign |
-| Shifts | `GET/POST /api/shifts`, `GET/PUT/DELETE /api/shifts/:id`, duplicate |
-| Employees | `GET/POST /api/employees`, `GET/PUT/DELETE /api/employees/:id` |
-| Vehicles | `GET/POST /api/vehicles`, `GET/PUT/DELETE /api/vehicles/:id` |
-| Config | duty-types, pay-types |
+| Resource | Key Endpoints |
+|----------|---------------|
+| Dispatch | `GET /api/dispatch/:date`, create-duty-line, create-adhoc-shift, update-duty-line |
+| Roster | `GET/POST /api/roster/containers`, publish, unpublish, assign, unassign |
+| Shifts | `GET/POST /api/shifts`, lock-status, duplicate |
+| Employees | Full CRUD at `/api/employees` |
+| Vehicles | Full CRUD at `/api/vehicles` |
 
-See [PROJECT-MD.txt](PROJECT-MD.txt) for full documentation.
+## Roster Workflow
 
-## Data Model
+1. **Create Shift Template** - Define duty blocks and lines
+2. **Create Roster** - Date range container (e.g., "Week 3 Jan")
+3. **Assign Duties** - Drag blocks to drivers in roster view
+4. **Schedule to Calendar** - Set calendar dates
+5. **Publish** - Makes duties visible in Dispatch
+6. **Unpublish** - Removes from Dispatch, allows editing
 
-```
-Shift Templates
-  └── Duty Blocks (assignable units)
-       └── Duty Lines (time segments)
-
-Rosters
-  └── Roster Entries (assignments)
-       └── Roster Duty Lines (instance data)
-
-Adhoc Entries (no template, created in dispatch)
-  └── Roster Duty Lines
-```
+### Published Roster Protection
+When published:
+- Shifts used in roster cannot be edited/deleted
+- Roster details cannot be modified
+- Must unpublish first to make changes
 
 ## Version History
 
+### v1.3.0 (January 15, 2026)
+- Published roster protection for shifts and rosters
+- Fixed shift editing FK constraint errors
+- Fixed bulk vehicle assignment persistence
+- Ops Calendar publish/unpublish workflow
+
 ### v1.2.0 (January 15, 2026)
 - Adhoc shift creation with database persistence
-- Location autocomplete fixes (z-index, shift templates)
-- PAY dropdown width fix
-- Add Duty prioritizes existing shifts
+- Location autocomplete fixes
 
 ### v1.1.0 (January 2026)
 - Roster module with drag-drop
 - Dispatch day view with inline editing
-- Location autocomplete
 
 ### v1.0.0 (December 2025)
 - Initial release with HRM, Vehicles, Shift Templates
+
+## Documentation
+
+See [PROJECT-MD.txt](PROJECT-MD.txt) for complete technical documentation including:
+- Full database schema with all columns
+- API endpoint details
+- Troubleshooting guide
+- Deployment procedures
 
 ## License
 
