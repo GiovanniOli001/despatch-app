@@ -11,6 +11,7 @@ interface FieldDefinitionInput {
   field_type: 'text' | 'number' | 'date' | 'select' | 'boolean';
   field_options?: string[];  // For select type
   field_width?: 'half' | 'full';  // Layout width
+  display_row?: number;  // Row number for layout
   is_required?: boolean;
   display_order?: number;
   tab_name?: string;
@@ -80,6 +81,13 @@ export async function handleEmployeeFields(
       return reorderFieldDefinitions(env, body.order);
     }
 
+    // POST /api/employee-fields/definitions/update-layouts - Update multiple field layouts
+    if (method === 'POST' && seg1 === 'definitions' && seg2 === 'update-layouts') {
+      const body = await parseBody<{ layouts: { id: string; display_row: number; field_width: string; display_order: number }[] }>(request);
+      if (!body) return error('Invalid request body');
+      return updateFieldLayouts(env, body.layouts);
+    }
+
     // ============================================
     // FIELD VALUES
     // ============================================
@@ -118,14 +126,15 @@ async function listFieldDefinitions(env: Env): Promise<Response> {
   const result = await env.DB.prepare(`
     SELECT * FROM employee_custom_field_definitions
     WHERE tenant_id = ? AND deleted_at IS NULL
-    ORDER BY display_order ASC, created_at ASC
+    ORDER BY display_row ASC, display_order ASC, created_at ASC
   `).bind(TENANT_ID).all();
 
   // Parse field_options JSON
   const definitions = result.results.map((def: any) => ({
     ...def,
     field_options: def.field_options ? JSON.parse(def.field_options) : null,
-    is_required: def.is_required === 1
+    is_required: def.is_required === 1,
+    display_row: def.display_row ?? 0
   }));
 
   return json({ data: definitions });
@@ -194,8 +203,8 @@ async function createFieldDefinition(env: Env, input: FieldDefinitionInput): Pro
   await env.DB.prepare(`
     INSERT INTO employee_custom_field_definitions (
       id, tenant_id, field_name, field_key, field_type, field_options,
-      field_width, is_required, display_order, tab_name, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      field_width, display_row, is_required, display_order, tab_name, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id,
     TENANT_ID,
@@ -204,6 +213,7 @@ async function createFieldDefinition(env: Env, input: FieldDefinitionInput): Pro
     input.field_type,
     input.field_options ? JSON.stringify(input.field_options) : null,
     input.field_width || 'full',
+    input.display_row ?? 0,
     input.is_required ? 1 : 0,
     displayOrder,
     input.tab_name || 'Custom',
@@ -266,6 +276,11 @@ async function updateFieldDefinition(env: Env, id: string, input: Partial<FieldD
     bindings.push(input.field_width);
   }
 
+  if (input.display_row !== undefined) {
+    updates.push('display_row = ?');
+    bindings.push(input.display_row);
+  }
+
   if (updates.length === 0) {
     return error('No fields to update');
   }
@@ -314,6 +329,20 @@ async function reorderFieldDefinitions(env: Env, order: string[]): Promise<Respo
   }
 
   return json({ success: true, message: 'Field order updated' });
+}
+
+async function updateFieldLayouts(env: Env, layouts: { id: string; display_row: number; field_width: string; display_order: number }[]): Promise<Response> {
+  const now = new Date().toISOString();
+
+  for (const layout of layouts) {
+    await env.DB.prepare(`
+      UPDATE employee_custom_field_definitions
+      SET display_row = ?, field_width = ?, display_order = ?, updated_at = ?
+      WHERE id = ? AND tenant_id = ?
+    `).bind(layout.display_row, layout.field_width, layout.display_order, now, layout.id, TENANT_ID).run();
+  }
+
+  return json({ success: true, message: 'Field layouts updated' });
 }
 
 // ============================================

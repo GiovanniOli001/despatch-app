@@ -4098,27 +4098,194 @@
     
     /* Custom fields grid layout */
     .custom-fields-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
+      flex-direction: column;
       gap: 16px;
     }
     
+    .custom-fields-row {
+      display: flex;
+      gap: 16px;
+    }
+    
+    .custom-field-group {
+      margin-bottom: 0;
+    }
+    
     .custom-field-group.full-width {
-      grid-column: span 2;
+      flex: 1 1 100%;
     }
     
     .custom-field-group.half-width {
-      grid-column: span 1;
+      flex: 1 1 calc(50% - 8px);
+      max-width: calc(50% - 8px);
     }
     
-    /* Ensure date inputs show picker */
-    input[type="date"].form-input {
+    /* Date picker with button */
+    .date-input-wrapper {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .date-input-wrapper input[type="date"] {
+      flex: 1;
+      color-scheme: dark;
+    }
+    
+    .date-picker-btn {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    
+    .date-picker-btn:hover {
+      background: var(--bg-primary);
+      border-color: var(--accent-blue);
+    }
+    
+    /* Checkbox wrapper */
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 10px 0;
+    }
+    
+    .checkbox-wrapper input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
       cursor: pointer;
     }
     
-    input[type="date"].form-input::-webkit-calendar-picker-indicator {
-      filter: invert(0.8);
+    .checkbox-label {
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+    
+    /* Layout editor styles */
+    .layout-editor {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--bg-primary);
+      margin-bottom: 16px;
+    }
+    
+    .layout-editor-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    
+    .layout-preview {
+      min-height: 100px;
+      background: var(--bg-tertiary);
+      border: 2px dashed var(--border);
+      border-radius: 6px;
+      padding: 12px;
+    }
+    
+    .layout-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      min-height: 40px;
+      padding: 4px;
+      border-radius: 4px;
+      background: var(--bg-secondary);
+    }
+    
+    .layout-row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .layout-row.drop-target {
+      border: 2px dashed var(--accent-blue);
+      background: rgba(59, 130, 246, 0.1);
+    }
+    
+    .layout-field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: grab;
+      font-size: 13px;
+    }
+    
+    .layout-field:active {
+      cursor: grabbing;
+    }
+    
+    .layout-field.dragging {
+      opacity: 0.5;
+    }
+    
+    .layout-field.full-width {
+      flex: 1 1 100%;
+    }
+    
+    .layout-field.half-width {
+      flex: 1 1 calc(50% - 4px);
+    }
+    
+    .layout-field-name {
+      font-weight: 500;
+    }
+    
+    .layout-field-type {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    .layout-field-controls {
+      display: flex;
+      gap: 4px;
+    }
+    
+    .layout-field-controls button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
       cursor: pointer;
+      padding: 2px 6px;
+      font-size: 12px;
+      border-radius: 3px;
+    }
+    
+    .layout-field-controls button:hover {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+    
+    .layout-add-row {
+      margin-top: 12px;
+      text-align: center;
+    }
+    
+    .layout-add-row button {
+      background: var(--bg-secondary);
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    
+    .layout-add-row button:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
     }
     
     /* Form section */
@@ -12270,43 +12437,64 @@ Guidelines:
         
         // Render custom field inputs with grid layout
         let html = '<div class="custom-fields-grid">';
+        
+        // Group fields by row
+        const fieldsByRow = {};
         for (const field of customFieldDefinitions) {
-          const value = fieldValues[field.id] || '';
-          const required = field.is_required ? ' *' : '';
-          const requiredAttr = field.is_required ? 'data-required="true"' : '';
-          const fieldWidth = field.field_width || 'full';
-          const widthClass = fieldWidth === 'half' ? 'half-width' : 'full-width';
+          const row = field.display_row || 0;
+          if (!fieldsByRow[row]) fieldsByRow[row] = [];
+          fieldsByRow[row].push(field);
+        }
+        
+        // Sort rows and render
+        const rowNumbers = Object.keys(fieldsByRow).map(Number).sort((a, b) => a - b);
+        
+        for (const rowNum of rowNumbers) {
+          const rowFields = fieldsByRow[rowNum];
+          html += `<div class="custom-fields-row">`;
           
-          html += `<div class="form-group custom-field-group ${widthClass}">`;
-          html += `<label class="form-label">${escapeHtml(field.field_name)}${required}</label>`;
-          
-          switch (field.field_type) {
-            case 'text':
-              html += `<input type="text" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
-              break;
-            case 'number':
-              html += `<input type="number" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
-              break;
-            case 'date':
-              html += `<input type="date" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr} style="color-scheme: dark;">`;
-              break;
-            case 'boolean':
-              const checked = value === 'true' || value === '1' ? 'checked' : '';
-              html += `<input type="checkbox" class="custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${checked}>`;
-              break;
-            case 'select':
-              html += `<select class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${requiredAttr}>`;
-              html += `<option value="">-- Select --</option>`;
-              if (field.field_options && Array.isArray(field.field_options)) {
-                for (const opt of field.field_options) {
-                  const selected = value === opt ? 'selected' : '';
-                  html += `<option value="${escapeHtml(opt)}" ${selected}>${escapeHtml(opt)}</option>`;
+          for (const field of rowFields) {
+            const value = fieldValues[field.id] || '';
+            const required = field.is_required ? ' *' : '';
+            const requiredAttr = field.is_required ? 'data-required="true"' : '';
+            const fieldWidth = field.field_width || 'full';
+            const widthClass = fieldWidth === 'half' ? 'half-width' : 'full-width';
+            
+            html += `<div class="form-group custom-field-group ${widthClass}">`;
+            html += `<label class="form-label">${escapeHtml(field.field_name)}${required}</label>`;
+            
+            switch (field.field_type) {
+              case 'text':
+                html += `<input type="text" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+                break;
+              case 'number':
+                html += `<input type="number" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+                break;
+              case 'date':
+                html += `<div class="date-input-wrapper">`;
+                html += `<input type="date" class="form-input custom-field-input" id="cf_${field.id}" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+                html += `<button type="button" class="date-picker-btn" onclick="document.getElementById('cf_${field.id}').showPicker()">📅</button>`;
+                html += `</div>`;
+                break;
+              case 'boolean':
+                const checked = value === 'true' || value === '1' ? 'checked' : '';
+                html += `<label class="checkbox-wrapper"><input type="checkbox" class="custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${checked}><span class="checkbox-label">Yes</span></label>`;
+                break;
+              case 'select':
+                html += `<select class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${requiredAttr}>`;
+                html += `<option value="">-- Select --</option>`;
+                if (field.field_options && Array.isArray(field.field_options)) {
+                  for (const opt of field.field_options) {
+                    const selected = value === opt ? 'selected' : '';
+                    html += `<option value="${escapeHtml(opt)}" ${selected}>${escapeHtml(opt)}</option>`;
+                  }
                 }
-              }
-              html += `</select>`;
-              break;
+                html += `</select>`;
+                break;
+            }
+            
+            html += `</div>`;
           }
-          
           html += `</div>`;
         }
         html += '</div>';
@@ -12360,6 +12548,191 @@ Guidelines:
     
     function closeEmployeeFieldsSettings() {
       document.getElementById('employeeFieldsSettingsOverlay').classList.remove('show');
+    }
+    
+    // Switch tabs in settings modal
+    function switchFieldsSettingsTab(tabName) {
+      document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+      
+      document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      if (tabName === 'fields') {
+        document.getElementById('fieldsTabFields').classList.add('active');
+      } else if (tabName === 'layout') {
+        document.getElementById('fieldsTabLayout').classList.add('active');
+        // Initialize row count based on existing fields
+        layoutRowCount = 0;
+        for (const field of customFieldDefinitions) {
+          layoutRowCount = Math.max(layoutRowCount, (field.display_row ?? 0) + 1);
+        }
+        if (layoutRowCount === 0) layoutRowCount = 1;
+        renderLayoutEditor();
+      }
+    }
+    
+    // Layout editor state
+    let layoutRows = [];
+    let draggedFieldId = null;
+    let layoutRowCount = 0; // Track total rows including empty ones
+    
+    function renderLayoutEditor() {
+      const container = document.getElementById('layoutPreview');
+      
+      if (customFieldDefinitions.length === 0) {
+        container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);">No fields to arrange. Add fields first.</div>`;
+        return;
+      }
+      
+      // Group fields by row
+      const fieldsByRow = {};
+      let maxRow = -1;
+      
+      for (const field of customFieldDefinitions) {
+        const row = field.display_row ?? 0;
+        if (!fieldsByRow[row]) fieldsByRow[row] = [];
+        fieldsByRow[row].push(field);
+        maxRow = Math.max(maxRow, row);
+      }
+      
+      // Ensure we show at least as many rows as layoutRowCount
+      maxRow = Math.max(maxRow, layoutRowCount - 1);
+      if (maxRow < 0) maxRow = 0;
+      
+      const typeLabels = {
+        text: 'Text',
+        number: 'Number',
+        date: 'Date',
+        boolean: 'Yes/No',
+        select: 'Dropdown'
+      };
+      
+      let html = '';
+      for (let rowNum = 0; rowNum <= maxRow; rowNum++) {
+        const rowFields = fieldsByRow[rowNum] || [];
+        html += `<div class="layout-row" data-row="${rowNum}" ondragover="handleLayoutDragOver(event)" ondrop="handleLayoutDrop(event, ${rowNum})" ondragleave="handleLayoutDragLeave(event)">`;
+        
+        if (rowFields.length === 0) {
+          html += `<div style="flex: 1; padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">Drop fields here (Row ${rowNum + 1})</div>`;
+        } else {
+          for (const field of rowFields) {
+            const width = field.field_width || 'full';
+            const typeLabel = typeLabels[field.field_type] || field.field_type;
+            html += `
+              <div class="layout-field ${width}-width" draggable="true" data-field-id="${field.id}"
+                   ondragstart="handleLayoutDragStart(event, '${field.id}')" ondragend="handleLayoutDragEnd(event)">
+                <div>
+                  <span class="layout-field-name">${escapeHtml(field.field_name)}</span>
+                  <span class="layout-field-type">${typeLabel}</span>
+                </div>
+                <div class="layout-field-controls">
+                  <button onclick="toggleFieldWidth('${field.id}')" title="Toggle width">${width === 'half' ? '◧' : '▣'}</button>
+                  <button onclick="moveFieldUp('${field.id}')" title="Move up">↑</button>
+                  <button onclick="moveFieldDown('${field.id}')" title="Move down">↓</button>
+                </div>
+              </div>
+            `;
+          }
+        }
+        html += `</div>`;
+      }
+      
+      container.innerHTML = html;
+    }
+    
+    function handleLayoutDragStart(event, fieldId) {
+      draggedFieldId = fieldId;
+      event.target.classList.add('dragging');
+      event.dataTransfer.effectAllowed = 'move';
+    }
+    
+    function handleLayoutDragEnd(event) {
+      event.target.classList.remove('dragging');
+      draggedFieldId = null;
+      document.querySelectorAll('.layout-row').forEach(row => row.classList.remove('drop-target'));
+    }
+    
+    function handleLayoutDragOver(event) {
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      event.currentTarget.classList.add('drop-target');
+    }
+    
+    function handleLayoutDrop(event, targetRow) {
+      event.preventDefault();
+      event.currentTarget.classList.remove('drop-target');
+      
+      if (!draggedFieldId) return;
+      
+      // Update the field's row
+      const field = customFieldDefinitions.find(f => f.id === draggedFieldId);
+      if (field) {
+        field.display_row = targetRow;
+        renderLayoutEditor();
+      }
+    }
+    
+    function toggleFieldWidth(fieldId) {
+      const field = customFieldDefinitions.find(f => f.id === fieldId);
+      if (field) {
+        field.field_width = field.field_width === 'half' ? 'full' : 'half';
+        renderLayoutEditor();
+      }
+    }
+    
+    function moveFieldUp(fieldId) {
+      const field = customFieldDefinitions.find(f => f.id === fieldId);
+      if (field && field.display_row > 0) {
+        field.display_row--;
+        renderLayoutEditor();
+      }
+    }
+    
+    function moveFieldDown(fieldId) {
+      const field = customFieldDefinitions.find(f => f.id === fieldId);
+      if (field) {
+        field.display_row = (field.display_row ?? 0) + 1;
+        renderLayoutEditor();
+      }
+    }
+    
+    function addLayoutRow() {
+      // Find max row with fields
+      let maxRow = -1;
+      for (const field of customFieldDefinitions) {
+        maxRow = Math.max(maxRow, field.display_row ?? 0);
+      }
+      // Increment row count to add an empty row
+      layoutRowCount = Math.max(layoutRowCount, maxRow + 1) + 1;
+      renderLayoutEditor();
+      showToast('New row added - drag fields into it');
+    }
+    
+    function handleLayoutDragLeave(event) {
+      event.currentTarget.classList.remove('drop-target');
+    }
+    
+    async function saveFieldLayouts() {
+      const layouts = customFieldDefinitions.map((field, index) => ({
+        id: field.id,
+        display_row: field.display_row ?? 0,
+        field_width: field.field_width || 'full',
+        display_order: index
+      }));
+      
+      try {
+        await apiRequest('/employee-fields/definitions/update-layouts', {
+          method: 'POST',
+          body: { layouts }
+        });
+        showToast('Layout saved');
+      } catch (err) {
+        showToast(err.message || 'Failed to save layout', 'error');
+      }
     }
     
     async function loadCustomFieldDefinitions() {
@@ -14408,20 +14781,45 @@ Guidelines:
   
   <!-- Employee Custom Fields Settings Modal -->
   <div class="crud-modal-overlay" id="employeeFieldsSettingsOverlay">
-    <div class="crud-modal crud-modal-tabbed">
+    <div class="crud-modal crud-modal-wide">
       <div class="crud-modal-header">
         <span class="crud-modal-title">Custom Fields Settings</span>
         <button class="crud-modal-close" onclick="closeEmployeeFieldsSettings()">&times;</button>
       </div>
-      <div class="crud-modal-body">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
-            Define custom fields that will appear on all employee records.
-          </p>
-          <button class="btn-primary" onclick="showAddCustomFieldModal()">+ Add Field</button>
+      <div class="modal-tabs">
+        <button class="modal-tab active" onclick="switchFieldsSettingsTab('fields')">Fields</button>
+        <button class="modal-tab" onclick="switchFieldsSettingsTab('layout')">Layout Designer</button>
+      </div>
+      <div class="crud-modal-body" style="padding: 0;">
+        <!-- Fields Tab -->
+        <div class="modal-tab-content active" id="fieldsTabFields">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
+              Define custom fields that will appear on all employee records.
+            </p>
+            <button class="btn-primary" onclick="showAddCustomFieldModal()">+ Add Field</button>
+          </div>
+          <div class="custom-fields-list" id="customFieldsList">
+            <div class="custom-fields-empty">No custom fields defined yet.</div>
+          </div>
         </div>
-        <div class="custom-fields-list" id="customFieldsList">
-          <div class="custom-fields-empty">No custom fields defined yet.</div>
+        
+        <!-- Layout Tab -->
+        <div class="modal-tab-content" id="fieldsTabLayout">
+          <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px 0;">
+            Drag fields to arrange them on the form. Use the width buttons to set half or full width.
+          </p>
+          <div class="layout-editor">
+            <div class="layout-preview" id="layoutPreview">
+              <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading layout...</div>
+            </div>
+            <div class="layout-add-row">
+              <button onclick="addLayoutRow()">+ Add Row</button>
+            </div>
+          </div>
+          <div style="margin-top: 16px; text-align: right;">
+            <button class="btn-primary" onclick="saveFieldLayouts()">Save Layout</button>
+          </div>
         </div>
       </div>
       <div class="crud-modal-footer">
