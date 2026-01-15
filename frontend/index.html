@@ -7706,7 +7706,7 @@
       showToast(`All duties updated to ${PAY_TYPES[payType]?.label || payType}`);
     }
     
-    function insertDuty(driverId, shiftId, dutyIdx, position) {
+    async function insertDuty(driverId, shiftId, dutyIdx, position) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
@@ -7811,15 +7811,20 @@
         }
       }
       
-      // Create and insert new duty directly
+      // Create new duty with temp ID
+      const tempId = `d-${Date.now()}`;
       const newDuty = {
-        id: `d-${Date.now()}`,
+        id: tempId,
         type: 'oov', // Default to OOV since it doesn't require vehicle
         start: newStart,
         end: newEnd,
         description: 'New duty',
         vehicle: null,
-        payType: 'standard'
+        vehicleId: null,
+        payType: 'STD',
+        locationName: null,
+        locationLat: null,
+        locationLng: null
       };
       
       // Insert at correct position
@@ -7831,14 +7836,43 @@
         driver.status = 'working';
       }
       
+      // Render immediately for responsiveness
+      renderDetailPanel();
+      renderAll();
+      
       if (extendedShift) {
         showToast('Shift extended - duty added');
       } else {
         showToast('Duty added');
       }
       
-      renderDetailPanel();
-      renderAll();
+      // Save to backend if in real mode and shift has entryId
+      if (dataSource === 'real' && shift.entryId) {
+        try {
+          const response = await apiRequest('/dispatch/create-duty-line', {
+            method: 'POST',
+            body: {
+              roster_entry_id: shift.entryId,
+              start_time: newStart,
+              end_time: newEnd,
+              duty_type: 'oov',
+              description: 'New duty',
+              pay_type: 'STD'
+            }
+          });
+          
+          // Update duty with real ID from backend
+          if (response && response.duty_line_id) {
+            newDuty.id = response.duty_line_id;
+          } else if (response && response.data && response.data.id) {
+            newDuty.id = response.data.id;
+          }
+          showToast('Duty saved to server');
+        } catch (err) {
+          console.error('Failed to save new duty:', err);
+          showToast('Warning: Duty added locally but failed to save to server', 'error');
+        }
+      }
     }
     
     function calculateShiftTotals(shift) {
@@ -9554,7 +9588,7 @@
       renderAll();
     }
 
-    function saveEdit() {
+    async function saveEdit() {
       if (!editingDuty) return;
       
       const startStr = document.getElementById('editStart')?.value;
@@ -9607,6 +9641,19 @@
         locationLng
       };
       
+      // Check if this is a NEW duty (temp ID starting with d-, new-, or adhoc-)
+      const isNewDuty = editingDuty.duty.id && (
+        editingDuty.duty.id.startsWith('d-') || 
+        editingDuty.duty.id.startsWith('new-') || 
+        editingDuty.duty.id.startsWith('adhoc-')
+      );
+      
+      // Find the shift for this duty
+      let targetShift = editingDuty.shift;
+      if (!targetShift) {
+        targetShift = driver.shifts.find(s => s.duties.some(d => d.id === editingDuty.duty.id));
+      }
+      
       if (editingDuty.isNew) {
         if (editingDuty.isAdhoc || !editingDuty.shift) {
           // Create new adhoc shift
@@ -9654,6 +9701,58 @@
         updateShiftBounds(shift);
         
         showToast('Duty updated successfully');
+      }
+      
+      // Save to backend if in real mode
+      if (dataSource === 'real' && targetShift && targetShift.entryId) {
+        try {
+          if (isNewDuty || editingDuty.isNew) {
+            // CREATE new duty via API
+            const response = await apiRequest('/dispatch/create-duty-line', {
+              method: 'POST',
+              body: {
+                roster_entry_id: targetShift.entryId,
+                start_time: start,
+                end_time: end,
+                duty_type: type,
+                description: description,
+                vehicle_id: vehicle,
+                pay_type: 'STD',
+                location_name: locationName,
+                location_lat: locationLat,
+                location_lng: locationLng
+              }
+            });
+            
+            // Update duty with real ID
+            if (response && response.duty_line_id) {
+              updatedDuty.id = response.duty_line_id;
+            } else if (response && response.data && response.data.id) {
+              updatedDuty.id = response.data.id;
+            }
+            showToast('New duty saved to server');
+          } else {
+            // UPDATE existing duty via API
+            await apiRequest('/dispatch/update-duty-line', {
+              method: 'POST',
+              body: {
+                duty_line_id: editingDuty.duty.id,
+                start_time: start,
+                end_time: end,
+                duty_type: type,
+                description: description,
+                vehicle_id: vehicle,
+                location_name: locationName,
+                location_lat: locationLat,
+                location_lng: locationLng
+              }
+            });
+            showToast('Changes saved to server');
+          }
+        } catch (err) {
+          console.error('Failed to save duty:', err);
+          showToast(err.message || 'Failed to save to server', 'error');
+        }
       }
       
       editingDuty = null;
