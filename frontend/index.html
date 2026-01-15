@@ -7343,7 +7343,7 @@
       }
       
       // Call API in real mode
-      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
         try {
           const body = { duty_line_id: duty.id };
           if (field === 'start') body.start_time = newTime;
@@ -7388,7 +7388,7 @@
       const duty = shift.duties[dutyIdx];
       
       // Call API in real mode
-      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/update-duty-line', {
             method: 'POST',
@@ -7426,7 +7426,7 @@
       const duty = shift.duties[dutyIdx];
       
       // Call API in real mode
-      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/update-duty-line', {
             method: 'POST',
@@ -7477,7 +7477,7 @@
       };
       
       // Call API in real mode
-      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/update-duty-line', {
             method: 'POST',
@@ -7528,7 +7528,7 @@
       }
       
       // Call API in real mode - pass fleet number, backend will resolve to ID
-      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/update-duty-line', {
             method: 'POST',
@@ -7583,7 +7583,7 @@
       const duty = shift.duties[dutyIdx];
       
       // Call API in real mode
-      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-')) {
+      if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/update-duty-line', {
             method: 'POST',
@@ -7618,7 +7618,7 @@
       if (dataSource === 'real') {
         try {
           const promises = shift.duties
-            .filter(duty => duty.id && !duty.id.startsWith('placeholder-'))
+            .filter(duty => duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-'))
             .map(duty => apiRequest('/dispatch/update-duty-line', {
               method: 'POST',
               body: {
