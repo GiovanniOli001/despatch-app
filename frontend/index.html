@@ -9673,24 +9673,73 @@
       
       if (editingDuty.isNew) {
         if (editingDuty.isAdhoc || !editingDuty.shift) {
-          // Create new adhoc shift
-          const newShift = {
-            id: `shift-adhoc-${Date.now()}`,
-            name: `ADHOC ${String(Math.floor(Math.random() * 900) + 100)}`,
-            type: 'adhoc',
-            start: start,
-            end: end,
-            duties: [updatedDuty]
-          };
-          driver.shifts.push(newShift);
-          driver.shifts.sort((a, b) => a.start - b.start);
+          // Create new adhoc shift via API
+          if (dataSource === 'real') {
+            try {
+              const result = await apiRequest('/dispatch/create-adhoc-shift', {
+                method: 'POST',
+                body: {
+                  date: formatDateISO(currentDate),
+                  employee_id: driver.id,
+                  duty: {
+                    start_time: start,
+                    end_time: end,
+                    duty_type: type,
+                    description: description || 'Adhoc duty',
+                    vehicle_number: vehicle || null,
+                    pay_type: 'STD',
+                    location_name: locationName,
+                    location_lat: locationLat,
+                    location_lng: locationLng
+                  }
+                }
+              });
+              
+              if (result.error) {
+                showToast(result.error, 'error');
+                return;
+              }
+              
+              // Create local shift object with real IDs
+              const newShift = {
+                id: `shift-${result.entry_id}`,
+                entryId: result.entry_id,
+                name: result.adhoc_code,
+                type: 'adhoc',
+                start: start,
+                end: end,
+                duties: [{
+                  ...updatedDuty,
+                  id: result.duty_line_id
+                }]
+              };
+              driver.shifts.push(newShift);
+              driver.shifts.sort((a, b) => a.start - b.start);
+              
+              showToast('Adhoc duty created');
+            } catch (err) {
+              showToast(err.message || 'Failed to create adhoc duty', 'error');
+              return;
+            }
+          } else {
+            // Demo mode - local only
+            const newShift = {
+              id: `shift-adhoc-${Date.now()}`,
+              name: `ADHOC ${String(Math.floor(Math.random() * 900) + 100)}`,
+              type: 'adhoc',
+              start: start,
+              end: end,
+              duties: [updatedDuty]
+            };
+            driver.shifts.push(newShift);
+            driver.shifts.sort((a, b) => a.start - b.start);
+            showToast('Adhoc duty created (demo mode)');
+          }
           
           // Update driver status if they were available
           if (driver.status === 'available') {
             driver.status = 'working';
           }
-          
-          showToast('Adhoc duty created');
         } else {
           // Add to existing shift - call API if in real mode
           if (dataSource === 'real' && editingDuty.shift.entryId) {

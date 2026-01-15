@@ -150,6 +150,27 @@ export async function handleDispatch(
       return createDutyLine(env, body);
     }
 
+    // POST /api/dispatch/create-adhoc-shift - Create an adhoc roster entry with duty
+    if (method === 'POST' && seg1 === 'create-adhoc-shift') {
+      const body = await parseBody<{
+        date: string;
+        employee_id: string;
+        duty: {
+          start_time: number;
+          end_time: number;
+          duty_type?: string;
+          description?: string;
+          vehicle_number?: string | null;
+          pay_type?: string;
+          location_name?: string | null;
+          location_lat?: number | null;
+          location_lng?: number | null;
+        };
+      }>(request);
+      if (!body) return error('Invalid request body');
+      return createAdhocShift(env, body);
+    }
+
     return error('Not found', 404);
   } catch (err) {
     console.error('Dispatch API error:', err);
@@ -983,5 +1004,94 @@ async function createDutyLine(
     success: true, 
     message: 'Duty line created',
     duty_line_id: newId 
+  });
+}
+
+// ============================================
+// CREATE ADHOC SHIFT (roster entry + duty)
+// ============================================
+
+async function createAdhocShift(
+  env: Env,
+  body: {
+    date: string;
+    employee_id: string;
+    duty: {
+      start_time: number;
+      end_time: number;
+      duty_type?: string;
+      description?: string;
+      vehicle_number?: string | null;
+      pay_type?: string;
+      location_name?: string | null;
+      location_lat?: number | null;
+      location_lng?: number | null;
+    };
+  }
+): Promise<Response> {
+  const { date, employee_id, duty } = body;
+
+  if (!date || !employee_id || !duty) {
+    return error('Missing required fields: date, employee_id, duty');
+  }
+
+  // Generate adhoc code
+  const adhocCode = `ADHOC-${Date.now().toString(36).toUpperCase()}`;
+  
+  // Resolve vehicle if provided
+  let resolvedVehicleId: string | null = null;
+  let resolvedVehicleNumber: string | null = duty.vehicle_number || null;
+  
+  if (duty.vehicle_number) {
+    const vehicle = await env.DB.prepare(`
+      SELECT id, fleet_number FROM vehicles 
+      WHERE fleet_number = ? AND tenant_id = ? AND deleted_at IS NULL
+    `).bind(duty.vehicle_number, TENANT_ID).first() as { id: string; fleet_number: string } | null;
+    
+    if (vehicle) {
+      resolvedVehicleId = vehicle.id;
+      resolvedVehicleNumber = vehicle.fleet_number;
+    }
+  }
+
+  const now = new Date().toISOString();
+  const entryId = crypto.randomUUID();
+  const dutyLineId = crypto.randomUUID();
+
+  // Create roster entry (no template = adhoc)
+  await env.DB.prepare(`
+    INSERT INTO roster_entries (
+      id, tenant_id, roster_id, shift_template_id, duty_block_id,
+      date, employee_id, adhoc_code, status,
+      created_at, updated_at
+    ) VALUES (?, ?, NULL, NULL, NULL, ?, ?, ?, 'scheduled', ?, ?)
+  `).bind(
+    entryId, TENANT_ID, date, employee_id, adhocCode, now, now
+  ).run();
+
+  // Create duty line
+  await env.DB.prepare(`
+    INSERT INTO roster_duty_lines (
+      id, tenant_id, roster_entry_id, sequence,
+      start_time, end_time, duty_type, description,
+      vehicle_id, vehicle_number, pay_type,
+      location_name, location_lat, location_lng,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    dutyLineId, TENANT_ID, entryId,
+    duty.start_time, duty.end_time, 
+    duty.duty_type || 'driving', duty.description || 'Adhoc duty',
+    resolvedVehicleId, resolvedVehicleNumber, duty.pay_type || 'STD',
+    duty.location_name || null, duty.location_lat || null, duty.location_lng || null,
+    now, now
+  ).run();
+
+  return json({
+    success: true,
+    message: 'Adhoc shift created',
+    entry_id: entryId,
+    duty_line_id: dutyLineId,
+    adhoc_code: adhocCode
   });
 }
