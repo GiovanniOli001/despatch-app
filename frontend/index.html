@@ -7376,13 +7376,37 @@
         
         if (currentStyle === 'style-a') {
           // Style A: Fragmented blocks showing duties
+          
+          // Helper to check if a synced duty's source is cancelled
+          const isDutyCancelled = (duty) => {
+            if (duty.cancelled) return true;
+            if (duty.syncedDutyId) {
+              for (const driver of drivers) {
+                for (const dShift of driver.shifts || []) {
+                  const sourceDuty = (dShift.duties || []).find(d => d.id === duty.syncedDutyId);
+                  if (sourceDuty) {
+                    return sourceDuty.cancelled === true;
+                  }
+                }
+              }
+            }
+            return false;
+          };
+          
           if (allocationMode === 'vehicle' && vehicle.shifts) {
             // Vehicle-centric: show duties with driver assignment indicators
             (vehicle.shifts || []).forEach(shift => {
+              const allDuties = shift.duties || [];
+              const activeDuties = allDuties.filter(d => !isDutyCancelled(d));
+              const cancelledDuties = allDuties.filter(d => isDutyCancelled(d));
+              
+              if (activeDuties.length === 0 && !showCancelledDuties) return;
+              
               const shiftLeft = timeToPercent(shift.start);
               blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
               
-              (shift.duties || []).forEach(duty => {
+              // Render active duties
+              activeDuties.forEach(duty => {
                 const left = timeToPercent(duty.start);
                 const width = Math.max(timeToPercent(duty.end) - left, 0.5);
                 const shortLabel = getDutyShortLabel(duty, width);
@@ -7396,10 +7420,24 @@
                   blocksHTML += `<div class="vehicle-status-bar" style="left: ${left}%; width: ${width}%;"></div>`;
                 }
               });
+              
+              // Render cancelled duties as ghost bars
+              if (showCancelledDuties) {
+                cancelledDuties.forEach(duty => {
+                  const left = timeToPercent(duty.start);
+                  const width = Math.max(timeToPercent(duty.end) - left, 0.5);
+                  blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${left}%; width: ${width}%;" title="CANCELLED: ${duty.description || ''}"></div>`;
+                });
+              }
             });
           } else {
             // Driver-centric: simple blocks with tooltip
             (vehicle.shifts || []).forEach(shift => {
+              const allDuties = shift.duties || [];
+              const hasActiveDuties = allDuties.some(d => !isDutyCancelled(d));
+              
+              if (!hasActiveDuties && !showCancelledDuties) return;
+              
               const left = timeToPercent(shift.start);
               const width = timeToPercent(shift.end) - left;
               const typeClass = shift.type === 'maintenance' ? 'maintenance' : 'driving';
@@ -7421,7 +7459,25 @@
           // Styles B, C, D, E: Unified bars with driver strip
           (vehicle.shifts || []).forEach(shift => {
             const allDuties = shift.duties || [];
-            const activeDuties = allDuties.filter(d => !d.cancelled);
+            
+            // Helper to check if a synced duty's source is cancelled
+            const isDutyCancelled = (duty) => {
+              if (duty.cancelled) return true;
+              // Check if the source duty on a driver is cancelled
+              if (duty.syncedDutyId) {
+                for (const driver of drivers) {
+                  for (const dShift of driver.shifts || []) {
+                    const sourceDuty = (dShift.duties || []).find(d => d.id === duty.syncedDutyId);
+                    if (sourceDuty) {
+                      return sourceDuty.cancelled === true;
+                    }
+                  }
+                }
+              }
+              return false;
+            };
+            
+            const activeDuties = allDuties.filter(d => !isDutyCancelled(d));
             const typeClass = shift.type === 'maintenance' ? 'maintenance' : (shift.type === 'charter' ? 'charter' : 'regular');
             const label = shift.type === 'maintenance' ? 'MAINT' : shift.name;
             
@@ -7443,7 +7499,7 @@
               dutiesToRender.forEach(duty => {
                 const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
                 const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
-                const isCancelled = duty.cancelled;
+                const isCancelled = isDutyCancelled(duty);
                 
                 if (isCancelled) {
                   segmentsHTML += `<div class="segment cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description || ''}"></div>`;
