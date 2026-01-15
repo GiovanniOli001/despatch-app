@@ -2220,6 +2220,37 @@
       color: white;
     }
     
+    /* Cancelled duty bar on Gantt - for Style A (absolute positioned) */
+    .style-a .timeline-duty.cancelled-ghost {
+      position: absolute;
+      top: 4px;
+      height: 20px;
+      opacity: 0.4;
+      background: repeating-linear-gradient(
+        -45deg,
+        var(--bg-tertiary),
+        var(--bg-tertiary) 3px,
+        rgba(239, 68, 68, 0.4) 3px,
+        rgba(239, 68, 68, 0.4) 6px
+      ) !important;
+      border: 1px dashed rgba(239, 68, 68, 0.6);
+      border-radius: 2px;
+    }
+    
+    /* Cancelled duty segment inside shift bar - for Style B/C/D/E */
+    .segment.cancelled-ghost {
+      opacity: 0.4;
+      background: repeating-linear-gradient(
+        -45deg,
+        var(--bg-tertiary),
+        var(--bg-tertiary) 3px,
+        rgba(239, 68, 68, 0.4) 3px,
+        rgba(239, 68, 68, 0.4) 6px
+      ) !important;
+      border: 1px dashed rgba(239, 68, 68, 0.5);
+      box-sizing: border-box;
+    }
+    
     /* Assignment list styles */
     .assignment-panel {
       display: flex;
@@ -4859,6 +4890,9 @@
               <option value="status">Sort: Status</option>
               <option value="name">Sort: Name</option>
             </select>
+            <button class="filter-toggle-btn" id="showCancelledBtn" onclick="event.stopPropagation(); toggleShowCancelled()" title="Show cancelled duties on Gantt">
+              Show Cancelled
+            </button>
           </div>
           <div class="timeline-header">
             <div class="timeline-label-col">Name</div>
@@ -5690,6 +5724,8 @@
     let viewMode = 'horizontal'; // 'horizontal' or 'vertical'
     let dataSource = 'fake'; // 'fake' or 'real'
     let dispatchMeta = null; // Metadata from real API
+    let showCancelledDuties = false; // Toggle to show cancelled duties on Gantt
+    let pendingCancelDuty = null; // For cancel duty modal
     
     // Filter state
     let driverFilters = { search: '', status: 'all', sort: 'status' };
@@ -7069,6 +7105,15 @@
       }
       updateStats();
     }
+    
+    function toggleShowCancelled() {
+      showCancelledDuties = !showCancelledDuties;
+      const btn = document.getElementById('showCancelledBtn');
+      if (btn) {
+        btn.classList.toggle('active', showCancelledDuties);
+      }
+      renderAll();
+    }
 
     function toggleSection(sectionId) {
       const section = document.getElementById(sectionId);
@@ -7330,10 +7375,20 @@
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
         (driver.shifts || []).forEach(shift => {
-          const shiftLeft = timeToPercent(shift.start);
-          blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
+          // Filter out cancelled duties for Gantt display (unless toggle is on)
+          const activeDuties = (shift.duties || []).filter(d => !d.cancelled);
+          const cancelledDuties = showCancelledDuties ? (shift.duties || []).filter(d => d.cancelled) : [];
           
-          (shift.duties || []).forEach(duty => {
+          if (activeDuties.length === 0 && cancelledDuties.length === 0) return;
+          
+          // Only show shift label if there are active duties
+          if (activeDuties.length > 0) {
+            const shiftLeft = timeToPercent(shift.start);
+            blocksHTML += `<div class="shift-label" style="left: ${shiftLeft}%">${shift.name}</div>`;
+          }
+          
+          // Render active duties
+          activeDuties.forEach(duty => {
             const left = timeToPercent(duty.start);
             const width = Math.max(timeToPercent(duty.end) - left, 0.5);
             const shortLabel = getDutyShortLabel(duty, width);
@@ -7346,6 +7401,13 @@
             if (duty.vehicle) {
               blocksHTML += `<div class="vehicle-status-bar" style="left: ${left}%; width: ${width}%;"></div>`;
             }
+          });
+          
+          // Render cancelled duties as ghost bars
+          cancelledDuties.forEach(duty => {
+            const left = timeToPercent(duty.start);
+            const width = Math.max(timeToPercent(duty.end) - left, 0.5);
+            blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${left}%; width: ${width}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
           });
         });
       }
@@ -7371,31 +7433,50 @@
         blocksHTML = `<div class="timeline-duty leave" style="left: 0%; width: 100%;">LEAVE</div>`;
       } else {
         (driver.shifts || []).forEach(shift => {
-          const shiftLeft = timeToPercent(shift.start);
-          const shiftWidth = timeToPercent(shift.end) - shiftLeft;
-          const shiftDuration = shift.end - shift.start;
+          const allDuties = shift.duties || [];
+          const activeDuties = allDuties.filter(d => !d.cancelled);
+          const cancelledDuties = allDuties.filter(d => d.cancelled);
+          
+          if (activeDuties.length === 0 && !showCancelledDuties) return;
+          if (allDuties.length === 0) return;
+          
           const shiftTypeClass = shift.type === 'charter' ? 'charter' : (shift.type === 'adhoc' ? 'adhoc' : 'regular');
+          
+          // Calculate shift bounds based on what we're showing
+          const dutiesToRender = showCancelledDuties ? allDuties : activeDuties;
+          if (dutiesToRender.length === 0) return;
+          
+          const shiftStart = Math.min(...dutiesToRender.map(d => d.start));
+          const shiftEnd = Math.max(...dutiesToRender.map(d => d.end));
+          const shiftLeft = timeToPercent(shiftStart);
+          const shiftWidth = timeToPercent(shiftEnd) - shiftLeft;
+          const shiftDuration = shiftEnd - shiftStart;
           
           let segmentsHTML = '';
           let vehicleStripHTML = '';
           
-          (shift.duties || []).forEach(duty => {
+          dutiesToRender.forEach(duty => {
             const dutyWidth = ((duty.end - duty.start) / shiftDuration) * 100;
-            const dutyLeft = ((duty.start - shift.start) / shiftDuration) * 100;
+            const dutyLeft = ((duty.start - shiftStart) / shiftDuration) * 100;
+            const isCancelled = duty.cancelled;
             
-            if (style === 'style-b') {
+            if (isCancelled) {
+              segmentsHTML += `<div class="segment cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description}${duty.cancelReason ? ' (' + duty.cancelReason + ')' : ''}"></div>`;
+            } else if (style === 'style-b') {
               segmentsHTML += `<div class="segment ${duty.type}" style="width: ${dutyWidth}%;"></div>`;
             } else {
               segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
             }
             
-            // Build vehicle strip segments
-            if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
-            } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
-              vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
-            } else {
-              vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
+            // Build vehicle strip segments (skip cancelled)
+            if (!isCancelled) {
+              if (duty.vehicle) {
+                vehicleStripHTML += `<div class="vehicle-segment assigned" style="width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
+                vehicleStripHTML += `<div class="vehicle-segment missing" style="width: ${dutyWidth}%;" title="No vehicle">—</div>`;
+              } else {
+                vehicleStripHTML += `<div class="vehicle-segment none" style="width: ${dutyWidth}%;"></div>`;
+              }
             }
           });
           
@@ -8021,7 +8102,7 @@
               <span style="margin-left: 8px; color: var(--text-muted);">${dt.label}</span>
               <span style="flex: 1; color: var(--text-muted); margin-left: 8px;">${duty.description || ''}</span>
               <span class="cancelled-badge">CANCELLED</span>
-              <button class="duty-reinstate-btn" onclick="event.stopPropagation(); reinstateDuty('${driverId}', '${shiftId}', ${dutyIdx}, '${duty.id}')" title="Reinstate this duty">Reinstate</button>
+              <button class="duty-reinstate-btn" onclick="event.stopPropagation(); reinstateDutyLine('${duty.id}', '${driverId}', '${shiftId}')" title="Reinstate this duty">Reinstate</button>
             </div>
           </div>
         `;
@@ -8066,7 +8147,7 @@
               ${payTypeOptions}
             </select>
             <span class="duty-inline-hours">${hoursStr}</span>
-            <button class="duty-cancel-btn" onclick="event.stopPropagation(); cancelDuty('${driverId}', '${shiftId}', ${dutyIdx}, '${duty.id}')" title="Cancel duty">✕</button>
+            <button class="duty-cancel-btn" onclick="event.stopPropagation(); openCancelDutyModal('${duty.id}', '${driverId}', '${shiftId}', ${dutyIdx})" title="Cancel duty">✕</button>
           </div>
         </div>
       `;
@@ -10676,26 +10757,120 @@
       renderAll();
     }
     
-    async function cancelDuty(driverId, shiftId, dutyIdx, dutyId) {
+    function openCancelDutyModal(dutyId, driverId, shiftId, dutyIdx) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
       const shift = driver.shifts.find(s => s.id === shiftId);
-      if (!shift || !shift.duties[dutyIdx]) return;
+      if (!shift) return;
       
       const duty = shift.duties[dutyIdx];
+      if (!duty) return;
       
-      // Prompt for reason
-      const reason = prompt('Reason for cancellation (optional):');
+      // Store pending cancel info
+      pendingCancelDuty = { dutyId, driverId, shiftId, dutyIdx, duty };
       
-      // Call API in real mode
+      // Populate modal with duty info
+      document.getElementById('cancelDutyInfo').innerHTML = `
+        <div style="display: flex; gap: 16px; align-items: center;">
+          <div class="duty-type-bar ${duty.type}" style="width: 4px; height: 40px; border-radius: 2px;"></div>
+          <div>
+            <div style="font-weight: 500; color: var(--text-primary);">${formatTimeCompact(duty.start)} - ${formatTimeCompact(duty.end)}</div>
+            <div style="color: var(--text-secondary); font-size: 13px;">${duty.description}</div>
+          </div>
+        </div>
+      `;
+      
+      document.getElementById('cancelDutyReason').value = '';
+      document.getElementById('cancelDutyModalOverlay').classList.add('show');
+    }
+    
+    function closeCancelDutyModal() {
+      document.getElementById('cancelDutyModalOverlay').classList.remove('show');
+      pendingCancelDuty = null;
+    }
+    
+    async function cancelAllDuties(driverId, shiftId) {
+      const driver = drivers.find(d => d.id === driverId);
+      if (!driver) return;
+      
+      const shift = driver.shifts.find(s => s.id === shiftId);
+      if (!shift) return;
+      
+      // Get active (non-cancelled) duties
+      const activeDuties = shift.duties.filter(d => !d.cancelled);
+      if (activeDuties.length === 0) {
+        showToast('All duties already cancelled', 'info');
+        return;
+      }
+      
+      if (!confirm(`Cancel all ${activeDuties.length} active duties in ${shift.name}?`)) {
+        return;
+      }
+      
+      let cancelled = 0;
+      let failed = 0;
+      
+      for (const duty of activeDuties) {
+        if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+          try {
+            const result = await apiRequest('/dispatch/cancel-duty-line', {
+              method: 'POST',
+              body: {
+                duty_line_id: duty.id,
+                reason: 'Bulk cancel'
+              }
+            });
+            
+            if (!result.error) {
+              duty.cancelled = true;
+              duty.cancelReason = 'Bulk cancel';
+              duty.cancelledAt = new Date().toISOString();
+              if (duty.vehicle) {
+                unsyncVehicleSchedule(duty.vehicle, duty.id);
+              }
+              cancelled++;
+            } else {
+              failed++;
+            }
+          } catch (err) {
+            failed++;
+          }
+        } else {
+          duty.cancelled = true;
+          duty.cancelReason = 'Bulk cancel';
+          duty.cancelledAt = new Date().toISOString();
+          if (duty.vehicle) {
+            unsyncVehicleSchedule(duty.vehicle, duty.id);
+          }
+          cancelled++;
+        }
+      }
+      
+      updateShiftBounds(shift);
+      
+      if (failed > 0) {
+        showToast(`Cancelled ${cancelled} duties, ${failed} failed`, 'warning');
+      } else {
+        showToast(`All ${cancelled} duties cancelled`);
+      }
+      
+      renderAll();
+    }
+    
+    async function confirmCancelDuty() {
+      if (!pendingCancelDuty) return;
+      
+      const { dutyId, driverId, shiftId, dutyIdx, duty } = pendingCancelDuty;
+      const reason = document.getElementById('cancelDutyReason').value.trim() || null;
+      
       if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/cancel-duty-line', {
             method: 'POST',
             body: {
               duty_line_id: dutyId,
-              reason: reason || null
+              reason: reason
             }
           });
           
@@ -10704,40 +10879,70 @@
             return;
           }
           
+          duty.cancelled = true;
+          duty.cancelReason = reason;
+          duty.cancelledAt = new Date().toISOString();
+          
+          if (duty.vehicle) {
+            unsyncVehicleSchedule(duty.vehicle, duty.id);
+          }
+          
+          const driver = drivers.find(d => d.id === driverId);
+          const shift = driver?.shifts.find(s => s.id === shiftId);
+          if (shift) {
+            updateShiftBounds(shift);
+          }
+          
+          closeCancelDutyModal();
           showToast('Duty cancelled');
-          await loadDispatchData();  // Reload from API
-          return;
+          renderAll();
         } catch (err) {
           showToast(err.message || 'Cancel failed', 'error');
-          return;
         }
+      } else {
+        duty.cancelled = true;
+        duty.cancelReason = reason;
+        duty.cancelledAt = new Date().toISOString();
+        
+        if (duty.vehicle) {
+          unsyncVehicleSchedule(duty.vehicle, duty.id);
+        }
+        
+        const driver = drivers.find(d => d.id === driverId);
+        const shift = driver?.shifts.find(s => s.id === shiftId);
+        if (shift) {
+          updateShiftBounds(shift);
+        }
+        
+        closeCancelDutyModal();
+        showToast('Duty cancelled (demo mode)');
+        renderAll();
       }
-      
-      // Demo mode - just update local state
-      duty.cancelled = true;
-      duty.cancelReason = reason || null;
-      duty.cancelledAt = new Date().toISOString();
-      
-      // Unsync vehicle if assigned
-      if (duty.vehicle) {
-        unsyncVehicleSchedule(duty.vehicle, duty.id);
-      }
-      
-      showToast('Duty cancelled');
-      renderDetailPanel();
-      renderAll();
     }
     
-    async function reinstateDuty(driverId, shiftId, dutyIdx, dutyId) {
+    async function reinstateDutyLine(dutyId, driverId, shiftId) {
       const driver = drivers.find(d => d.id === driverId);
       if (!driver) return;
       
       const shift = driver.shifts.find(s => s.id === shiftId);
-      if (!shift || !shift.duties[dutyIdx]) return;
+      if (!shift) return;
       
-      const duty = shift.duties[dutyIdx];
+      const duty = shift.duties.find(d => d.id === dutyId);
+      if (!duty) return;
       
-      // Call API in real mode
+      // Check for overlap with ALL active duties across ALL shifts for this driver
+      for (const s of driver.shifts) {
+        for (const d of s.duties) {
+          if (d.id === duty.id) continue;
+          if (d.cancelled) continue;
+          
+          if (duty.start < d.end && duty.end > d.start) {
+            showToast(`Cannot reinstate: overlaps with ${d.description || 'duty'} (${formatTimeCompact(d.start)}-${formatTimeCompact(d.end)})`, 'error');
+            return;
+          }
+        }
+      }
+      
       if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
         try {
           const result = await apiRequest('/dispatch/reinstate-duty-line', {
@@ -10752,23 +10957,35 @@
             return;
           }
           
+          duty.cancelled = false;
+          duty.cancelReason = null;
+          duty.cancelledAt = null;
+          
+          if (duty.vehicle) {
+            syncVehicleSchedule(duty.vehicle, duty, driver, shift);
+          }
+          
+          updateShiftBounds(shift);
+          
           showToast('Duty reinstated');
-          await loadDispatchData();  // Reload from API
-          return;
+          renderAll();
         } catch (err) {
           showToast(err.message || 'Reinstate failed', 'error');
-          return;
         }
+      } else {
+        duty.cancelled = false;
+        duty.cancelReason = null;
+        duty.cancelledAt = null;
+        
+        if (duty.vehicle) {
+          syncVehicleSchedule(duty.vehicle, duty, driver, shift);
+        }
+        
+        updateShiftBounds(shift);
+        
+        showToast('Duty reinstated (demo mode)');
+        renderAll();
       }
-      
-      // Demo mode - just update local state
-      duty.cancelled = false;
-      duty.cancelReason = null;
-      duty.cancelledAt = null;
-      
-      showToast('Duty reinstated');
-      renderDetailPanel();
-      renderAll();
     }
 
     async function assignDriverToJob(jobIndex, driverIndex) {
@@ -15116,6 +15333,32 @@ Guidelines:
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeVehicleModal()">Cancel</button>
         <button class="btn-primary" onclick="saveVehicle()">Save</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Cancel Duty Confirmation Modal -->
+  <div class="crud-modal-overlay" id="cancelDutyModalOverlay">
+    <div class="crud-modal" style="width: 400px;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title">Cancel Duty Line</span>
+        <button class="crud-modal-close" onclick="closeCancelDutyModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <p style="margin-bottom: 16px; color: var(--text-secondary);">
+          This will cancel the duty line for dispatch purposes only. The roster will not be affected.
+        </p>
+        <div id="cancelDutyInfo" style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+          <!-- Duty info will be populated here -->
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reason (optional)</label>
+          <input type="text" id="cancelDutyReason" class="form-input" placeholder="e.g. Customer cancelled, Weather...">
+        </div>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closeCancelDutyModal()">Keep Active</button>
+        <button class="btn-primary" style="background: var(--accent-amber);" onclick="confirmCancelDuty()">Cancel Duty</button>
       </div>
     </div>
   </div>
