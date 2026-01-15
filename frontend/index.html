@@ -4037,6 +4037,367 @@
       max-width: 95vw;
     }
     
+    /* Tabbed modal - larger size for employee modal */
+    .crud-modal-tabbed {
+      width: 700px;
+      max-width: 95vw;
+    }
+    
+    .modal-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-tertiary);
+    }
+    
+    .modal-tab {
+      padding: 12px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    
+    .modal-tab:hover {
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+    }
+    
+    .modal-tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+      background: var(--bg-secondary);
+    }
+    
+    .modal-tab-content {
+      display: none;
+      padding: 20px;
+    }
+    
+    .modal-tab-content.active {
+      display: block;
+    }
+    
+    /* Settings gear button */
+    .btn-settings {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 6px 10px;
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+    
+    .btn-settings:hover {
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+    }
+    
+    /* Custom fields settings modal */
+    .custom-fields-list {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    
+    .custom-field-item {
+      display: flex;
+      align-items: center;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+    }
+    
+    .custom-field-item:last-child {
+      border-bottom: none;
+    }
+    
+    .custom-field-item:hover {
+      background: var(--bg-tertiary);
+    }
+    
+    .custom-field-drag {
+      color: var(--text-muted);
+      cursor: grab;
+      padding: 0 8px;
+      font-size: 14px;
+    }
+    
+    .custom-field-info {
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .custom-field-name {
+      font-weight: 500;
+      font-size: 14px;
+    }
+    
+    .custom-field-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    
+    .custom-field-actions {
+      display: flex;
+      gap: 4px;
+    }
+    
+    .custom-field-actions button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    
+    .custom-field-actions button:hover {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+    
+    .custom-field-actions button.delete:hover {
+      color: var(--accent-red);
+    }
+    
+    .custom-fields-empty {
+      padding: 32px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    
+    /* Custom field type badges */
+    .field-type-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 4px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      margin-left: 8px;
+    }
+    
+    .field-type-badge.required {
+      background: var(--accent-amber);
+      color: #000;
+    }
+    
+    /* Custom field input section in employee modal */
+    .custom-fields-section {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    
+    .custom-fields-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    
+    /* Custom fields grid layout */
+    .custom-fields-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    
+    .custom-fields-row {
+      display: flex;
+      gap: 16px;
+    }
+    
+    .custom-field-group {
+      margin-bottom: 0;
+    }
+    
+    .custom-field-group.full-width {
+      flex: 1 1 100%;
+    }
+    
+    .custom-field-group.half-width {
+      flex: 1 1 calc(50% - 8px);
+      max-width: calc(50% - 8px);
+    }
+    
+    /* Date picker with button */
+    .date-input-wrapper {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .date-input-wrapper input[type="date"] {
+      flex: 1;
+      color-scheme: dark;
+    }
+    
+    .date-picker-btn {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    
+    .date-picker-btn:hover {
+      background: var(--bg-primary);
+      border-color: var(--accent-blue);
+    }
+    
+    /* Checkbox wrapper */
+    .checkbox-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      padding: 10px 0;
+    }
+    
+    .checkbox-wrapper input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    
+    .checkbox-label {
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+    
+    /* Layout editor styles */
+    .layout-editor {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      background: var(--bg-primary);
+      margin-bottom: 16px;
+    }
+    
+    .layout-editor-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    
+    .layout-preview {
+      min-height: 100px;
+      background: var(--bg-tertiary);
+      border: 2px dashed var(--border);
+      border-radius: 6px;
+      padding: 12px;
+    }
+    
+    .layout-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+      min-height: 40px;
+      padding: 4px;
+      border-radius: 4px;
+      background: var(--bg-secondary);
+    }
+    
+    .layout-row:last-child {
+      margin-bottom: 0;
+    }
+    
+    .layout-row.drop-target {
+      border: 2px dashed var(--accent-blue);
+      background: rgba(59, 130, 246, 0.1);
+    }
+    
+    .layout-field {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: grab;
+      font-size: 13px;
+    }
+    
+    .layout-field:active {
+      cursor: grabbing;
+    }
+    
+    .layout-field.dragging {
+      opacity: 0.5;
+    }
+    
+    .layout-field.full-width {
+      flex: 1 1 100%;
+    }
+    
+    .layout-field.half-width {
+      flex: 1 1 calc(50% - 4px);
+    }
+    
+    .layout-field-name {
+      font-weight: 500;
+    }
+    
+    .layout-field-type {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    
+    .layout-field-controls {
+      display: flex;
+      gap: 4px;
+    }
+    
+    .layout-field-controls button {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 2px 6px;
+      font-size: 12px;
+      border-radius: 3px;
+    }
+    
+    .layout-field-controls button:hover {
+      background: var(--bg-primary);
+      color: var(--text-primary);
+    }
+    
+    .layout-add-row {
+      margin-top: 12px;
+      text-align: center;
+    }
+    
+    .layout-add-row button {
+      background: var(--bg-secondary);
+      border: 1px dashed var(--border);
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    
+    .layout-add-row button:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+    }
+    
     /* Form section */
     .form-section {
       margin: 20px 0;
@@ -4631,7 +4992,10 @@
       <div class="screen" id="screen-hrm" style="display: none;">
         <div class="screen-header-bar">
           <h2>Human Resources</h2>
-          <button class="btn-primary" onclick="showAddEmployeeModal()">+ Add Employee</button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn-settings" onclick="showEmployeeFieldsSettings()" title="Custom Fields Settings">⚙️</button>
+            <button class="btn-primary" onclick="showAddEmployeeModal()">+ Add Employee</button>
+          </div>
         </div>
         <div class="screen-filters">
           <input type="text" class="filter-input" placeholder="Search employees..." oninput="filterEmployees(this.value)">
@@ -12688,14 +13052,49 @@ Guidelines:
       loadEmployees();
     }
     
-    function showAddEmployeeModal() {
+    // Custom fields state
+    let customFieldDefinitions = [];
+    let editingCustomFieldId = null;
+    
+    // Switch employee modal tabs
+    function switchEmployeeTab(tabName) {
+      // Update tab buttons
+      document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+      
+      // Update tab content
+      document.querySelectorAll('#employeeModalOverlay .modal-tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      if (tabName === 'general') {
+        document.getElementById('empTabGeneral').classList.add('active');
+      } else if (tabName === 'custom') {
+        document.getElementById('empTabCustom').classList.add('active');
+      }
+    }
+    
+    async function showAddEmployeeModal() {
       editingEmployeeId = null;
       document.getElementById('employeeModalTitle').textContent = 'Add Employee';
       document.getElementById('employeeForm').reset();
+      
+      // Reset to General tab
+      document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === 0);
+      });
+      document.getElementById('empTabGeneral').classList.add('active');
+      document.getElementById('empTabCustom').classList.remove('active');
+      
+      // Load custom fields (empty for new employee)
+      await loadCustomFieldsForEmployee(null);
+      
       document.getElementById('employeeModalOverlay').classList.add('show');
     }
     
-    function editEmployee(id) {
+    async function editEmployee(id) {
       const emp = employeesData.find(e => e.id === id);
       if (!emp) return;
       
@@ -12709,6 +13108,17 @@ Guidelines:
       document.getElementById('empLicence').value = emp.licence_number || '';
       document.getElementById('empRole').value = emp.role || 'driver';
       document.getElementById('empStatus').value = emp.status || 'active';
+      
+      // Reset to General tab
+      document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
+        tab.classList.toggle('active', i === 0);
+      });
+      document.getElementById('empTabGeneral').classList.add('active');
+      document.getElementById('empTabCustom').classList.remove('active');
+      
+      // Load custom fields with values for this employee
+      await loadCustomFieldsForEmployee(id);
+      
       document.getElementById('employeeModalOverlay').classList.add('show');
     }
     
@@ -12729,19 +13139,666 @@ Guidelines:
         status: document.getElementById('empStatus').value,
       };
       
+      // Validate required custom fields
+      const requiredFields = document.querySelectorAll('.custom-field-input[data-required="true"]');
+      for (const field of requiredFields) {
+        const value = field.type === 'checkbox' ? field.checked : field.value;
+        if (!value || value === '') {
+          const fieldName = field.getAttribute('data-field-name') || 'Field';
+          showToast(`${fieldName} is required`, 'error');
+          // Switch to Custom Fields tab
+          document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
+            tab.classList.toggle('active', i === 1);
+          });
+          document.getElementById('empTabGeneral').classList.remove('active');
+          document.getElementById('empTabCustom').classList.add('active');
+          field.focus();
+          return;
+        }
+      }
+      
       try {
+        let employeeId = editingEmployeeId;
+        
         if (editingEmployeeId) {
           await apiRequest(`/employees/${editingEmployeeId}`, { method: 'PUT', body: data });
-          showToast('Employee updated');
         } else {
-          await apiRequest('/employees', { method: 'POST', body: data });
-          showToast('Employee added');
+          const result = await apiRequest('/employees', { method: 'POST', body: data });
+          employeeId = result.data?.id;
         }
+        
+        // Save custom field values
+        if (employeeId) {
+          await saveCustomFieldValues(employeeId);
+        }
+        
+        showToast(editingEmployeeId ? 'Employee updated' : 'Employee added');
         closeEmployeeModal();
         loadEmployees();
       } catch (err) {
         showToast(err.message || 'Failed to save', 'error');
       }
+    }
+    
+    // ============================================
+    // CUSTOM FIELDS - EMPLOYEE VALUES
+    // ============================================
+    
+    async function loadCustomFieldsForEmployee(employeeId) {
+      const container = document.getElementById('empCustomFieldsContainer');
+      
+      try {
+        // Load field definitions
+        const defsResult = await apiRequest('/employee-fields/definitions');
+        customFieldDefinitions = defsResult.data || [];
+        
+        if (customFieldDefinitions.length === 0) {
+          container.innerHTML = `
+            <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+              <p>No custom fields defined yet.</p>
+              <p style="font-size: 12px; margin-top: 8px;">Click the ⚙️ settings button to add custom fields.</p>
+            </div>
+          `;
+          return;
+        }
+        
+        // Load values if editing existing employee
+        let fieldValues = {};
+        if (employeeId) {
+          const valuesResult = await apiRequest(`/employee-fields/values/${employeeId}`);
+          if (valuesResult.data) {
+            for (const field of valuesResult.data) {
+              fieldValues[field.id] = field.value;
+            }
+          }
+        }
+        
+        // Render custom field inputs with grid layout
+        let html = '<div class="custom-fields-grid">';
+        
+        // Group fields by row
+        const fieldsByRow = {};
+        for (const field of customFieldDefinitions) {
+          const row = field.display_row || 0;
+          if (!fieldsByRow[row]) fieldsByRow[row] = [];
+          fieldsByRow[row].push(field);
+        }
+        
+        // Sort rows and render
+        const rowNumbers = Object.keys(fieldsByRow).map(Number).sort((a, b) => a - b);
+        
+        for (const rowNum of rowNumbers) {
+          const rowFields = fieldsByRow[rowNum];
+          html += `<div class="custom-fields-row">`;
+          
+          for (const field of rowFields) {
+            const value = fieldValues[field.id] || '';
+            const required = field.is_required ? ' *' : '';
+            const requiredAttr = field.is_required ? 'data-required="true"' : '';
+            const fieldWidth = field.field_width || 'full';
+            const widthClass = fieldWidth === 'half' ? 'half-width' : 'full-width';
+            
+            html += `<div class="form-group custom-field-group ${widthClass}">`;
+            html += `<label class="form-label">${escapeHtml(field.field_name)}${required}</label>`;
+            
+            switch (field.field_type) {
+              case 'text':
+                html += `<input type="text" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+                break;
+              case 'number':
+                html += `<input type="number" class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+                break;
+              case 'date':
+                html += `<div class="date-input-wrapper">`;
+                html += `<input type="date" class="form-input custom-field-input" id="cf_${field.id}" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" value="${escapeHtml(value)}" ${requiredAttr}>`;
+                html += `<button type="button" class="date-picker-btn" onclick="document.getElementById('cf_${field.id}').showPicker()">📅</button>`;
+                html += `</div>`;
+                break;
+              case 'boolean':
+                const checked = value === 'true' || value === '1' ? 'checked' : '';
+                html += `<label class="checkbox-wrapper"><input type="checkbox" class="custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${checked}><span class="checkbox-label">Yes</span></label>`;
+                break;
+              case 'select':
+                html += `<select class="form-input custom-field-input" data-field-id="${field.id}" data-field-name="${escapeHtml(field.field_name)}" ${requiredAttr}>`;
+                html += `<option value="">-- Select --</option>`;
+                if (field.field_options && Array.isArray(field.field_options)) {
+                  for (const opt of field.field_options) {
+                    const selected = value === opt ? 'selected' : '';
+                    html += `<option value="${escapeHtml(opt)}" ${selected}>${escapeHtml(opt)}</option>`;
+                  }
+                }
+                html += `</select>`;
+                break;
+            }
+            
+            html += `</div>`;
+          }
+          html += `</div>`;
+        }
+        html += '</div>';
+        
+        container.innerHTML = html;
+      } catch (err) {
+        console.error('Failed to load custom fields:', err);
+        container.innerHTML = `<div style="padding: 20px; color: var(--accent-red);">Failed to load custom fields</div>`;
+      }
+    }
+    
+    async function saveCustomFieldValues(employeeId) {
+      const inputs = document.querySelectorAll('.custom-field-input');
+      const values = [];
+      
+      for (const input of inputs) {
+        const fieldId = input.getAttribute('data-field-id');
+        let value;
+        
+        if (input.type === 'checkbox') {
+          value = input.checked ? 'true' : 'false';
+        } else {
+          value = input.value || null;
+        }
+        
+        values.push({
+          field_definition_id: fieldId,
+          value: value
+        });
+      }
+      
+      if (values.length > 0) {
+        await apiRequest('/employee-fields/values/bulk', {
+          method: 'POST',
+          body: {
+            employee_id: employeeId,
+            values: values
+          }
+        });
+      }
+    }
+    
+    // ============================================
+    // CUSTOM FIELDS - SETTINGS/DEFINITIONS
+    // ============================================
+    
+    async function showEmployeeFieldsSettings() {
+      await loadCustomFieldDefinitions();
+      document.getElementById('employeeFieldsSettingsOverlay').classList.add('show');
+    }
+    
+    function closeEmployeeFieldsSettings() {
+      document.getElementById('employeeFieldsSettingsOverlay').classList.remove('show');
+    }
+    
+    // Switch tabs in settings modal
+    function switchFieldsSettingsTab(tabName) {
+      document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+      
+      document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      
+      if (tabName === 'fields') {
+        document.getElementById('fieldsTabFields').classList.add('active');
+      } else if (tabName === 'layout') {
+        document.getElementById('fieldsTabLayout').classList.add('active');
+        // Initialize row count based on existing fields
+        layoutRowCount = 0;
+        for (const field of customFieldDefinitions) {
+          layoutRowCount = Math.max(layoutRowCount, (field.display_row ?? 0) + 1);
+        }
+        if (layoutRowCount === 0) layoutRowCount = 1;
+        renderLayoutEditor();
+      }
+    }
+    
+    // Layout editor state
+    let layoutRows = [];
+    let draggedFieldId = null;
+    let layoutRowCount = 0; // Track total rows including empty ones
+    
+    function renderLayoutEditor() {
+      const container = document.getElementById('layoutPreview');
+      
+      if (customFieldDefinitions.length === 0) {
+        container.innerHTML = `<div style="padding: 20px; text-align: center; color: var(--text-muted);">No fields to arrange. Add fields first.</div>`;
+        return;
+      }
+      
+      // Group fields by row
+      const fieldsByRow = {};
+      let maxRow = -1;
+      
+      for (const field of customFieldDefinitions) {
+        const row = field.display_row ?? 0;
+        if (!fieldsByRow[row]) fieldsByRow[row] = [];
+        fieldsByRow[row].push(field);
+        maxRow = Math.max(maxRow, row);
+      }
+      
+      // Ensure we show at least as many rows as layoutRowCount
+      maxRow = Math.max(maxRow, layoutRowCount - 1);
+      if (maxRow < 0) maxRow = 0;
+      
+      const typeLabels = {
+        text: 'Text',
+        number: 'Number',
+        date: 'Date',
+        boolean: 'Yes/No',
+        select: 'Dropdown'
+      };
+      
+      let html = '';
+      for (let rowNum = 0; rowNum <= maxRow; rowNum++) {
+        const rowFields = fieldsByRow[rowNum] || [];
+        html += `<div class="layout-row" data-row="${rowNum}" ondragover="handleLayoutDragOver(event)" ondrop="handleLayoutDrop(event, ${rowNum})" ondragleave="handleLayoutDragLeave(event)">`;
+        
+        if (rowFields.length === 0) {
+          html += `<div style="flex: 1; padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">Drop fields here (Row ${rowNum + 1})</div>`;
+        } else {
+          for (const field of rowFields) {
+            const width = field.field_width || 'full';
+            const typeLabel = typeLabels[field.field_type] || field.field_type;
+            html += `
+              <div class="layout-field ${width}-width" draggable="true" data-field-id="${field.id}"
+                   ondragstart="handleLayoutDragStart(event, '${field.id}')" ondragend="handleLayoutDragEnd(event)">
+                <div>
+                  <span class="layout-field-name">${escapeHtml(field.field_name)}</span>
+                  <span class="layout-field-type">${typeLabel}</span>
+                </div>
+                <div class="layout-field-controls">
+                  <button onclick="toggleFieldWidth('${field.id}')" title="Toggle width">${width === 'half' ? '◧' : '▣'}</button>
+                  <button onclick="moveFieldUp('${field.id}')" title="Move up">↑</button>
+                  <button onclick="moveFieldDown('${field.id}')" title="Move down">↓</button>
+                </div>
+              </div>
+            `;
+          }
+        }
+        html += `</div>`;
+      }
+      
+      container.innerHTML = html;
+    }
+    
+    function handleLayoutDragStart(event, fieldId) {
+      draggedFieldId = fieldId;
+      event.target.classList.add('dragging');
+    }
+    
+    function handleLayoutDragEnd(event) {
+      event.target.classList.remove('dragging');
+      draggedFieldId = null;
+    }
+    
+    function handleLayoutDragOver(event) {
+      event.preventDefault();
+      event.currentTarget.classList.add('drop-target');
+    }
+    
+    function handleLayoutDragLeave(event) {
+      event.currentTarget.classList.remove('drop-target');
+    }
+    
+    async function handleLayoutDrop(event, targetRow) {
+      event.preventDefault();
+      event.currentTarget.classList.remove('drop-target');
+      
+      if (!draggedFieldId) return;
+      
+      const field = customFieldDefinitions.find(f => f.id === draggedFieldId);
+      if (!field) return;
+      
+      // Update row
+      field.display_row = targetRow;
+      
+      // Save to backend
+      try {
+        await apiRequest(`/employee-fields/definitions/${field.id}`, {
+          method: 'PUT',
+          body: { display_row: targetRow }
+        });
+        renderLayoutEditor();
+      } catch (err) {
+        showToast('Failed to update layout', 'error');
+      }
+    }
+    
+    async function toggleFieldWidth(fieldId) {
+      const field = customFieldDefinitions.find(f => f.id === fieldId);
+      if (!field) return;
+      
+      const newWidth = field.field_width === 'half' ? 'full' : 'half';
+      field.field_width = newWidth;
+      
+      try {
+        await apiRequest(`/employee-fields/definitions/${fieldId}`, {
+          method: 'PUT',
+          body: { field_width: newWidth }
+        });
+        renderLayoutEditor();
+      } catch (err) {
+        showToast('Failed to update width', 'error');
+      }
+    }
+    
+    async function moveFieldUp(fieldId) {
+      const field = customFieldDefinitions.find(f => f.id === fieldId);
+      if (!field || field.display_row <= 0) return;
+      
+      field.display_row--;
+      
+      try {
+        await apiRequest(`/employee-fields/definitions/${fieldId}`, {
+          method: 'PUT',
+          body: { display_row: field.display_row }
+        });
+        renderLayoutEditor();
+      } catch (err) {
+        showToast('Failed to move field', 'error');
+      }
+    }
+    
+    async function moveFieldDown(fieldId) {
+      const field = customFieldDefinitions.find(f => f.id === fieldId);
+      if (!field) return;
+      
+      field.display_row++;
+      layoutRowCount = Math.max(layoutRowCount, field.display_row + 1);
+      
+      try {
+        await apiRequest(`/employee-fields/definitions/${fieldId}`, {
+          method: 'PUT',
+          body: { display_row: field.display_row }
+        });
+        renderLayoutEditor();
+      } catch (err) {
+        showToast('Failed to move field', 'error');
+      }
+    }
+    
+    function addLayoutRow() {
+      layoutRowCount++;
+      renderLayoutEditor();
+    }
+    
+    async function loadCustomFieldDefinitions() {
+      try {
+        const result = await apiRequest('/employee-fields/definitions');
+        customFieldDefinitions = result.data || [];
+        renderFieldDefinitionsTable();
+      } catch (err) {
+        console.error('Failed to load field definitions:', err);
+      }
+    }
+    
+    function renderFieldDefinitionsTable() {
+      const tbody = document.getElementById('fieldDefinitionsBody');
+      
+      if (customFieldDefinitions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">No custom fields defined. Click "+ Add Field" to create one.</td></tr>';
+        return;
+      }
+      
+      const typeLabels = {
+        text: 'Text',
+        number: 'Number',
+        date: 'Date',
+        boolean: 'Yes/No',
+        select: 'Dropdown'
+      };
+      
+      tbody.innerHTML = customFieldDefinitions.map(field => `
+        <tr>
+          <td>${escapeHtml(field.field_name)}</td>
+          <td>${typeLabels[field.field_type] || field.field_type}</td>
+          <td>${field.is_required ? '✓' : ''}</td>
+          <td>${field.field_width === 'half' ? 'Half' : 'Full'}</td>
+          <td>
+            <button class="action-btn" onclick="editFieldDefinition('${field.id}')">Edit</button>
+            <button class="action-btn danger" onclick="deleteFieldDefinition('${field.id}', '${escapeHtml(field.field_name)}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+    
+    function showAddFieldModal() {
+      editingCustomFieldId = null;
+      document.getElementById('fieldModalTitle').textContent = 'Add Custom Field';
+      document.getElementById('fieldDefForm').reset();
+      document.getElementById('fieldOptionsGroup').style.display = 'none';
+      document.getElementById('fieldDefModalOverlay').classList.add('show');
+    }
+    
+    function editFieldDefinition(id) {
+      const field = customFieldDefinitions.find(f => f.id === id);
+      if (!field) return;
+      
+      editingCustomFieldId = id;
+      document.getElementById('fieldModalTitle').textContent = 'Edit Custom Field';
+      document.getElementById('fieldDefName').value = field.field_name || '';
+      document.getElementById('fieldDefType').value = field.field_type || 'text';
+      document.getElementById('fieldDefRequired').checked = field.is_required || false;
+      document.getElementById('fieldDefWidth').value = field.field_width || 'full';
+      document.getElementById('fieldDefOptions').value = (field.field_options || []).join('\n');
+      
+      // Show/hide options based on type
+      document.getElementById('fieldOptionsGroup').style.display = 
+        field.field_type === 'select' ? 'block' : 'none';
+      
+      document.getElementById('fieldDefModalOverlay').classList.add('show');
+    }
+    
+    function closeFieldDefModal() {
+      document.getElementById('fieldDefModalOverlay').classList.remove('show');
+      editingCustomFieldId = null;
+    }
+    
+    function onFieldTypeChange() {
+      const type = document.getElementById('fieldDefType').value;
+      document.getElementById('fieldOptionsGroup').style.display = 
+        type === 'select' ? 'block' : 'none';
+    }
+    
+    async function saveFieldDefinition() {
+      const data = {
+        field_name: document.getElementById('fieldDefName').value,
+        field_type: document.getElementById('fieldDefType').value,
+        is_required: document.getElementById('fieldDefRequired').checked,
+        field_width: document.getElementById('fieldDefWidth').value,
+        field_options: document.getElementById('fieldDefType').value === 'select'
+          ? document.getElementById('fieldDefOptions').value.split('\n').map(s => s.trim()).filter(s => s)
+          : null,
+        display_row: editingCustomFieldId 
+          ? customFieldDefinitions.find(f => f.id === editingCustomFieldId)?.display_row || 0
+          : customFieldDefinitions.length > 0 
+            ? Math.max(...customFieldDefinitions.map(f => f.display_row || 0)) + 1
+            : 0
+      };
+      
+      try {
+        if (editingCustomFieldId) {
+          await apiRequest(`/employee-fields/definitions/${editingCustomFieldId}`, {
+            method: 'PUT',
+            body: data
+          });
+          showToast('Field updated');
+        } else {
+          await apiRequest('/employee-fields/definitions', {
+            method: 'POST',
+            body: data
+          });
+          showToast('Field added');
+        }
+        closeFieldDefModal();
+        await loadCustomFieldDefinitions();
+      } catch (err) {
+        showToast(err.message || 'Failed to save field', 'error');
+      }
+    }
+    
+    async function deleteFieldDefinition(id, name) {
+      if (!confirm(`Delete field "${name}"? This will also delete all values for this field.`)) return;
+      
+      try {
+        await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
+        showToast('Field deleted');
+        await loadCustomFieldDefinitions();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    }
+    
+    // ============================================
+    // CUSTOM FIELD MODAL MANAGEMENT
+    // ============================================
+    
+    function showAddCustomFieldModal() {
+      editingCustomFieldId = null;
+      document.getElementById('customFieldModalTitle').textContent = 'Add Custom Field';
+      document.getElementById('customFieldForm').reset();
+      document.getElementById('customFieldOptionsGroup').style.display = 'none';
+      document.getElementById('customFieldModalOverlay').classList.add('show');
+    }
+    
+    async function editCustomField(id) {
+      const field = customFieldDefinitions.find(f => f.id === id);
+      if (!field) return;
+      
+      editingCustomFieldId = id;
+      document.getElementById('customFieldModalTitle').textContent = 'Edit Custom Field';
+      document.getElementById('customFieldId').value = id;
+      document.getElementById('customFieldName').value = field.field_name;
+      document.getElementById('customFieldKey').value = field.field_key;
+      document.getElementById('customFieldType').value = field.field_type;
+      document.getElementById('customFieldWidth').value = field.field_width || 'full';
+      document.getElementById('customFieldRequired').checked = field.is_required;
+      
+      // Handle options for select type
+      if (field.field_type === 'select' && field.field_options) {
+        document.getElementById('customFieldOptions').value = field.field_options.join('\n');
+        document.getElementById('customFieldOptionsGroup').style.display = 'block';
+      } else {
+        document.getElementById('customFieldOptions').value = '';
+        document.getElementById('customFieldOptionsGroup').style.display = 'none';
+      }
+      
+      document.getElementById('customFieldModalOverlay').classList.add('show');
+    }
+    
+    function closeCustomFieldModal() {
+      document.getElementById('customFieldModalOverlay').classList.remove('show');
+      editingCustomFieldId = null;
+    }
+    
+    function toggleFieldOptions() {
+      const type = document.getElementById('customFieldType').value;
+      document.getElementById('customFieldOptionsGroup').style.display = type === 'select' ? 'block' : 'none';
+    }
+    
+    async function saveCustomField() {
+      const data = {
+        field_name: document.getElementById('customFieldName').value,
+        field_key: document.getElementById('customFieldKey').value,
+        field_type: document.getElementById('customFieldType').value,
+        field_width: document.getElementById('customFieldWidth').value,
+        is_required: document.getElementById('customFieldRequired').checked,
+      };
+      
+      // Add options for select type
+      if (data.field_type === 'select') {
+        const optionsText = document.getElementById('customFieldOptions').value;
+        data.field_options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
+        if (data.field_options.length === 0) {
+          showToast('Please add at least one option for dropdown field', 'error');
+          return;
+        }
+      }
+      
+      try {
+        if (editingCustomFieldId) {
+          await apiRequest(`/employee-fields/definitions/${editingCustomFieldId}`, { method: 'PUT', body: data });
+          showToast('Custom field updated');
+        } else {
+          await apiRequest('/employee-fields/definitions', { method: 'POST', body: data });
+          showToast('Custom field added');
+        }
+        closeCustomFieldModal();
+        loadCustomFieldDefinitions();
+      } catch (err) {
+        showToast(err.message || 'Failed to save custom field', 'error');
+      }
+    }
+    
+    async function deleteCustomField(id, name) {
+      if (!confirm(`Delete custom field "${name}"?\n\nThis will also delete all stored values for this field across all employees.`)) return;
+      
+      try {
+        await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
+        showToast('Custom field deleted');
+        loadCustomFieldDefinitions();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    }
+    
+    async function saveFieldLayouts() {
+      // Layout is saved automatically when dragging, this just confirms
+      showToast('Layout saved');
+    }
+    
+    async function loadCustomFieldDefinitions() {
+      try {
+        const result = await apiRequest('/employee-fields/definitions');
+        customFieldDefinitions = result.data || [];
+        renderCustomFieldsList();
+      } catch (err) {
+        console.error('Failed to load custom field definitions:', err);
+      }
+    }
+    
+    function renderCustomFieldsList() {
+      const container = document.getElementById('customFieldsList');
+      
+      if (customFieldDefinitions.length === 0) {
+        container.innerHTML = '<div class="custom-fields-empty">No custom fields defined yet.</div>';
+        return;
+      }
+      
+      const typeLabels = {
+        text: 'Text',
+        number: 'Number',
+        date: 'Date',
+        boolean: 'Yes/No',
+        select: 'Dropdown'
+      };
+      
+      container.innerHTML = customFieldDefinitions.map(field => `
+        <div class="custom-field-item">
+          <div class="custom-field-drag">⋮⋮</div>
+          <div class="custom-field-info">
+            <div class="custom-field-name">
+              ${escapeHtml(field.field_name)}
+              <span class="field-type-badge">${typeLabels[field.field_type] || field.field_type}</span>
+              ${field.is_required ? '<span class="field-type-badge required">Required</span>' : ''}
+            </div>
+            <div class="custom-field-meta">Key: ${escapeHtml(field.field_key)} | Width: ${field.field_width === 'half' ? 'Half' : 'Full'}</div>
+          </div>
+          <div class="custom-field-actions">
+            <button onclick="editCustomField('${field.id}')" title="Edit">✏️</button>
+            <button class="delete" onclick="deleteCustomField('${field.id}', '${escapeHtml(field.field_name)}')" title="Delete">🗑️</button>
+          </div>
+        </div>
+      `).join('');
+    }
+    
+    // Helper function to escape HTML
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
     }
     
     async function deleteEmployee(id, name) {
@@ -14557,58 +15614,72 @@ Guidelines:
   
   <!-- Employee Modal -->
   <div class="crud-modal-overlay" id="employeeModalOverlay">
-    <div class="crud-modal">
+    <div class="crud-modal crud-modal-tabbed">
       <div class="crud-modal-header">
         <span class="crud-modal-title" id="employeeModalTitle">Add Employee</span>
         <button class="crud-modal-close" onclick="closeEmployeeModal()">&times;</button>
       </div>
-      <div class="crud-modal-body">
+      <div class="modal-tabs">
+        <button class="modal-tab active" onclick="switchEmployeeTab('general')">General</button>
+        <button class="modal-tab" onclick="switchEmployeeTab('custom')">Custom Fields</button>
+      </div>
+      <div class="crud-modal-body" style="padding: 0;">
         <form id="employeeForm" onsubmit="event.preventDefault(); saveEmployee();">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Employee Number *</label>
-              <input type="text" id="empNumber" class="form-input" required>
+          <!-- General Tab -->
+          <div class="modal-tab-content active" id="empTabGeneral">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Employee Number *</label>
+                <input type="text" id="empNumber" class="form-input" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Role</label>
+                <select id="empRole" class="form-input">
+                  <option value="driver">Driver</option>
+                  <option value="dispatcher">Dispatcher</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
             </div>
-            <div class="form-group">
-              <label class="form-label">Role</label>
-              <select id="empRole" class="form-input">
-                <option value="driver">Driver</option>
-                <option value="dispatcher">Dispatcher</option>
-                <option value="admin">Admin</option>
-              </select>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">First Name *</label>
+                <input type="text" id="empFirstName" class="form-input" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Last Name *</label>
+                <input type="text" id="empLastName" class="form-input" required>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" id="empEmail" class="form-input">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Phone</label>
+                <input type="tel" id="empPhone" class="form-input">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Licence Number</label>
+                <input type="text" id="empLicence" class="form-input">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Status</label>
+                <select id="empStatus" class="form-input">
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
             </div>
           </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">First Name *</label>
-              <input type="text" id="empFirstName" class="form-input" required>
-            </div>
-            <div class="form-group">
-              <label class="form-label">Last Name *</label>
-              <input type="text" id="empLastName" class="form-input" required>
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Email</label>
-              <input type="email" id="empEmail" class="form-input">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Phone</label>
-              <input type="tel" id="empPhone" class="form-input">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Licence Number</label>
-              <input type="text" id="empLicence" class="form-input">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Status</label>
-              <select id="empStatus" class="form-input">
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
+          
+          <!-- Custom Fields Tab -->
+          <div class="modal-tab-content" id="empTabCustom">
+            <div id="empCustomFieldsContainer">
+              <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading custom fields...</div>
             </div>
           </div>
         </form>
@@ -14616,6 +15687,111 @@ Guidelines:
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeEmployeeModal()">Cancel</button>
         <button class="btn-primary" onclick="saveEmployee()">Save</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Employee Custom Fields Settings Modal -->
+  <div class="crud-modal-overlay" id="employeeFieldsSettingsOverlay">
+    <div class="crud-modal crud-modal-wide">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title">Custom Fields Settings</span>
+        <button class="crud-modal-close" onclick="closeEmployeeFieldsSettings()">&times;</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" onclick="switchFieldsSettingsTab('fields')">Fields</button>
+        <button class="modal-tab" onclick="switchFieldsSettingsTab('layout')">Layout Designer</button>
+      </div>
+      <div class="crud-modal-body" style="padding: 0;">
+        <!-- Fields Tab -->
+        <div class="modal-tab-content active" id="fieldsTabFields">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <p style="color: var(--text-secondary); font-size: 13px; margin: 0;">
+              Define custom fields that will appear on all employee records.
+            </p>
+            <button class="btn-primary" onclick="showAddCustomFieldModal()">+ Add Field</button>
+          </div>
+          <div class="custom-fields-list" id="customFieldsList">
+            <div class="custom-fields-empty">No custom fields defined yet.</div>
+          </div>
+        </div>
+        
+        <!-- Layout Tab -->
+        <div class="modal-tab-content" id="fieldsTabLayout">
+          <p style="color: var(--text-secondary); font-size: 13px; margin: 0 0 16px 0;">
+            Drag fields to arrange them on the form. Use the width buttons to set half or full width.
+          </p>
+          <div class="layout-editor">
+            <div class="layout-preview" id="layoutPreview">
+              <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading layout...</div>
+            </div>
+            <div class="layout-add-row">
+              <button onclick="addLayoutRow()">+ Add Row</button>
+            </div>
+          </div>
+          <div style="margin-top: 16px; text-align: right;">
+            <button class="btn-primary" onclick="saveFieldLayouts()">Save Layout</button>
+          </div>
+        </div>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closeEmployeeFieldsSettings()">Close</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Add/Edit Custom Field Modal -->
+  <div class="crud-modal-overlay" id="customFieldModalOverlay">
+    <div class="crud-modal">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="customFieldModalTitle">Add Custom Field</span>
+        <button class="crud-modal-close" onclick="closeCustomFieldModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="customFieldForm" onsubmit="event.preventDefault(); saveCustomField();">
+          <input type="hidden" id="customFieldId">
+          <div class="form-group">
+            <label class="form-label">Field Name *</label>
+            <input type="text" id="customFieldName" class="form-input" placeholder="e.g., Training Date" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Field Key *</label>
+            <input type="text" id="customFieldKey" class="form-input" placeholder="e.g., training_date" required>
+            <small style="color: var(--text-muted); font-size: 11px;">Lowercase, no spaces. Used for data storage.</small>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Field Type *</label>
+            <select id="customFieldType" class="form-input" onchange="toggleFieldOptions()">
+              <option value="text">Text</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="boolean">Yes/No (Checkbox)</option>
+              <option value="select">Dropdown (Select)</option>
+            </select>
+          </div>
+          <div class="form-group" id="customFieldOptionsGroup" style="display: none;">
+            <label class="form-label">Options (one per line) *</label>
+            <textarea id="customFieldOptions" class="form-input" rows="4" placeholder="Option 1&#10;Option 2&#10;Option 3"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Field Width</label>
+              <select id="customFieldWidth" class="form-input">
+                <option value="full">Full Width</option>
+                <option value="half">Half Width</option>
+              </select>
+            </div>
+            <div class="form-group" style="display: flex; align-items: center; padding-top: 22px;">
+              <label class="form-label" style="margin-bottom: 0;">
+                <input type="checkbox" id="customFieldRequired"> Required field
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closeCustomFieldModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveCustomField()">Save Field</button>
       </div>
     </div>
   </div>
