@@ -10661,6 +10661,24 @@
           
           <div class="form-row">
             <div class="form-group">
+              <label class="form-label">Location <span style="font-size: 10px; color: var(--text-muted);">(optional - for smart assignment)</span></label>
+              <div class="location-input-wrapper">
+                <input type="text" class="form-input" id="editLocation" 
+                       value="${duty.locationName || ''}" 
+                       placeholder="Start typing to search or enter free text..."
+                       oninput="onLocationInput('editLocation')"
+                       onfocus="onLocationInput('editLocation')">
+                <input type="hidden" id="editLocationLat" value="${duty.locationLat || ''}">
+                <input type="hidden" id="editLocationLng" value="${duty.locationLng || ''}">
+              </div>
+              ${duty.locationLat && duty.locationLng ? 
+                `<div class="location-coords">📍 ${Number(duty.locationLat).toFixed(4)}, ${Number(duty.locationLng).toFixed(4)}</div>` : 
+                ''}
+            </div>
+          </div>
+          
+          <div class="form-row">
+            <div class="form-group">
               <label class="form-label">
                 Driver ${needsDriver ? '<span class="required">*</span>' : ''}
               </label>
@@ -10851,6 +10869,9 @@
       const type = document.getElementById('editType')?.value;
       const driverId = document.getElementById('editDriver')?.value || null;
       const description = document.getElementById('editDesc')?.value || '';
+      const locationName = document.getElementById('editLocation')?.value || null;
+      const locationLat = parseFloat(document.getElementById('editLocationLat')?.value) || null;
+      const locationLng = parseFloat(document.getElementById('editLocationLng')?.value) || null;
       
       const start = parseTime(startStr);
       const end = parseTime(endStr);
@@ -10888,7 +10909,10 @@
         end, 
         description, 
         driver: selectedDriver ? selectedDriver.name : null,
-        driverId: driverId
+        driverId: driverId,
+        locationName,
+        locationLat,
+        locationLng
       };
       
       if (editingDuty.isNew) {
