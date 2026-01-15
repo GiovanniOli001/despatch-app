@@ -7628,25 +7628,71 @@
       
       container.innerHTML = filtered.map(job => {
         // Filter out cancelled duties for display
-        const activeDuties = (job.duties || []).filter(d => !d.cancelled);
-        if (activeDuties.length === 0) return ''; // Skip job entirely if all duties cancelled
+        const allDuties = job.duties || [];
+        const activeDuties = allDuties.filter(d => !d.cancelled);
+        const cancelledDuties = allDuties.filter(d => d.cancelled);
+        
+        if (activeDuties.length === 0 && !showCancelledDuties) return ''; // Skip job entirely if all duties cancelled
         
         const idx = unassignedJobs.indexOf(job);
         
-        // Recalculate bounds based on active duties only
-        const activeStart = Math.min(...activeDuties.map(d => d.start));
-        const activeEnd = Math.max(...activeDuties.map(d => d.end));
+        let blocksHTML = '';
         
-        const left = timeToPercent(activeStart);
-        const width = timeToPercent(activeEnd) - left;
+        if (showCancelledDuties && allDuties.length > 0) {
+          // Show all duties in one bar
+          const allStart = Math.min(...allDuties.map(d => d.start));
+          const allEnd = Math.max(...allDuties.map(d => d.end));
+          const left = timeToPercent(allStart);
+          const width = timeToPercent(allEnd) - left;
+          
+          blocksHTML = `<div class="time-block unassigned-job" style="left: ${left}%; width: ${width}%;">${job.name}</div>`;
+          
+          // Show cancelled ghost overlays
+          cancelledDuties.forEach(duty => {
+            const dutyLeft = timeToPercent(duty.start);
+            const dutyWidth = timeToPercent(duty.end) - dutyLeft;
+            blocksHTML += `<div class="timeline-duty cancelled-ghost" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="CANCELLED: ${duty.description || ''}"></div>`;
+          });
+        } else if (activeDuties.length > 0) {
+          // Group contiguous active duties into separate bars
+          const sortedActive = [...activeDuties].sort((a, b) => a.start - b.start);
+          const groups = [];
+          let currentGroup = [];
+          
+          sortedActive.forEach(duty => {
+            if (currentGroup.length === 0) {
+              currentGroup.push(duty);
+            } else {
+              const lastDuty = currentGroup[currentGroup.length - 1];
+              if (Math.abs(duty.start - lastDuty.end) < 0.01) {
+                currentGroup.push(duty);
+              } else {
+                groups.push(currentGroup);
+                currentGroup = [duty];
+              }
+            }
+          });
+          if (currentGroup.length > 0) {
+            groups.push(currentGroup);
+          }
+          
+          // Render each group as a separate bar
+          groups.forEach((group, groupIdx) => {
+            const groupStart = Math.min(...group.map(d => d.start));
+            const groupEnd = Math.max(...group.map(d => d.end));
+            const left = timeToPercent(groupStart);
+            const width = timeToPercent(groupEnd) - left;
+            const label = groupIdx === 0 ? job.name : '';
+            
+            blocksHTML += `<div class="time-block unassigned-job" style="left: ${left}%; width: ${width}%;">${label}</div>`;
+          });
+        }
         
         return `
           <div class="heatmap-row ${selectedItem?.type === 'job' && selectedItem?.index === idx ? 'selected' : ''}"
                onclick="selectItem('job', ${idx})">
             <div class="row-label"><span class="row-name">${job.name}</span></div>
-            <div class="row-timeline">
-              <div class="time-block unassigned-job" style="left: ${left}%; width: ${width}%;">${job.name}</div>
-            </div>
+            <div class="row-timeline">${blocksHTML}</div>
           </div>
         `;
       }).join('');
