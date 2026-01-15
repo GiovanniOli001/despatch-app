@@ -2,7 +2,7 @@
 
 Bus and coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch.
 
-**Version:** 1.3.0 | **Last Updated:** January 15, 2026
+**Version:** 1.4.0 | **Last Updated:** January 15, 2026
 
 ## Live App
 
@@ -29,6 +29,7 @@ Bus and coach dispatch operations system for managing drivers, vehicles, shifts,
 - **Adhoc Shifts** - Create duties without templates
 - **Location Autocomplete** - Nominatim integration
 - **Published Roster Protection** - Blocks editing when published
+- **Duty Cancellation** - Cancel/reinstate duties with reason tracking
 
 ### Planned
 - Charters module (quote-to-invoice)
@@ -137,7 +138,7 @@ dispatch-app/
 
 | Resource | Key Endpoints |
 |----------|---------------|
-| Dispatch | `GET /api/dispatch/:date`, create-duty-line, create-adhoc-shift, update-duty-line |
+| Dispatch | `GET /api/dispatch/:date`, create-duty-line, create-adhoc-shift, update-duty-line, cancel-duty-line, reinstate-duty-line |
 | Roster | `GET/POST /api/roster/containers`, publish, unpublish, assign, unassign |
 | Shifts | `GET/POST /api/shifts`, lock-status, duplicate |
 | Employees | Full CRUD at `/api/employees` |
@@ -159,6 +160,12 @@ When published:
 - Must unpublish first to make changes
 
 ## Version History
+
+### v1.4.0 (January 15, 2026)
+- Duty cancellation with visual indicators and reason tracking
+- Cancel/reinstate individual duties or bulk cancel shifts
+- Vehicle sync respects cancelled state across date changes
+- Roster unpublish/republish resets cancelled states
 
 ### v1.3.0 (January 15, 2026)
 - Published roster protection for shifts and rosters

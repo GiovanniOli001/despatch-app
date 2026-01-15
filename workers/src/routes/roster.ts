@@ -434,6 +434,18 @@ async function publishRoster(env: Env, id: string): Promise<Response> {
     }
   }
   
+  // Recreate duty lines from template for ALL entries (ensures fresh state after unpublish)
+  // Query all entries, not just assigned ones
+  const allEntries = await env.DB.prepare(`
+    SELECT re.id, re.duty_block_id
+    FROM roster_entries re
+    WHERE re.roster_id = ? AND re.deleted_at IS NULL
+  `).bind(id).all();
+  
+  for (const entry of allEntries.results as any[]) {
+    await copyDutyLinesToRosterEntry(env, entry.id, entry.duty_block_id);
+  }
+  
   // No conflicts, publish
   await env.DB.prepare(`
     UPDATE rosters SET status = 'published', updated_at = ? WHERE id = ?
@@ -449,6 +461,16 @@ async function unpublishRoster(env: Env, id: string): Promise<Response> {
   `).bind(id, TENANT_ID).first();
   
   if (!roster) return error('Roster not found', 404);
+  
+  // Delete all roster_duty_lines for this roster's entries
+  // This ensures fresh duty lines (without cancelled status) are created on next publish
+  await env.DB.prepare(`
+    DELETE FROM roster_duty_lines 
+    WHERE roster_entry_id IN (
+      SELECT id FROM roster_entries 
+      WHERE roster_id = ? AND deleted_at IS NULL
+    )
+  `).bind(id).run();
   
   // Revert to draft
   await env.DB.prepare(`
