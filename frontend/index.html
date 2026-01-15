@@ -576,6 +576,76 @@
       white-space: nowrap;
       color: white;
       min-width: 2px;
+      cursor: pointer;
+    }
+    
+    /* Hide text in narrow blocks, show on hover via tooltip */
+    .style-a .timeline-duty .duty-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+      padding: 0 2px;
+    }
+    
+    /* Tooltip for all timeline duties */
+    .timeline-duty-tooltip {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--bg-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 10px;
+      min-width: 160px;
+      max-width: 250px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      z-index: 9999;
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.15s, visibility 0.15s;
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--text-primary);
+      text-align: left;
+    }
+    
+    .timeline-duty:hover .timeline-duty-tooltip {
+      opacity: 1;
+      visibility: visible;
+    }
+    
+    .timeline-duty-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: var(--border-color);
+    }
+    
+    .timeline-duty-tooltip .tooltip-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: var(--text-primary);
+    }
+    
+    .timeline-duty-tooltip .tooltip-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--text-secondary);
+    }
+    
+    .timeline-duty-tooltip .tooltip-label {
+      color: var(--text-muted);
+    }
+    
+    .timeline-duty-tooltip .tooltip-value {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 500;
     }
 
     .style-a .timeline-duty.driving { background: var(--duty-driving); }
@@ -6095,6 +6165,38 @@
         renderAll();
       }
     }
+    
+    // Generate tooltip HTML for duty blocks
+    function renderDutyTooltip(duty, shiftName = '') {
+      const dt = DUTY_TYPES[duty.type] || DUTY_TYPES.driving;
+      const hours = (duty.end - duty.start).toFixed(2);
+      const desc = duty.description || shiftName || dt.label;
+      const locationText = duty.locationName || duty.location || '';
+      const vehicleText = duty.vehicle || '';
+      
+      return `
+        <div class="timeline-duty-tooltip">
+          <div class="tooltip-title">${desc}</div>
+          <div class="tooltip-row"><span class="tooltip-label">Time</span><span class="tooltip-value">${formatTime(duty.start)} - ${formatTime(duty.end)}</span></div>
+          <div class="tooltip-row"><span class="tooltip-label">Type</span><span class="tooltip-value">${dt.label}</span></div>
+          <div class="tooltip-row"><span class="tooltip-label">Hours</span><span class="tooltip-value">${hours}h</span></div>
+          ${vehicleText ? `<div class="tooltip-row"><span class="tooltip-label">Vehicle</span><span class="tooltip-value">${vehicleText}</span></div>` : ''}
+          ${locationText ? `<div class="tooltip-row"><span class="tooltip-label">Location</span><span class="tooltip-value">${locationText}</span></div>` : ''}
+        </div>
+      `;
+    }
+    
+    // Get short label for duty block (abbreviated when narrow)
+    function getDutyShortLabel(duty, width) {
+      const dt = DUTY_TYPES[duty.type] || DUTY_TYPES.driving;
+      // If very narrow (< 3%), show nothing or just type code
+      if (width < 3) return '';
+      // If narrow (< 6%), show just type
+      if (width < 6) return dt.code || dt.label.charAt(0);
+      // Otherwise show description truncated
+      const desc = duty.description || dt.label;
+      return desc.length > 12 ? desc.substring(0, 10) + '…' : desc;
+    }
 
     function formatTime(hour) {
       const h = Math.floor(hour);
@@ -6643,7 +6745,11 @@
           (shift.duties || []).forEach(duty => {
             const left = timeToPercent(duty.start);
             const width = Math.max(timeToPercent(duty.end) - left, 0.5);
-            blocksHTML += `<div class="timeline-duty ${duty.type}" style="left: ${left}%; width: ${width}%;"></div>`;
+            const shortLabel = getDutyShortLabel(duty, width);
+            blocksHTML += `<div class="timeline-duty ${duty.type}" style="left: ${left}%; width: ${width}%;">
+              <span class="duty-text">${shortLabel}</span>
+              ${renderDutyTooltip(duty, shift.name)}
+            </div>`;
             
             // Show vehicle indicator for any duty with a vehicle assigned
             if (duty.vehicle) {
@@ -6815,7 +6921,11 @@
               (shift.duties || []).forEach(duty => {
                 const left = timeToPercent(duty.start);
                 const width = Math.max(timeToPercent(duty.end) - left, 0.5);
-                blocksHTML += `<div class="timeline-duty ${duty.type}" style="left: ${left}%; width: ${width}%;"></div>`;
+                const shortLabel = getDutyShortLabel(duty, width);
+                blocksHTML += `<div class="timeline-duty ${duty.type}" style="left: ${left}%; width: ${width}%;">
+                  <span class="duty-text">${shortLabel}</span>
+                  ${renderDutyTooltip(duty, shift.name)}
+                </div>`;
                 
                 // Show driver assignment status (green bar if driver assigned)
                 if (DRIVER_REQUIRED_TYPES.includes(duty.type) && (duty.driver || duty.driverId)) {
@@ -6824,13 +6934,23 @@
               });
             });
           } else {
-            // Driver-centric: simple blocks
+            // Driver-centric: simple blocks with tooltip
             (vehicle.shifts || []).forEach(shift => {
               const left = timeToPercent(shift.start);
               const width = timeToPercent(shift.end) - left;
               const typeClass = shift.type === 'maintenance' ? 'maintenance' : 'driving';
-              const label = shift.type === 'maintenance' ? 'MAINT' : (shift.duties && shift.duties[0]?.driver) || shift.name;
-              blocksHTML += `<div class="timeline-duty ${typeClass}" style="left: ${left}%; width: ${width}%;">${label}</div>`;
+              const shortLabel = width < 4 ? '' : (shift.type === 'maintenance' ? 'MAINT' : shift.name.substring(0, 8));
+              const fullLabel = shift.type === 'maintenance' ? 'Maintenance' : shift.name;
+              // Create a simple tooltip for shift-level blocks
+              const tooltip = `<div class="timeline-duty-tooltip">
+                <div class="tooltip-title">${fullLabel}</div>
+                <div class="tooltip-row"><span class="tooltip-label">Time</span><span class="tooltip-value">${formatTime(shift.start)} - ${formatTime(shift.end)}</span></div>
+                <div class="tooltip-row"><span class="tooltip-label">Hours</span><span class="tooltip-value">${(shift.end - shift.start).toFixed(2)}h</span></div>
+              </div>`;
+              blocksHTML += `<div class="timeline-duty ${typeClass}" style="left: ${left}%; width: ${width}%;">
+                <span class="duty-text">${shortLabel}</span>
+                ${tooltip}
+              </div>`;
             });
           }
         } else {
