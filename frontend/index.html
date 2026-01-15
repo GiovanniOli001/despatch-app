@@ -6333,6 +6333,7 @@
         for (const shift of driver.shifts) {
           for (const duty of shift.duties) {
             if (excludeDutyId && duty.id === excludeDutyId) continue;
+            if (duty.cancelled) continue; // Skip cancelled duties
             if (duty.vehicle === vehicleId) {
               // Check for overlap
               if (start < duty.end && end > duty.start) {
@@ -6526,7 +6527,9 @@
     }
 
     function getShiftVehicleStatus(shift) {
-      const drivingDuties = shift.duties.filter(d => VEHICLE_REQUIRED_TYPES.includes(d.type));
+      // Only consider active (non-cancelled) duties
+      const activeDuties = shift.duties.filter(d => !d.cancelled);
+      const drivingDuties = activeDuties.filter(d => VEHICLE_REQUIRED_TYPES.includes(d.type));
       if (drivingDuties.length === 0) return { status: 'complete', label: 'N/A', assigned: 0, total: 0 };
       
       const withVehicle = drivingDuties.filter(d => d.vehicle);
@@ -6540,6 +6543,7 @@
       const endMins = toMinutes(end);
       return duties.find(d => {
         if (d.id === excludeId) return false;
+        if (d.cancelled) return false; // Skip cancelled duties
         const dStartMins = toMinutes(d.start);
         const dEndMins = toMinutes(d.end);
         return (startMins < dEndMins && endMins > dStartMins);
@@ -6548,7 +6552,9 @@
 
     function findAvailableSlots(duties, shiftStart, shiftEnd, minDuration = 0.25) {
       const slots = [];
-      const sortedDuties = [...duties].sort((a, b) => a.start - b.start);
+      // Only consider active (non-cancelled) duties
+      const activeDuties = duties.filter(d => !d.cancelled);
+      const sortedDuties = [...activeDuties].sort((a, b) => a.start - b.start);
       let currentTime = shiftStart;
       const minDurationMins = toMinutes(minDuration);
       
@@ -7488,6 +7494,7 @@
               <div class="shift-block-actions">
                 ${vehicleStatus.status !== 'complete' ? `<button class="shift-action-btn primary" onclick="showBulkAssignVehicle('${driver.id}', '${shift.id}')" title="Assign vehicle to all unassigned duties">Assign All</button>` : ''}
                 <button class="shift-action-btn" onclick="showTransferDriverShift('${driver.id}', ${shiftIdx})" title="Transfer to another driver">Transfer</button>
+                <button class="shift-action-btn danger" onclick="cancelAllDuties('${driver.id}', '${shift.id}')" title="Cancel all duties in this shift">Cancel All</button>
                 <button class="shift-action-btn danger" onclick="unassignDriverShift('${driver.id}', ${shiftIdx})" title="Remove and move to unassigned">Unassign</button>
               </div>
               ${bulkAssigning && bulkAssigning.type === 'vehicle' && bulkAssigning.driverId === driver.id && bulkAssigning.shiftId === shift.id ? renderBulkAssignVehiclePanel() : ''}
@@ -7740,7 +7747,6 @@
             </select>
             <span class="duty-inline-hours">${hoursStr}</span>
             <button class="duty-cancel-btn" onclick="event.stopPropagation(); openCancelDutyModal('${duty.id}', '${driverId}', '${shiftId}', ${dutyIdx})" title="Cancel duty">✕</button>
-            <button class="duty-delete-btn" onclick="deleteDuty('${driverId}', '${shiftId}', ${dutyIdx})" title="Delete duty">🗑</button>
           </div>
         </div>
       `;
@@ -8792,6 +8798,7 @@
       for (const shift of driver.shifts || []) {
         for (const duty of shift.duties || []) {
           if (excludeDutyId && duty.id === excludeDutyId) continue;
+          if (duty.cancelled) continue; // Skip cancelled duties
           // Check for overlap
           if (start < duty.end && end > duty.start) {
             return false;
@@ -10394,6 +10401,69 @@
       pendingCancelDuty = null;
     }
     
+    async function cancelAllDuties(driverId, shiftId) {
+      const driver = drivers.find(d => d.id === driverId);
+      if (!driver) return;
+      
+      const shift = driver.shifts.find(s => s.id === shiftId);
+      if (!shift) return;
+      
+      // Get active (non-cancelled) duties
+      const activeDuties = shift.duties.filter(d => !d.cancelled);
+      if (activeDuties.length === 0) {
+        showToast('All duties already cancelled', 'info');
+        return;
+      }
+      
+      if (!confirm(`Cancel all ${activeDuties.length} active duties in ${shift.name}?`)) {
+        return;
+      }
+      
+      let cancelled = 0;
+      let failed = 0;
+      
+      for (const duty of activeDuties) {
+        if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+          try {
+            const result = await apiRequest('/dispatch/cancel-duty-line', {
+              method: 'POST',
+              body: {
+                duty_line_id: duty.id,
+                reason: 'Bulk cancel'
+              }
+            });
+            
+            if (!result.error) {
+              duty.cancelled = true;
+              duty.cancelReason = 'Bulk cancel';
+              duty.cancelledAt = new Date().toISOString();
+              cancelled++;
+            } else {
+              failed++;
+            }
+          } catch (err) {
+            failed++;
+          }
+        } else {
+          // Demo mode
+          duty.cancelled = true;
+          duty.cancelReason = 'Bulk cancel';
+          duty.cancelledAt = new Date().toISOString();
+          cancelled++;
+        }
+      }
+      
+      updateShiftBounds(shift);
+      
+      if (failed > 0) {
+        showToast(`Cancelled ${cancelled} duties, ${failed} failed`, 'warning');
+      } else {
+        showToast(`All ${cancelled} duties cancelled`);
+      }
+      
+      renderAll();
+    }
+    
     async function confirmCancelDuty() {
       if (!pendingCancelDuty) return;
       
@@ -10461,6 +10531,13 @@
       
       const duty = shift.duties.find(d => d.id === dutyId);
       if (!duty) return;
+      
+      // Check for overlap with active duties before reinstating
+      const overlappingDuty = findOverlappingDuty(shift.duties, duty.start, duty.end, duty.id);
+      if (overlappingDuty) {
+        showToast(`Cannot reinstate: overlaps with ${overlappingDuty.description} (${formatTimeCompact(overlappingDuty.start)}-${formatTimeCompact(overlappingDuty.end)})`, 'error');
+        return;
+      }
       
       // Call API to reinstate
       if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
@@ -11354,6 +11431,7 @@
       
       for (const shift of driver.shifts) {
         for (const duty of shift.duties) {
+          if (duty.cancelled) continue; // Skip cancelled duties
           const dStartMins = toMinutes(duty.start);
           const dEndMins = toMinutes(duty.end);
           if (dStartMins < endMins && dEndMins > startMins) {
