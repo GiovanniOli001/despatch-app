@@ -4,6 +4,7 @@
  */
 
 import { handleEmployees } from './routes/employees';
+import { handleEmployeeFields } from './routes/employee-fields';
 import { handleVehicles } from './routes/vehicles';
 import { handleShifts } from './routes/shifts';
 import { handleRoster } from './routes/roster';
@@ -82,6 +83,9 @@ export default {
 
         case 'employees':
           return handleEmployees(request, env, segments.slice(1));
+
+        case 'employee-fields':
+          return handleEmployeeFields(request, env, segments.slice(1));
 
         case 'vehicles':
           return handleVehicles(request, env, segments.slice(1));
