@@ -10605,7 +10605,7 @@
       }
     }
     
-    function executeBulkAssignVehicle(vehicleId) {
+    async function executeBulkAssignVehicle(vehicleId) {
       if (!bulkAssigning || bulkAssigning.type !== 'vehicle') return;
       
       const driver = drivers.find(d => d.id === bulkAssigning.driverId);
@@ -10614,16 +10614,42 @@
       const shift = driver.shifts.find(s => s.id === bulkAssigning.shiftId);
       if (!shift) return;
       
-      let assignedCount = 0;
+      // Find duties that need vehicles
+      const dutiesToAssign = shift.duties.filter(duty => 
+        VEHICLE_REQUIRED_TYPES.includes(duty.type) && !duty.vehicle
+      );
       
-      // Assign vehicle to all unassigned duties
-      shift.duties.forEach(duty => {
-        if (VEHICLE_REQUIRED_TYPES.includes(duty.type) && !duty.vehicle) {
-          duty.vehicle = vehicleId;
-          // Sync to vehicle's schedule
-          syncVehicleSchedule(vehicleId, duty, driver);
-          assignedCount++;
+      if (dutiesToAssign.length === 0) {
+        showToast('No duties to assign');
+        bulkAssigning = null;
+        return;
+      }
+      
+      // Call API for each duty in real mode
+      if (dataSource === 'real') {
+        try {
+          const promises = dutiesToAssign
+            .filter(duty => duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-'))
+            .map(duty => apiRequest('/dispatch/update-duty-line', {
+              method: 'POST',
+              body: {
+                duty_line_id: duty.id,
+                vehicle_number: vehicleId
+              }
+            }));
+          
+          await Promise.all(promises);
+        } catch (err) {
+          showToast(err.message || 'Bulk assign failed', 'error');
+          bulkAssigning = null;
+          return;
         }
+      }
+      
+      // Update local state
+      dutiesToAssign.forEach(duty => {
+        duty.vehicle = vehicleId;
+        syncVehicleSchedule(vehicleId, duty, driver);
       });
       
       // Update vehicle status if needed
@@ -10633,7 +10659,7 @@
       }
       
       bulkAssigning = null;
-      showToast(`Assigned ${vehicleId} to ${assignedCount} duties`);
+      showToast(`Assigned ${vehicleId} to ${dutiesToAssign.length} duties`);
       renderAll();
     }
     
@@ -13003,6 +13029,13 @@ Guidelines:
     // ============================================
     
     async function openRoster(id) {
+      // Check if roster is published - block editing
+      const roster = rostersData.find(r => r.id === id);
+      if (roster && roster.status === 'published') {
+        showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', 'error');
+        return;
+      }
+      
       try {
         document.getElementById('rosterListView').style.display = 'none';
         document.getElementById('rosterDetailView').style.display = 'flex';
@@ -13010,6 +13043,14 @@ Guidelines:
         
         const result = await apiRequest(`/roster/containers/${id}`);
         currentRoster = result.data;
+        
+        // Double-check from server response
+        if (currentRoster.status === 'published') {
+          showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', 'error');
+          backToRosterList();
+          return;
+        }
+        
         currentRosterId = id;
         currentRosterDate = new Date(currentRoster.start_date);
         

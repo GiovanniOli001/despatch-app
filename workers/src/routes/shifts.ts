@@ -257,97 +257,56 @@ async function updateShiftTemplate(env: Env, id: string, input: ShiftTemplateInp
 
     // Replace duty blocks if provided
     if (input.duty_blocks !== undefined) {
-      // First, try to create all new blocks - if this fails, old data is preserved
-      const newBlockIds: string[] = [];
+      // Step 1: Delete ALL existing lines first
+      const existingBlocks = await env.DB.prepare(`
+        SELECT id FROM shift_template_duty_blocks WHERE shift_template_id = ?
+      `).bind(id).all();
       
-      try {
-        for (const block of input.duty_blocks) {
-          const blockId = uuid();
-          newBlockIds.push(blockId);
-          
-          // Validate driver_id if provided - set to null if invalid
-          let driverId = null;
-          if (block.driver_id && block.driver_id.trim() !== '') {
-            const driverExists = await env.DB.prepare(`
-              SELECT id FROM employees WHERE id = ?
-            `).bind(block.driver_id).first();
-            if (driverExists) {
-              driverId = block.driver_id;
-            }
-          }
-
-          // Insert new duty block
-          await env.DB.prepare(`
-            INSERT INTO shift_template_duty_blocks (
-              id, shift_template_id, sequence, name, driver_id, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).bind(
-            blockId, id, block.sequence, block.name, driverId, now, now
-          ).run();
-
-          // Insert duty lines for this block
-          if (block.lines && block.lines.length > 0) {
-            for (const line of block.lines) {
-              // Validate vehicle_id if provided
-              let vehicleId = null;
-              if (line.vehicle_id && line.vehicle_id.trim() !== '') {
-                const vehicleExists = await env.DB.prepare(`
-                  SELECT id FROM vehicles WHERE id = ?
-                `).bind(line.vehicle_id).first();
-                if (vehicleExists) {
-                  vehicleId = line.vehicle_id;
-                }
-              }
-              
-              await env.DB.prepare(`
-                INSERT INTO shift_template_duty_lines (
-                  id, duty_block_id, sequence, start_time, end_time,
-                  duty_type, description, vehicle_id, pay_type,
-                  location_name, location_lat, location_lng,
-                  created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-              `).bind(
-                uuid(), blockId, line.sequence,
-                line.start_time, line.end_time,
-                line.duty_type || 'driving',
-                line.description || null,
-                vehicleId,
-                line.pay_type || 'STD',
-                line.location_name ?? null,
-                line.location_lat ?? null,
-                line.location_lng ?? null,
-                now, now
-              ).run();
-            }
-          }
-        }
-        
-        // SUCCESS - now delete old blocks (new ones are already saved)
-        // Get old block IDs (excluding the ones we just created)
-        const oldBlocks = await env.DB.prepare(`
-          SELECT id FROM shift_template_duty_blocks 
-          WHERE shift_template_id = ? AND id NOT IN (${newBlockIds.map(() => '?').join(',') || "''"})
-        `).bind(id, ...newBlockIds).all();
-        
-        for (const oldBlock of oldBlocks.results as Record<string, unknown>[]) {
-          await env.DB.prepare(`
-            DELETE FROM shift_template_duty_lines WHERE duty_block_id = ?
-          `).bind(oldBlock.id).run();
-        }
-        
+      for (const block of existingBlocks.results as Record<string, unknown>[]) {
         await env.DB.prepare(`
-          DELETE FROM shift_template_duty_blocks 
-          WHERE shift_template_id = ? AND id NOT IN (${newBlockIds.map(() => '?').join(',') || "''"})
-        `).bind(id, ...newBlockIds).run();
+          DELETE FROM shift_template_duty_lines WHERE duty_block_id = ?
+        `).bind(block.id).run();
+      }
+      
+      // Step 2: Delete ALL existing blocks
+      await env.DB.prepare(`
+        DELETE FROM shift_template_duty_blocks WHERE shift_template_id = ?
+      `).bind(id).run();
+      
+      // Step 3: Insert new blocks and lines
+      for (const block of input.duty_blocks) {
+        const blockId = uuid();
         
-      } catch (insertErr) {
-        // Insert failed - clean up any new blocks we created and preserve old data
-        console.error('Insert failed, rolling back new blocks:', insertErr);
-        for (const newBlockId of newBlockIds) {
-          await env.DB.prepare(`DELETE FROM shift_template_duty_lines WHERE duty_block_id = ?`).bind(newBlockId).run();
-          await env.DB.prepare(`DELETE FROM shift_template_duty_blocks WHERE id = ?`).bind(newBlockId).run();
+        // Insert block (no driver_id foreign key - we'll skip it for now)
+        await env.DB.prepare(`
+          INSERT INTO shift_template_duty_blocks (
+            id, shift_template_id, sequence, name, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(blockId, id, block.sequence, block.name, now, now).run();
+
+        // Insert lines
+        if (block.lines && block.lines.length > 0) {
+          for (const line of block.lines) {
+            await env.DB.prepare(`
+              INSERT INTO shift_template_duty_lines (
+                id, duty_block_id, sequence, start_time, end_time,
+                duty_type, description, pay_type,
+                location_name, location_lat, location_lng,
+                created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              uuid(), blockId, line.sequence,
+              line.start_time, line.end_time,
+              line.duty_type || 'driving',
+              line.description || null,
+              line.pay_type || 'STD',
+              line.location_name ?? null,
+              line.location_lat ?? null,
+              line.location_lng ?? null,
+              now, now
+            ).run();
+          }
         }
-        throw insertErr;
       }
     }
 
