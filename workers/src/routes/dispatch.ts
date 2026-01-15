@@ -1068,6 +1068,9 @@ async function createAdhocShift(
   if (!date || !employee_id || !duty) {
     return error('Missing required fields: date, employee_id, duty');
   }
+
+  // Use description as name, or generate adhoc name
+  const shiftName = duty.description || `ADHOC-${Date.now().toString(36).toUpperCase()}`;
   
   // Resolve vehicle if provided
   let resolvedVehicleId: string | null = null;
@@ -1089,9 +1092,6 @@ async function createAdhocShift(
   const entryId = crypto.randomUUID();
   const dutyLineId = crypto.randomUUID();
 
-  // Generate adhoc name
-  const adhocName = `ADHOC-${Date.now().toString(36).toUpperCase()}`;
-
   // Create roster entry (no template = adhoc)
   await env.DB.prepare(`
     INSERT INTO roster_entries (
@@ -1100,7 +1100,7 @@ async function createAdhocShift(
       created_at, updated_at
     ) VALUES (?, ?, NULL, ?, ?, 'adhoc', ?, ?, ?, 'scheduled', 'manual', ?, ?)
   `).bind(
-    entryId, TENANT_ID, date, adhocName,
+    entryId, TENANT_ID, date, shiftName,
     duty.start_time, duty.end_time, employee_id,
     now, now
   ).run();
@@ -1128,6 +1128,6 @@ async function createAdhocShift(
     message: 'Adhoc shift created',
     entry_id: entryId,
     duty_line_id: dutyLineId,
-    adhoc_code: adhocName
+    adhoc_code: shiftName
   });
 }
