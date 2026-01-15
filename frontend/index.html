@@ -6354,6 +6354,7 @@
         driver.shifts.forEach(shift => {
           if (!shift.duties) return;
           shift.duties.forEach(duty => {
+            if (duty.cancelled) return; // Skip cancelled duties
             if (duty.vehicle) {
               syncVehicleSchedule(duty.vehicle, duty, driver, shift);
             }
@@ -10770,6 +10771,10 @@
               duty.cancelled = true;
               duty.cancelReason = 'Bulk cancel';
               duty.cancelledAt = new Date().toISOString();
+              // Unsync from vehicle schedule
+              if (duty.vehicle) {
+                unsyncVehicleSchedule(duty.vehicle, duty.id);
+              }
               cancelled++;
             } else {
               failed++;
@@ -10782,6 +10787,10 @@
           duty.cancelled = true;
           duty.cancelReason = 'Bulk cancel';
           duty.cancelledAt = new Date().toISOString();
+          // Unsync from vehicle schedule
+          if (duty.vehicle) {
+            unsyncVehicleSchedule(duty.vehicle, duty.id);
+          }
           cancelled++;
         }
       }
@@ -10824,6 +10833,11 @@
           duty.cancelReason = reason;
           duty.cancelledAt = new Date().toISOString();
           
+          // Unsync from vehicle schedule
+          if (duty.vehicle) {
+            unsyncVehicleSchedule(duty.vehicle, duty.id);
+          }
+          
           // Recalculate shift bounds based on remaining active duties
           const driver = drivers.find(d => d.id === driverId);
           const shift = driver?.shifts.find(s => s.id === shiftId);
@@ -10842,6 +10856,11 @@
         duty.cancelled = true;
         duty.cancelReason = reason;
         duty.cancelledAt = new Date().toISOString();
+        
+        // Unsync from vehicle schedule
+        if (duty.vehicle) {
+          unsyncVehicleSchedule(duty.vehicle, duty.id);
+        }
         
         const driver = drivers.find(d => d.id === driverId);
         const shift = driver?.shifts.find(s => s.id === shiftId);
@@ -10899,6 +10918,11 @@
           duty.cancelReason = null;
           duty.cancelledAt = null;
           
+          // Re-sync to vehicle schedule if vehicle assigned
+          if (duty.vehicle) {
+            syncVehicleSchedule(duty.vehicle, duty, driver, shift);
+          }
+          
           // Recalculate shift bounds
           updateShiftBounds(shift);
           
@@ -10912,6 +10936,11 @@
         duty.cancelled = false;
         duty.cancelReason = null;
         duty.cancelledAt = null;
+        
+        // Re-sync to vehicle schedule if vehicle assigned
+        if (duty.vehicle) {
+          syncVehicleSchedule(duty.vehicle, duty, driver, shift);
+        }
         
         updateShiftBounds(shift);
         
