@@ -2,8 +2,11 @@
 
 **CRITICAL: Claude must read this entire file before making any changes or suggestions.**
 
-## QUICK FACTS (READ FIRST)
+---
 
+## SECTION 1: QUICK REFERENCE
+
+### Essential Facts
 - **User:** John (Windows PC, Brisbane QLD Australia)
 - **Local Project Path:** `C:\Users\Giovanni\Downloads\despatch-app`
 - **Frontend:** Single HTML file at `frontend/index.html`
@@ -12,8 +15,7 @@
 - **Live App:** https://despatch-app.pages.dev/
 - **Live API:** https://dispatch-api.oliveri-john001.workers.dev
 
-## FILE STRUCTURE (EXACT PATHS)
-
+### File Structure
 ```
 C:\Users\Giovanni\Downloads\despatch-app\
 ├── frontend\
@@ -33,18 +35,21 @@ C:\Users\Giovanni\Downloads\despatch-app\
             └── schema.sql      ← Database schema
 ```
 
-## DEPLOYMENT PROCEDURE (WINDOWS - LINE BY LINE)
+---
+
+## SECTION 2: DEPLOYMENT PROCEDURES
 
 **CRITICAL: On Windows, NEVER chain commands with && or ;**
 **Give each command in a SEPARATE code block.**
 
-### When Claude provides files:
+### Workflow
+1. Claude provides downloadable files
+2. User downloads files to `C:\Users\Giovanni\Downloads\`
+3. User runs copy commands (one at a time)
+4. User deploys backend (if changed): `npx wrangler deploy`
+5. User deploys frontend (if changed): `git add . && git commit && git push`
 
-1. User downloads files from Claude to `C:\Users\Giovanni\Downloads\`
-2. User copies files to project folders
-3. User deploys
-
-### Copy Commands (give these ONE AT A TIME):
+### Copy Commands (ONE AT A TIME):
 
 For index.html:
 ```
@@ -66,94 +71,333 @@ For shifts.ts:
 copy C:\Users\Giovanni\Downloads\shifts.ts C:\Users\Giovanni\Downloads\despatch-app\workers\src\routes\shifts.ts
 ```
 
-For schema.sql or migrations:
-```
-copy C:\Users\Giovanni\Downloads\migration_xyz.sql C:\Users\Giovanni\Downloads\despatch-app\workers\src\db\migration_xyz.sql
-```
-
-### Backend Deploy Commands (ONE AT A TIME):
-
+### Backend Deploy (ONE AT A TIME):
 ```
 cd C:\Users\Giovanni\Downloads\despatch-app\workers
 ```
-
 ```
 npx wrangler deploy
 ```
 
-### Frontend Deploy Commands (ONE AT A TIME):
-
+### Frontend Deploy (ONE AT A TIME):
 ```
 cd C:\Users\Giovanni\Downloads\despatch-app
 ```
-
 ```
 git add .
 ```
-
 ```
 git commit -m "Your message here"
 ```
-
 ```
 git push
 ```
 
-### Database Migration Commands (ONE AT A TIME):
-
+### Database Migration (ONE AT A TIME):
 ```
 cd C:\Users\Giovanni\Downloads\despatch-app\workers
 ```
-
 ```
 npx wrangler d1 execute dispatch-db --remote --file=src/db/migration_xyz.sql
 ```
 
-## Q&A - COMMON QUESTIONS CLAUDE MUST KNOW
+### If Git Push Rejected:
+```
+git pull --rebase
+```
+```
+git push
+```
+
+---
+
+## SECTION 3: ARCHITECTURE
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Cloudflare    │     │   Cloudflare    │     │   Cloudflare    │
+│     Pages       │────▶│    Workers      │────▶│       D1        │
+│   (Frontend)    │     │   (API)         │     │   (Database)    │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+### External Services
+- **Nominatim** - Free geocoding/location autocomplete (OpenStreetMap)
+- **OSRM** - Free routing/distance calculations (planned)
+
+---
+
+## SECTION 4: DATA MODEL
+
+### Hierarchy
+```
+Shift Templates (reusable definitions)
+  └── Duty Blocks (assignable units, e.g., "AM Block", "PM Block")
+       └── Duty Lines (time segments within a block)
+
+Rosters (date range containers, e.g., "Week 3 Jan 2026")
+  └── Roster Entries (assignments: block + date + driver)
+       └── Roster Duty Lines (instance-specific duty line data)
+```
+
+### Key Tables
+
+**shift_templates**
+- Reusable shift definitions (e.g., "Early Shift", "School Run AM")
+
+**shift_template_duty_blocks**
+```sql
+id TEXT PRIMARY KEY,
+shift_template_id TEXT NOT NULL,
+sequence INTEGER NOT NULL,
+name TEXT NOT NULL,
+driver_id TEXT  -- Default driver (optional)
+```
+
+**shift_template_duty_lines**
+```sql
+id TEXT PRIMARY KEY,
+duty_block_id TEXT NOT NULL,
+sequence INTEGER NOT NULL,
+start_time REAL NOT NULL,  -- Decimal hours (6.5 = 06:30)
+end_time REAL NOT NULL,
+duty_type TEXT NOT NULL DEFAULT 'driving',
+description TEXT,
+vehicle_id TEXT,
+pay_type TEXT NOT NULL DEFAULT 'STD',
+location_name TEXT,
+location_lat REAL,
+location_lng REAL
+```
+
+**rosters**
+```sql
+id TEXT PRIMARY KEY,
+code TEXT NOT NULL UNIQUE,  -- e.g., "WK03-JAN26"
+name TEXT NOT NULL,
+start_date TEXT NOT NULL,
+end_date TEXT NOT NULL,
+status TEXT DEFAULT 'draft'  -- draft, published, archived
+```
+
+**roster_entries**
+```sql
+id TEXT PRIMARY KEY,
+roster_id TEXT,
+shift_template_id TEXT,
+duty_block_id TEXT,
+date TEXT NOT NULL,
+driver_id TEXT,
+vehicle_id TEXT,
+start_time REAL,
+end_time REAL
+```
+
+**roster_duty_lines**
+- Instance-specific duty lines (created when dispatch edits are made)
+- Overrides template duty lines for specific roster entries
+
+### Time Format
+- **Decimal hours**: 6.5 = 06:30, 14.25 = 14:15, 23.75 = 23:45
+- Stored as REAL in SQLite
+
+---
+
+## SECTION 5: ROSTER SYSTEM
+
+### Design Principles
+- All shift duty blocks appear in "Unassigned" by default for every day
+- User drags blocks from Unassigned to Driver rows to create assignments
+- Each shift template gets its own row in the Unassigned section
+- Multi-block shifts prompt: "Move all connected blocks?" or "Just this one?"
+- Blocks with pre-assigned default drivers show ⚡ quick-assign button
+
+### Australian Public Holidays (QLD)
+Hardcoded for 2025-2027:
+- New Year's Day, Australia Day
+- Good Friday, Easter Saturday, Easter Monday
+- ANZAC Day, Labour Day (QLD), King's Birthday (QLD)
+- Royal Queensland Show (Brisbane area)
+- Christmas Day, Boxing Day
+
+Holidays display as orange badge on roster grid.
+
+---
+
+## SECTION 6: DISPATCH SYSTEM
+
+### Views
+- **Driver-centric**: Rows are drivers, shows their shifts and duties
+- **Vehicle-centric**: Rows are vehicles, shows their assignments
+
+### Data Sources
+- **Real mode**: Loads from published rosters via API
+- **Fake mode**: Generated test data for demos
+
+### Inline Duty Editing
+Each duty line in dispatch can be edited inline:
+- Start/end time
+- Duty type (driving, OOV, break, etc.)
+- Description
+- Location (with autocomplete)
+- Vehicle assignment
+- Pay type
+
+### Location Functionality
+- **Autocomplete**: Uses Nominatim geocoding service
+- **Storage**: location_name (text), location_lat (decimal), location_lng (decimal)
+- **Smart Assignment**: Prioritizes jobs with real coordinates for proximity matching
+
+### Smart Vehicle Assignment
+Algorithm for suggesting vehicles:
+1. Find vehicles available during duty time
+2. If duty has coordinates, calculate distance from vehicle's last known location
+3. Sort by proximity (closest first)
+4. Prioritize vehicles with real coordinate data over description parsing
+
+### Duty Creation
+- **Existing entries**: Can add duty lines via API (`create-duty-line`)
+- **Adhoc duties**: Created locally but need backend support for full persistence
+
+---
+
+## SECTION 7: API ENDPOINTS
+
+### Dispatch
+- `GET /api/dispatch/:date` - Get day's dispatch data (drivers, vehicles, unassigned)
+- `POST /api/dispatch/assign` - Assign driver/vehicle to entry
+- `POST /api/dispatch/transfer` - Transfer entry to different driver/vehicle
+- `POST /api/dispatch/unassign` - Remove assignment
+- `POST /api/dispatch/update-duty-line` - Update existing duty line
+- `POST /api/dispatch/create-duty-line` - Create new duty line for existing entry
+
+### Roster
+- `GET /api/roster/containers` - List all rosters
+- `GET /api/roster/containers/:id` - Get roster with details
+- `POST /api/roster/containers` - Create roster
+- `PUT /api/roster/containers/:id` - Update roster
+- `DELETE /api/roster/containers/:id` - Soft delete
+- `GET /api/roster/day/:rosterId/:date` - Get day view
+- `POST /api/roster/assign` - Assign block to driver
+- `POST /api/roster/unassign` - Remove assignment
+
+### Shift Templates
+- `GET /api/shifts` - List templates
+- `GET /api/shifts/:id` - Get template with blocks/lines
+- `POST /api/shifts` - Create template
+- `PUT /api/shifts/:id` - Update template (replaces all blocks/lines)
+- `DELETE /api/shifts/:id` - Soft delete
+
+### Employees
+- `GET /api/employees` - List (with search, status, role filters)
+- `GET /api/employees/:id` - Get single
+- `POST /api/employees` - Create
+- `PUT /api/employees/:id` - Update
+- `DELETE /api/employees/:id` - Soft delete
+
+### Vehicles
+- `GET /api/vehicles` - List (with search, capacity filters)
+- `GET /api/vehicles/:id` - Get single
+- `POST /api/vehicles` - Create
+- `PUT /api/vehicles/:id` - Update
+- `DELETE /api/vehicles/:id` - Soft delete
+
+### Config
+- `GET /api/config/duty-types` - List duty types
+- `GET /api/config/pay-types` - List pay types
+
+---
+
+## SECTION 8: DUTY TYPES & PAY TYPES
+
+### Duty Types
+| Code | Label | Color | Description |
+|------|-------|-------|-------------|
+| driving | D | Blue | Driving with vehicle |
+| oov | OOV | Amber | Out of vehicle work |
+| break | BRK | Green | Meal/rest break |
+| waiting | WAIT | Gray | Waiting time |
+| charter | CHR | Purple | Charter work |
+| dead | DEAD | Red | Dead running |
+
+### Pay Types
+| Code | Label | Multiplier |
+|------|-------|------------|
+| STD | Standard | 1.0x |
+| OT | Overtime | 1.5x |
+| DT | Double Time | 2.0x |
+| PEN | Penalty Rate | 1.25x |
+| ALLOW | Allowance | 1.0x |
+| UNPAID | Unpaid | 0x |
+
+---
+
+## SECTION 9: CURRENT STATE
+
+### Completed Modules
+- ✅ HRM (Employees) - Full CRUD with modal forms
+- ✅ Vehicles - Full CRUD with modal forms
+- ✅ Shift Templates - Builder with duty blocks/lines, visual Gantt preview
+- ✅ Roster - Gantt-style drag-drop assignment
+- ✅ Dispatch - Day view with driver/vehicle centric modes
+
+### In Progress
+- Location functionality across all modules
+- Adhoc shift/duty creation (shifts not from templates)
+- Charters module (quote-to-invoice workflow)
+
+### Planned
+- Operations Calendar (week/month view)
+- Maintenance tracking
+- Reporting/exports
+- Mobile optimization
+
+---
+
+## SECTION 10: TROUBLESHOOTING
+
+### "404 Not Found" on API calls
+- Check endpoint exists in appropriate route file
+- Check route is registered in `workers/src/index.ts`
+- Redeploy backend: `npx wrangler deploy`
+
+### Changes not showing in browser
+- Hard refresh: Ctrl+Shift+R
+- Clear cache if needed
+- Check deployment completed
+
+### Git push rejected
+```
+git pull --rebase
+```
+```
+git push
+```
+
+### Wrangler deploy fails
+- Check you're in `workers` directory
+- Run `npx wrangler login` if auth expired
+
+### Database errors
+- Check column exists in schema
+- Run migration if adding new columns
+
+### Location autocomplete not working
+- Nominatim has rate limits, wait and retry
+- Check browser console for errors
+
+---
+
+## SECTION 11: Q&A FOR CLAUDE
 
 ### Q: Where is the frontend code?
 A: ALL frontend code is in ONE file: `frontend/index.html`. This includes HTML, CSS (in `<style>` tags), and JavaScript (in `<script>` tags). There are NO separate .js or .css files.
 
 ### Q: Where is the backend code?
-A: In `workers/src/routes/`. Each route file handles a different API area:
-- `dispatch.ts` - Daily dispatch operations
-- `roster.ts` - Roster management
-- `shifts.ts` - Shift template management
-- `employees.ts` - Employee/HRM
-- `vehicles.ts` - Vehicle fleet
+A: In `workers/src/routes/`. Each route file handles a different API area.
 
-### Q: How do I deploy frontend changes?
-A: Git push. Cloudflare Pages auto-deploys from GitHub.
-```
-cd C:\Users\Giovanni\Downloads\despatch-app
-git add .
-git commit -m "message"
-git push
-```
-
-### Q: How do I deploy backend changes?
-A: Wrangler deploy.
-```
-cd C:\Users\Giovanni\Downloads\despatch-app\workers
-npx wrangler deploy
-```
-
-### Q: What if git push fails with "rejected" error?
-A: Remote has newer changes. Run:
-```
-git pull --rebase
-```
-Then:
-```
-git push
-```
-
-### Q: How do I run database migrations?
-A: Use wrangler d1 execute:
-```
-cd C:\Users\Giovanni\Downloads\despatch-app\workers
-npx wrangler d1 execute dispatch-db --remote --file=src/db/your_migration.sql
-```
+### Q: How do I deploy?
+A: Backend: `cd workers && npx wrangler deploy`. Frontend: `git add . && git commit && git push`
 
 ### Q: What's the API base URL?
 A: `https://dispatch-api.oliveri-john001.workers.dev/api`
@@ -164,97 +408,15 @@ A: Decimal hours. 6.5 = 06:30, 14.25 = 14:15
 ### Q: What's the tenant ID?
 A: `default` (hardcoded, single tenant for now)
 
-### Q: How do I test locally?
-A: Currently no local dev setup. Test directly on production (it's a personal project).
+### Q: How does location autocomplete work?
+A: Uses Nominatim (OpenStreetMap) geocoding. User types, debounced search queries Nominatim, results shown in dropdown. Selected location stores name + lat + lng.
 
-## CURRENT APPLICATION STATE
+### Q: How does smart assignment work?
+A: For vehicle assignment, system finds available vehicles, calculates distance from duty location to vehicle's last location, sorts by proximity.
 
-### Completed Modules:
-- ✅ HRM (Employees) - Full CRUD
-- ✅ Vehicles - Full CRUD
-- ✅ Shift Templates - Builder with duty blocks/lines, Gantt preview
-- ✅ Roster - Drag-drop assignment, day view
-- ✅ Dispatch - Day view with driver/vehicle centric modes
+---
 
-### Dispatch Features (Current):
-- Driver-centric and vehicle-centric views
-- Real data mode (loads from published rosters)
-- Fake data mode (for testing/demo)
-- Inline duty editing (time, type, description, location, vehicle, pay)
-- Location autocomplete using Nominatim
-- Smart vehicle assignment based on location proximity
-- Duty line creation for existing roster entries
-
-### In Progress:
-- Adhoc shift creation (shifts not from roster templates)
-- Charters module
-
-## DATA MODEL
-
-```
-Shift Templates (reusable definitions)
-  └── Duty Blocks (assignable units, e.g., "AM Block", "PM Block")
-       └── Duty Lines (time segments within a block)
-
-Rosters (date range containers)
-  └── Roster Entries (assignments: block + date + driver)
-       └── Roster Duty Lines (instance-specific overrides of template duty lines)
-```
-
-### Key Tables:
-- `shift_templates` - Template definitions
-- `shift_template_duty_blocks` - Blocks within templates
-- `shift_template_duty_lines` - Lines within blocks (TEMPLATE)
-- `rosters` - Date range containers
-- `roster_entries` - Assignments for specific dates
-- `roster_duty_lines` - Instance-specific duty lines (for dispatch edits)
-
-## API ENDPOINTS REFERENCE
-
-### Dispatch
-- `GET /api/dispatch/:date` - Get day's dispatch data
-- `POST /api/dispatch/assign` - Assign driver/vehicle to entry
-- `POST /api/dispatch/transfer` - Transfer entry to different driver
-- `POST /api/dispatch/unassign` - Remove assignment
-- `POST /api/dispatch/update-duty-line` - Update existing duty line
-- `POST /api/dispatch/create-duty-line` - Create new duty line for existing entry
-
-### Roster
-- `GET /api/roster/containers` - List rosters
-- `GET /api/roster/day/:rosterId/:date` - Get day view
-- `POST /api/roster/assign` - Assign block to driver
-- `POST /api/roster/unassign` - Remove assignment
-
-### Shifts
-- `GET /api/shifts` - List templates
-- `GET /api/shifts/:id` - Get template with blocks/lines
-- `POST /api/shifts` - Create template
-- `PUT /api/shifts/:id` - Update template
-
-## TROUBLESHOOTING
-
-### "404 Not Found" on API calls
-- Check endpoint exists in appropriate route file
-- Check route is registered in `workers/src/index.ts`
-- Redeploy backend: `npx wrangler deploy`
-
-### Changes not showing in browser
-- Hard refresh: Ctrl+Shift+R
-- Check deployment completed (git push or wrangler deploy)
-
-### Git push rejected
-- Run: `git pull --rebase`
-- Then: `git push`
-
-### Wrangler deploy fails
-- Check you're in `workers` directory
-- Run: `npx wrangler login` if auth expired
-
-### Database errors
-- Check column exists in schema
-- Run migration if needed
-
-## IMPORTANT REMINDERS FOR CLAUDE
+## SECTION 12: REMINDERS FOR CLAUDE
 
 1. **ALWAYS give Windows commands LINE BY LINE** - Never use && or ; to chain
 2. **Frontend is ONE file** - `frontend/index.html` contains everything
@@ -264,3 +426,5 @@ Rosters (date range containers)
 6. **Test on production** - No local dev environment
 7. **Provide downloadable files** - User downloads then copies manually
 8. **After changes, remind user to hard refresh** - Ctrl+Shift+R
+9. **Times are decimal hours** - 6.5 = 06:30, not 6:50
+10. **Soft deletes only** - Set deleted_at timestamp, never hard delete
