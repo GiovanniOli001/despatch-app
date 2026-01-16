@@ -3708,8 +3708,8 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
       }
       
       // Use the real ID from the API
-      newDuty.id = result.duty_line_id;
-      newDutyId = result.duty_line_id;
+      newDuty.id = result.data.id;
+      newDutyId = result.data.id;
     } catch (err) {
       showToast(err.message || 'Failed to create duty', 'error');
       return;

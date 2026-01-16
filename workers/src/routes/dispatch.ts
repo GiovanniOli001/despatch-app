@@ -661,37 +661,65 @@ async function assignToEntry(
   input: { roster_entry_id: string; driver_id?: string; vehicle_id?: string }
 ): Promise<Response> {
   const { roster_entry_id, driver_id, vehicle_id } = input;
+  const now = new Date().toISOString();
   
-  const updates: string[] = [];
-  const bindings: (string | null)[] = [];
+  // Try roster_entries first
+  const rosterUpdates: string[] = [];
+  const rosterBindings: (string | null)[] = [];
 
   if (driver_id !== undefined) {
-    updates.push('driver_id = ?');
-    bindings.push(driver_id || null);
+    rosterUpdates.push('driver_id = ?');
+    rosterBindings.push(driver_id || null);
   }
 
   if (vehicle_id !== undefined) {
-    updates.push('vehicle_id = ?');
-    bindings.push(vehicle_id || null);
+    rosterUpdates.push('vehicle_id = ?');
+    rosterBindings.push(vehicle_id || null);
   }
 
-  if (updates.length === 0) {
+  if (rosterUpdates.length === 0) {
     return error('No assignment provided');
   }
 
-  updates.push('updated_at = ?');
-  bindings.push(new Date().toISOString());
-  bindings.push(roster_entry_id);
+  rosterUpdates.push('updated_at = ?');
+  rosterBindings.push(now);
+  rosterBindings.push(roster_entry_id);
 
-  const result = await env.DB.prepare(`
-    UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
-  `).bind(...bindings).run();
+  const rosterResult = await env.DB.prepare(`
+    UPDATE roster_entries SET ${rosterUpdates.join(', ')} WHERE id = ? AND deleted_at IS NULL
+  `).bind(...rosterBindings).run();
 
-  if (result.meta.changes === 0) {
-    return error('Entry not found', 404);
+  if (rosterResult.meta.changes > 0) {
+    return json({ success: true, message: 'Assignment updated' });
   }
 
-  return json({ success: true, message: 'Assignment updated' });
+  // Try adhoc shifts
+  const adhocUpdates: string[] = [];
+  const adhocBindings: (string | null)[] = [];
+
+  if (driver_id !== undefined) {
+    adhocUpdates.push('employee_id = ?');
+    adhocBindings.push(driver_id || null);
+  }
+
+  if (vehicle_id !== undefined) {
+    adhocUpdates.push('vehicle_id = ?');
+    adhocBindings.push(vehicle_id || null);
+  }
+
+  adhocUpdates.push('updated_at = ?');
+  adhocBindings.push(now);
+  adhocBindings.push(roster_entry_id);
+
+  const adhocResult = await env.DB.prepare(`
+    UPDATE dispatch_adhoc_shifts SET ${adhocUpdates.join(', ')} WHERE id = ? AND deleted_at IS NULL
+  `).bind(...adhocBindings).run();
+
+  if (adhocResult.meta.changes > 0) {
+    return json({ success: true, message: 'Assignment updated' });
+  }
+
+  return error('Entry not found', 404);
 }
 
 async function transferEntry(
@@ -700,43 +728,81 @@ async function transferEntry(
 ): Promise<Response> {
   const { roster_entry_id, to_driver_id, to_vehicle_id } = input;
   
-  const entry = await env.DB.prepare(`
-    SELECT * FROM roster_entries WHERE id = ? AND deleted_at IS NULL
+  // Check roster_entries first
+  const rosterEntry = await env.DB.prepare(`
+    SELECT id FROM roster_entries WHERE id = ? AND deleted_at IS NULL
   `).bind(roster_entry_id).first();
 
-  if (!entry) {
-    return error('Entry not found', 404);
+  if (rosterEntry) {
+    const updates: string[] = [];
+    const bindings: (string | null)[] = [];
+
+    if (to_driver_id !== undefined) {
+      updates.push('driver_id = ?');
+      bindings.push(to_driver_id || null);
+    }
+
+    if (to_vehicle_id !== undefined) {
+      updates.push('vehicle_id = ?');
+      bindings.push(to_vehicle_id || null);
+    }
+
+    if (updates.length === 0) {
+      return error('No transfer target provided');
+    }
+
+    updates.push('updated_at = ?');
+    bindings.push(new Date().toISOString());
+    bindings.push(roster_entry_id);
+
+    await env.DB.prepare(`
+      UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
+    `).bind(...bindings).run();
+
+    return json({ 
+      success: true, 
+      message: 'Transfer complete'
+    });
   }
 
-  const updates: string[] = [];
-  const bindings: (string | null)[] = [];
+  // Check adhoc shifts
+  const adhocShift = await env.DB.prepare(`
+    SELECT id FROM dispatch_adhoc_shifts WHERE id = ? AND deleted_at IS NULL
+  `).bind(roster_entry_id).first();
 
-  if (to_driver_id !== undefined) {
-    updates.push('driver_id = ?');
-    bindings.push(to_driver_id || null);
+  if (adhocShift) {
+    const updates: string[] = [];
+    const bindings: (string | null)[] = [];
+
+    if (to_driver_id !== undefined) {
+      updates.push('employee_id = ?');
+      bindings.push(to_driver_id || null);
+    }
+
+    if (to_vehicle_id !== undefined) {
+      updates.push('vehicle_id = ?');
+      bindings.push(to_vehicle_id || null);
+    }
+
+    if (updates.length === 0) {
+      return error('No transfer target provided');
+    }
+
+    updates.push('updated_at = ?');
+    bindings.push(new Date().toISOString());
+    bindings.push(roster_entry_id);
+
+    await env.DB.prepare(`
+      UPDATE dispatch_adhoc_shifts SET ${updates.join(', ')} WHERE id = ?
+    `).bind(...bindings).run();
+
+    return json({ 
+      success: true, 
+      message: 'Transfer complete'
+    });
   }
 
-  if (to_vehicle_id !== undefined) {
-    updates.push('vehicle_id = ?');
-    bindings.push(to_vehicle_id || null);
-  }
-
-  if (updates.length === 0) {
-    return error('No transfer target provided');
-  }
-
-  updates.push('updated_at = ?');
-  bindings.push(new Date().toISOString());
-  bindings.push(roster_entry_id);
-
-  await env.DB.prepare(`
-    UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
-  `).bind(...bindings).run();
-
-  return json({ 
-    success: true, 
-    message: 'Transfer complete'
-  });
+  return error('Entry not found', 404);
 }
 
 async function unassignEntry(
@@ -744,29 +810,52 @@ async function unassignEntry(
   input: { roster_entry_id: string; unassign: 'driver' | 'vehicle' | 'both' }
 ): Promise<Response> {
   const { roster_entry_id, unassign } = input;
+  const now = new Date().toISOString();
   
-  const updates: string[] = [];
+  // Try roster_entries first
+  const rosterUpdates: string[] = [];
   
   if (unassign === 'driver' || unassign === 'both') {
-    updates.push('driver_id = NULL');
-    updates.push('include_in_dispatch = 1');
+    rosterUpdates.push('driver_id = NULL');
+    rosterUpdates.push('include_in_dispatch = 1');
   }
   
   if (unassign === 'vehicle' || unassign === 'both') {
-    updates.push('vehicle_id = NULL');
+    rosterUpdates.push('vehicle_id = NULL');
   }
 
-  updates.push('updated_at = ?');
+  rosterUpdates.push('updated_at = ?');
   
-  const result = await env.DB.prepare(`
-    UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
-  `).bind(new Date().toISOString(), roster_entry_id).run();
+  const rosterResult = await env.DB.prepare(`
+    UPDATE roster_entries SET ${rosterUpdates.join(', ')} WHERE id = ? AND deleted_at IS NULL
+  `).bind(now, roster_entry_id).run();
 
-  if (result.meta.changes === 0) {
-    return error('Entry not found', 404);
+  if (rosterResult.meta.changes > 0) {
+    return json({ success: true });
   }
 
-  return json({ success: true });
+  // Try adhoc shifts
+  const adhocUpdates: string[] = [];
+  
+  if (unassign === 'driver' || unassign === 'both') {
+    adhocUpdates.push('employee_id = NULL');
+  }
+  
+  if (unassign === 'vehicle' || unassign === 'both') {
+    adhocUpdates.push('vehicle_id = NULL');
+  }
+
+  adhocUpdates.push('updated_at = ?');
+  
+  const adhocResult = await env.DB.prepare(`
+    UPDATE dispatch_adhoc_shifts SET ${adhocUpdates.join(', ')} WHERE id = ? AND deleted_at IS NULL
+  `).bind(now, roster_entry_id).run();
+
+  if (adhocResult.meta.changes > 0) {
+    return json({ success: true });
+  }
+
+  return error('Entry not found', 404);
 }
 
 // ============================================

@@ -287,7 +287,12 @@ function setupNavigationHooks() {
     originalNavigateTo(screen);
     
     // Load data for the screen
-    if (screen === 'hrm') {
+    if (screen === 'dispatch') {
+      // loadDispatchData is defined in dispatch.js
+      if (typeof loadDispatchData === 'function') {
+        loadDispatchData();
+      }
+    } else if (screen === 'hrm') {
       loadEmployees();
     } else if (screen === 'vehicles') {
       loadVehiclesData();

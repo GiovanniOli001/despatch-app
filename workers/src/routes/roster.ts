@@ -363,13 +363,25 @@ async function unscheduleRoster(env: Env, id: string): Promise<Response> {
     return error('Cannot unschedule a published roster. Unpublish it first.');
   }
   
+  const now = new Date().toISOString();
+  
+  // Reset dispatch-time assignments on roster_entries for this roster
+  // This clears driver_id and vehicle_id so shifts return to unassigned state
+  await env.DB.prepare(`
+    UPDATE roster_entries 
+    SET driver_id = NULL, 
+        vehicle_id = NULL,
+        updated_at = ?
+    WHERE roster_id = ? AND deleted_at IS NULL
+  `).bind(now, id).run();
+  
   // Clear calendar dates
   await env.DB.prepare(`
     UPDATE rosters SET calendar_start_date = NULL, calendar_end_date = NULL, updated_at = ?
     WHERE id = ?
-  `).bind(new Date().toISOString(), id).run();
+  `).bind(now, id).run();
   
-  return json({ success: true, message: 'Roster removed from calendar' });
+  return json({ success: true, message: 'Roster removed from calendar. Assignments reset.' });
 }
 
 async function publishRoster(env: Env, id: string): Promise<Response> {

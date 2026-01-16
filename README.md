@@ -2,7 +2,7 @@
 
 Bus and coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch.
 
-**Version:** 1.7.0 | **Last Updated:** January 16, 2026
+**Version:** 1.8.0 | **Last Updated:** January 17, 2026
 
 ## Live App
 
@@ -125,6 +125,8 @@ Cloudflare auto-deploys frontend in ~30 seconds.
 | rosters | Roster containers (week/period) |
 | roster_entries | Assigned duties per date |
 | roster_duty_lines | Instance-level duty data |
+| dispatch_adhoc_shifts | Standalone adhoc shifts |
+| dispatch_adhoc_duty_lines | Adhoc duty lines |
 | pay_types | Hourly rate definitions |
 | dispatch_commits | Committed date tracking |
 | employee_pay_records | Generated pay records |
@@ -137,6 +139,8 @@ When purging data, delete in this order:
 4. `shift_template_duty_lines`
 5. `shift_template_duty_blocks`
 6. `shift_templates`
+7. `dispatch_adhoc_duty_lines`
+8. `dispatch_adhoc_shifts`
 
 ## API Endpoints
 
@@ -167,6 +171,10 @@ Before making backend changes:
 See PROJECT-MD.txt Section 2 for full protocol.
 
 ## Version History
+
+### v1.8.0 (January 17, 2026)
+- Adhoc shift refactoring - standalone tables
+- Fixed inline duty insertion time bug
 
 ### v1.7.0 (January 16, 2026)
 - Pay Types Admin (Phase 1)

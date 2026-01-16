@@ -1,8 +1,8 @@
 # Dispatch App - Complete Project Reference
 
-**Version:** 1.7.0  
-**Last Updated:** January 16, 2026  
-**Database Schema Verified:** January 16, 2026
+**Version:** 1.8.0  
+**Last Updated:** January 17, 2026  
+**Database Schema Verified:** January 17, 2026
 
 ---
 
@@ -149,7 +149,7 @@ git push
 
 ---
 
-## SECTION 4: DATABASE SCHEMA (VERIFIED January 16, 2026)
+## SECTION 4: DATABASE SCHEMA (VERIFIED January 17, 2026)
 
 ### All Tables
 ```
@@ -157,6 +157,8 @@ _cf_KV                              (Cloudflare internal)
 audit_log
 customers
 depots
+dispatch_adhoc_duty_lines           ← Adhoc duty lines (standalone)
+dispatch_adhoc_shifts               ← Adhoc shifts (standalone, no roster/template)
 dispatch_commits                    ← Pay commit tracking
 dispatch_duty_cancellations         ← Cancelled duties
 duty_types
@@ -367,6 +369,46 @@ vehicles
 | committed_at | TEXT | YES | |
 | notes | TEXT | | |
 
+#### dispatch_adhoc_shifts
+| Column | Type | NotNull | Default |
+|--------|------|---------|---------|
+| id | TEXT | PK | |
+| tenant_id | TEXT | YES | 'default' |
+| date | TEXT | YES | |
+| employee_id | TEXT | YES | |
+| name | TEXT | YES | 'ADHOC' |
+| start_time | REAL | YES | |
+| end_time | REAL | YES | |
+| vehicle_id | TEXT | | |
+| status | TEXT | | 'active' |
+| created_at | TEXT | | datetime('now') |
+| updated_at | TEXT | | datetime('now') |
+| deleted_at | TEXT | | |
+
+**Note:** Standalone adhoc shifts - no roster or shift template required. Used for on-the-fly duty creation in Dispatch view.
+
+#### dispatch_adhoc_duty_lines
+| Column | Type | NotNull | Default |
+|--------|------|---------|---------|
+| id | TEXT | PK | |
+| tenant_id | TEXT | YES | 'default' |
+| adhoc_shift_id | TEXT | YES | |
+| sequence | INTEGER | YES | 1 |
+| start_time | REAL | YES | |
+| end_time | REAL | YES | |
+| duty_type | TEXT | YES | 'driving' |
+| description | TEXT | | |
+| vehicle_id | TEXT | | |
+| pay_type | TEXT | YES | 'STD' |
+| location_name | TEXT | | |
+| location_lat | REAL | | |
+| location_lng | REAL | | |
+| created_at | TEXT | | datetime('now') |
+| updated_at | TEXT | | datetime('now') |
+| deleted_at | TEXT | | |
+
+**Note:** References dispatch_adhoc_shifts via adhoc_shift_id. Included in pay commit system.
+
 #### employee_pay_records
 | Column | Type | NotNull | Default |
 |--------|------|---------|---------|
@@ -408,15 +450,30 @@ shift_template_duty_lines             roster_entries
                                              │ roster_entry_id
                                              │
                                       roster_duty_lines
+
+
+dispatch_adhoc_shifts (standalone - no FK to rosters/templates)
+    ↑
+    │ adhoc_shift_id
+    │
+dispatch_adhoc_duty_lines
 ```
 
 ### Deletion Order (CRITICAL!)
+
+**Roster data:**
 1. `roster_duty_lines`
 2. `roster_entries`
 3. `rosters`
+
+**Shift template data:**
 4. `shift_template_duty_lines`
 5. `shift_template_duty_blocks`
 6. `shift_templates`
+
+**Adhoc data:**
+7. `dispatch_adhoc_duty_lines`
+8. `dispatch_adhoc_shifts`
 
 ---
 
@@ -516,6 +573,13 @@ Claude should then:
 ---
 
 ## SECTION 9: VERSION HISTORY
+
+### v1.8.0 (January 17, 2026)
+- **Adhoc shift refactoring** - Standalone tables (dispatch_adhoc_shifts, dispatch_adhoc_duty_lines)
+- Adhoc shifts no longer create fake roster/template records
+- All dispatch operations (assign, transfer, unassign, cancel, reinstate) support adhoc shifts
+- Adhoc duties included in pay commit system
+- Fixed inline duty insertion time calculation bug
 
 ### v1.7.0 (January 16, 2026)
 - Restored dispatch commit functionality after accidental removal
