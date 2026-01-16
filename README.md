@@ -2,7 +2,7 @@
 
 Bus and coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch.
 
-**Version:** 1.5.0 | **Last Updated:** January 16, 2026
+**Version:** 1.6.0 | **Last Updated:** January 16, 2026
 
 ## Live App
 
@@ -11,7 +11,7 @@ Bus and coach dispatch operations system for managing drivers, vehicles, shifts,
 
 ## Tech Stack
 
-- **Frontend:** Vanilla JS (single HTML file) → Cloudflare Pages
+- **Frontend:** Vanilla JS (modular files) → Cloudflare Pages
 - **Backend:** TypeScript → Cloudflare Workers
 - **Database:** Cloudflare D1 (SQLite)
 - **Geocoding:** Nominatim (OpenStreetMap)
@@ -121,11 +121,21 @@ Cloudflare auto-deploys frontend in ~30 seconds.
 ```
 dispatch-app/
 ├── frontend/
-│   └── index.html          # ALL frontend code (HTML + CSS + JS)
+│   ├── index.html              ← HTML shell + modals
+│   ├── css/
+│   │   └── main.css            ← All styles (~4,700 lines)
+│   └── js/
+│       ├── api.js              ← API client
+│       ├── app.js              ← Constants, navigation, utilities
+│       ├── dispatch.js         ← Dispatch screen (~7,600 lines)
+│       ├── hrm.js              ← Employees + custom fields
+│       ├── vehicles.js         ← Vehicle CRUD
+│       ├── shifts.js           ← Shift templates
+│       └── roster.js           ← Roster + calendar
 └── workers/
-    ├── wrangler.toml       # Cloudflare config
+    ├── wrangler.toml           ← Cloudflare config
     └── src/
-        ├── index.ts        # Main router
+        ├── index.ts            ← Main router
         ├── routes/
         │   ├── employees.ts
         │   ├── employee-fields.ts
@@ -187,6 +197,11 @@ The HRM module supports configurable custom fields for employees:
 - "Layout Designer" tab to arrange fields
 
 ## Version History
+
+### v1.6.0 (January 16, 2026)
+- Frontend restructured into modular files (CSS, JS modules)
+- Improved maintainability with separate files per feature
+- No functional changes - same features, better organization
 
 ### v1.5.0 (January 16, 2026)
 - HRM custom fields with configurable types (text, number, date, boolean, select)

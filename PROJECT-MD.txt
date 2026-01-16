@@ -1,6 +1,6 @@
 # Dispatch App - Complete Project Reference
 
-**Version:** 1.5.0  
+**Version:** 1.6.0  
 **Last Updated:** January 16, 2026  
 **CRITICAL: Claude must read this entire file before making any changes or suggestions.**
 
@@ -11,7 +11,7 @@
 ### Essential Facts
 - **User:** John (Windows PC, Brisbane QLD Australia)
 - **Local Project Path:** `C:\Users\Giovanni\Downloads\despatch-app`
-- **Frontend:** Single HTML file at `frontend/index.html`
+- **Frontend:** Modular files in `frontend/` folder
 - **Backend:** TypeScript files in `workers/src/routes/`
 - **Database:** Cloudflare D1 (SQLite)
 - **Live App:** https://despatch-app.pages.dev/
@@ -21,7 +21,17 @@
 ```
 C:\Users\Giovanni\Downloads\despatch-app\
 ├── frontend\
-│   └── index.html              ← ALL frontend code (HTML + CSS + JS in one file)
+│   ├── index.html              ← HTML shell + modals (~950 lines)
+│   ├── css\
+│   │   └── main.css            ← All styles (~4,700 lines)
+│   └── js\
+│       ├── api.js              ← API client (~20 lines)
+│       ├── app.js              ← Constants, nav, utilities (~300 lines)
+│       ├── dispatch.js         ← Dispatch screen (~7,600 lines)
+│       ├── hrm.js              ← Employees + custom fields (~800 lines)
+│       ├── vehicles.js         ← Vehicle CRUD (~130 lines)
+│       ├── shifts.js           ← Shift templates (~550 lines)
+│       └── roster.js           ← Roster + calendar (~1,100 lines)
 └── workers\
     ├── wrangler.toml           ← Cloudflare Workers config
     └── src\
@@ -39,31 +49,46 @@ C:\Users\Giovanni\Downloads\despatch-app\
             └── schema.sql      ← Database schema
 ```
 
+### Frontend File Responsibilities
+
+| File | Purpose |
+|------|---------|
+| `index.html` | HTML structure, modals, script tags |
+| `css/main.css` | All CSS styles |
+| `js/api.js` | API_BASE constant, apiRequest() function |
+| `js/app.js` | DUTY_TYPES, LOCATIONS, navigation, init(), showToast(), escapeHtml() |
+| `js/dispatch.js` | Dispatch screen, timeline rendering, cancel/reinstate, AI assistant |
+| `js/hrm.js` | Employee CRUD, custom fields, layout designer |
+| `js/vehicles.js` | Vehicle CRUD |
+| `js/shifts.js` | Shift template CRUD |
+| `js/roster.js` | Roster, Gantt view, drag-drop, ops calendar |
+
 ---
 
 ## SECTION 2: CRITICAL RULES FOR CLAUDE
 
-### ⚠️ FILE MODIFICATION RULES (MUST FOLLOW)
+### ⚠️ FILE MODIFICATION RULES
 
-**NEVER regenerate or rebuild entire files or large sections.**
+**With the modular structure, modifications are now safer and more targeted.**
 
-When adding features to `index.html`:
-1. **Start with the user's CURRENT working file** - This is the untouchable base
-2. **Identify ONLY the specific additions needed** - CSS blocks, JS functions, HTML elements
-3. **Use surgical str_replace** - Insert new code at specific locations
-4. **VERIFY existing features still exist** - Use grep to count key function references
-5. **Never overwrite** - Only add, never remove or regenerate
+When adding features:
+1. **Identify which file(s) need changes** - Use the table above
+2. **Modify only the relevant file(s)** - Don't touch unrelated modules
+3. **CSS changes** → `css/main.css`
+4. **New screen/feature** → Create new JS file or add to existing
+5. **Shared utilities** → `js/app.js`
+6. **HTML/modals** → `index.html`
 
-**Why this matters:**
-The frontend is a 15,000+ line single file. Regenerating sections loses existing features. Previous incident: HRM custom fields addition accidentally removed the dispatch cancel/reinstate system because the file was rebuilt instead of surgically modified.
+**Load order matters!** Scripts load in this order:
+1. api.js (API client)
+2. app.js (constants, utilities)
+3. dispatch.js
+4. hrm.js
+5. vehicles.js
+6. shifts.js
+7. roster.js
 
-**Verification checklist before providing file:**
-```bash
-# Check critical features still exist
-grep -c "openCancelDutyModal\|confirmCancelDuty" index.html  # Should be 10+
-grep -c "loadCustomFieldsForEmployee\|customFieldDefinitions" index.html  # Should be 10+
-grep -c "renderDispatchDay\|loadDispatchData" index.html  # Should be 5+
-```
+Functions in later files can call functions from earlier files, but not vice versa.
 
 ### Windows Command Rules
 **NEVER chain commands with && or ;**
@@ -88,12 +113,32 @@ cd C:\Users\Giovanni\Downloads\despatch-app\workers
 npx wrangler deploy
 ```
 
-### Frontend Deploy (ONE AT A TIME):
+### Frontend Deploy - Single File (ONE AT A TIME):
 ```
 cd C:\Users\Giovanni\Downloads\despatch-app
 ```
 ```
-copy C:\Users\Giovanni\Downloads\index.html frontend\index.html
+copy C:\Users\Giovanni\Downloads\dispatch.js frontend\js\dispatch.js
+```
+```
+git add .
+```
+```
+git commit -m "Your message here"
+```
+```
+git push
+```
+
+### Frontend Deploy - Multiple Files:
+```
+cd C:\Users\Giovanni\Downloads\despatch-app
+```
+```
+copy C:\Users\Giovanni\Downloads\main.css frontend\css\main.css
+```
+```
+copy C:\Users\Giovanni\Downloads\hrm.js frontend\js\hrm.js
 ```
 ```
 git add .
@@ -239,9 +284,6 @@ CREATE TABLE rosters (
     start_date TEXT NOT NULL,        -- ISO date
     end_date TEXT NOT NULL,
     status TEXT DEFAULT 'draft',     -- draft, scheduled, published
-    calendar_start_date TEXT,        -- When scheduled to ops calendar
-    calendar_end_date TEXT,
-    notes TEXT,
     deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -252,19 +294,12 @@ CREATE TABLE rosters (
 ```sql
 CREATE TABLE roster_entries (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL,
-    roster_id TEXT REFERENCES rosters(id),           -- NULL for adhoc
-    shift_template_id TEXT REFERENCES shift_templates(id),  -- NULL for adhoc
-    duty_block_id TEXT REFERENCES shift_template_duty_blocks(id),
-    date TEXT NOT NULL,
-    name TEXT NOT NULL,
-    shift_type TEXT DEFAULT 'regular',
-    start_time REAL,
-    end_time REAL,
+    roster_id TEXT NOT NULL REFERENCES rosters(id),
+    shift_template_id TEXT NOT NULL REFERENCES shift_templates(id),
+    duty_block_id TEXT NOT NULL REFERENCES shift_template_duty_blocks(id),
+    calendar_date TEXT NOT NULL,     -- ISO date for this entry
     driver_id TEXT REFERENCES employees(id),
-    status TEXT DEFAULT 'scheduled',
-    source TEXT DEFAULT 'manual',
-    include_in_dispatch INTEGER DEFAULT 0,
+    is_adhoc INTEGER DEFAULT 0,      -- 1 if created as adhoc
     deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -275,44 +310,20 @@ CREATE TABLE roster_entries (
 ```sql
 CREATE TABLE roster_duty_lines (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL,
     roster_entry_id TEXT NOT NULL REFERENCES roster_entries(id),
-    source_duty_line_id TEXT,        -- Original template line ID
     sequence INTEGER NOT NULL,
     start_time REAL NOT NULL,
     end_time REAL NOT NULL,
     duty_type TEXT NOT NULL DEFAULT 'driving',
     description TEXT,
     vehicle_id TEXT REFERENCES vehicles(id),
-    vehicle_number TEXT,             -- Denormalized for display
     pay_type TEXT NOT NULL DEFAULT 'STD',
     location_name TEXT,
     location_lat REAL,
     location_lng REAL,
-    cancelled INTEGER DEFAULT 0,     -- 1 = cancelled
-    cancelled_at TEXT,               -- When cancelled
-    cancel_reason TEXT,              -- Why cancelled
-    deleted_at TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
-);
-```
-
-**employees**
-```sql
-CREATE TABLE employees (
-    id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL,
-    employee_number TEXT,
-    first_name TEXT NOT NULL,
-    last_name TEXT NOT NULL,
-    email TEXT,
-    phone TEXT,
-    role TEXT DEFAULT 'driver',      -- driver, admin, etc.
-    status TEXT DEFAULT 'active',
-    licence_number TEXT,
-    licence_expiry TEXT,
-    deleted_at TEXT,
+    is_cancelled INTEGER DEFAULT 0,
+    cancel_reason TEXT,
+    cancelled_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -323,14 +334,14 @@ CREATE TABLE employees (
 CREATE TABLE employee_custom_field_definitions (
     id TEXT PRIMARY KEY,
     tenant_id TEXT NOT NULL,
-    field_name TEXT NOT NULL,        -- Display name
-    field_key TEXT NOT NULL,         -- Internal key (lowercase, no spaces)
+    field_name TEXT NOT NULL,
+    field_key TEXT NOT NULL,
     field_type TEXT NOT NULL,        -- text, number, date, boolean, select
     field_options TEXT,              -- JSON array for select options
-    field_width TEXT DEFAULT 'full', -- full or half
-    display_row INTEGER DEFAULT 0,   -- Row position in layout
+    field_width TEXT DEFAULT 'full', -- full, half
+    display_row INTEGER DEFAULT 0,
+    display_order INTEGER DEFAULT 0,
     is_required INTEGER DEFAULT 0,
-    is_active INTEGER DEFAULT 1,
     deleted_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -341,37 +352,22 @@ CREATE TABLE employee_custom_field_definitions (
 ```sql
 CREATE TABLE employee_custom_field_values (
     id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL,
     employee_id TEXT NOT NULL REFERENCES employees(id),
     field_definition_id TEXT NOT NULL REFERENCES employee_custom_field_definitions(id),
-    value TEXT,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE(employee_id, field_definition_id)
-);
-```
-
-**vehicles**
-```sql
-CREATE TABLE vehicles (
-    id TEXT PRIMARY KEY,
-    tenant_id TEXT NOT NULL,
-    fleet_number TEXT NOT NULL,      -- e.g., "BUS-001"
-    registration TEXT,
-    make TEXT,
-    model TEXT,
-    year INTEGER,
-    capacity INTEGER,
-    status TEXT DEFAULT 'active',
-    deleted_at TEXT,
+    field_value TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
 ```
 
-### Purge Data Commands (Safe Order)
+### Useful Database Queries
 
-To purge all roster/shift data:
+View roster entries for a date:
+```
+npx wrangler d1 execute dispatch-db --remote --command="SELECT re.*, r.name as roster_name FROM roster_entries re JOIN rosters r ON re.roster_id = r.id WHERE re.calendar_date = '2026-01-20' AND re.deleted_at IS NULL;"
+```
+
+Purge ALL roster data (ONE AT A TIME):
 ```
 npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM roster_duty_lines;"
 ```
@@ -381,6 +377,8 @@ npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM roster_entri
 ```
 npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM rosters;"
 ```
+
+Purge ALL shift data (ONE AT A TIME):
 ```
 npx wrangler d1 execute dispatch-db --remote --command="DELETE FROM shift_template_duty_lines;"
 ```
@@ -569,21 +567,27 @@ When assigning a driver to a duty block, check for:
 
 ## SECTION 10: REMINDERS FOR CLAUDE
 
-1. **NEVER regenerate entire files** - Surgical additions only (see Section 2)
-2. **ALWAYS verify features exist** after modifications (grep counts)
-3. **ALWAYS give Windows commands LINE BY LINE** - Never use && or ;
-4. **Frontend is ONE file** - `frontend/index.html`
-5. **UNDERSTAND FK RELATIONSHIPS** before modifying/deleting data
-6. **Deletion order matters** - roster_duty_lines → roster_entries → etc.
-7. **Published rosters block edits** - Check status before modifications
-8. **Soft deletes only** - Set deleted_at, never hard delete
-9. **Always check deleted_at IS NULL** in queries
-10. **Times are decimal hours** - 6.5 = 06:30
-11. **User is in Brisbane, QLD** - Australian context
+1. **Frontend is now MODULAR** - Edit only the relevant file(s)
+2. **ALWAYS give Windows commands LINE BY LINE** - Never use && or ;
+3. **UNDERSTAND FK RELATIONSHIPS** before modifying/deleting data
+4. **Deletion order matters** - roster_duty_lines → roster_entries → etc.
+5. **Published rosters block edits** - Check status before modifications
+6. **Soft deletes only** - Set deleted_at, never hard delete
+7. **Always check deleted_at IS NULL** in queries
+8. **Times are decimal hours** - 6.5 = 06:30
+9. **User is in Brisbane, QLD** - Australian context
+10. **Load order matters** - api.js → app.js → dispatch.js → hrm.js → etc.
 
 ---
 
 ## SECTION 11: VERSION HISTORY
+
+### v1.6.0 (January 16, 2026)
+- Frontend restructured into modular files
+- CSS extracted to `css/main.css`
+- JavaScript split by feature into `js/` folder
+- Improved maintainability and easier targeted modifications
+- No functional changes - same features, better organization
 
 ### v1.5.0 (January 16, 2026)
 - HRM custom fields with configurable field types (text, number, date, boolean, select)
