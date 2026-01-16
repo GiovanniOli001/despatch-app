@@ -5538,16 +5538,18 @@ async function saveEdit() {
           }
           
           // Create local shift object with real IDs
+          const entryId = result.data?.entry_id || result.entry_id;
+          const dutyLineId = result.data?.duty_line_id || result.duty_line_id;
           const newShift = {
-            id: `shift-${result.entry_id}`,
-            entryId: result.entry_id,
-            name: result.adhoc_code,
+            id: `shift-${entryId}`,
+            entryId: entryId,
+            name: 'ADHOC',
             type: 'adhoc',
             start: start,
             end: end,
             duties: [{
               ...updatedDuty,
-              id: result.duty_line_id
+              id: dutyLineId
             }]
           };
           driver.shifts.push(newShift);
@@ -5603,7 +5605,7 @@ async function saveEdit() {
           }
           
           // Use the real ID from API
-          updatedDuty.id = result.duty_line_id;
+          updatedDuty.id = result.data?.id || result.duty_line_id;
         } catch (err) {
           showToast(err.message || 'Failed to create duty', 'error');
           return;
