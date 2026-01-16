@@ -139,6 +139,15 @@ function renderOpsRosterList() {
   
   let html = '';
   
+  // Clear Despatch button at top
+  html += `
+    <div class="ops-clear-section">
+      <button class="btn-clear-despatch" onclick="showClearDespatchConfirm()" title="Remove all rosters from calendar and clear all dispatch data">
+        🗑️ Clear Despatch
+      </button>
+    </div>
+  `;
+  
   // Scheduled rosters section
   if (scheduled.length > 0) {
     html += `<div class="ops-section-title">On Calendar (${scheduled.length})</div>`;
@@ -309,15 +318,72 @@ async function publishRosterFromCalendar(rosterId) {
 }
 
 async function unpublishRosterFromCalendar(rosterId) {
-  const confirmMsg = 'WARNING: Unpublishing this roster will remove ALL duties from this roster from Dispatch.\n\nDrivers will no longer see these assignments until the roster is published again.\n\nContinue?';
+  const confirmMsg = 'WARNING: Unpublishing this roster will:\n\n• Remove ALL duties from Dispatch\n• Clear ALL driver assignments\n\nDrivers will need to be reassigned before republishing.\n\nContinue?';
   if (!confirm(confirmMsg)) return;
   
   try {
     await apiRequest(`/roster/containers/${rosterId}/unpublish`, { method: 'POST' });
-    showToast('Roster unpublished - duties removed from dispatch', 'success');
+    showToast('Roster unpublished - duties and assignments cleared', 'success');
     loadOpsCalendar();
   } catch (err) {
     showToast(err.message || 'Failed to unpublish', 'error');
+  }
+}
+
+// ============================================
+// CLEAR DESPATCH FEATURE
+// ============================================
+
+function showClearDespatchConfirm() {
+  // Count scheduled/published rosters for the warning message
+  const scheduledCount = allRostersData.filter(r => r.isScheduled).length;
+  const publishedCount = allRostersData.filter(r => r.status === 'published').length;
+  const totalEntries = allRostersData.reduce((sum, r) => sum + (r.entryCount || 0), 0);
+  
+  const warningMsg = `⚠️ CLEAR ALL DISPATCH DATA ⚠️
+
+This will perform a FULL RESET:
+
+• Remove ${scheduledCount} roster(s) from the calendar
+• Delete ${totalEntries} roster entries/assignments
+• Unpublish ${publishedCount} published roster(s)
+• Reset all rosters to 'draft' status
+
+THIS CANNOT BE UNDONE!
+
+Type "CLEAR" to confirm:`;
+
+  const userInput = prompt(warningMsg);
+  
+  if (userInput === 'CLEAR') {
+    clearAllDespatch();
+  } else if (userInput !== null) {
+    showToast('Clear cancelled - you must type "CLEAR" exactly to confirm', 'error');
+  }
+}
+
+async function clearAllDespatch() {
+  try {
+    showToast('Clearing all dispatch data...', 'info');
+    
+    const result = await apiRequest('/ops-calendar/clear-all', { method: 'POST' });
+    
+    if (result.error) {
+      showToast(result.error, 'error');
+      return;
+    }
+    
+    const details = result.details || {};
+    showToast(
+      `Dispatch cleared! Duty lines: ${details.dutyLinesDeleted || 0}, Entries: ${details.entriesDeleted || 0}, Rosters reset: ${details.rostersReset || 0}`,
+      'success'
+    );
+    
+    // Reload calendar to show empty state
+    loadOpsCalendar();
+    
+  } catch (err) {
+    showToast(err.message || 'Failed to clear dispatch data', 'error');
   }
 }
 
@@ -698,42 +764,29 @@ function renderUnassignedShiftRow(shiftCode, blocks) {
   
   // Blocks
   for (const block of blocks) {
-    const startPct = ((block.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
-    const widthPct = ((block.end_time - block.start_time) / GANTT_HOURS) * 100;
-    if (startPct < 0 || startPct >= 100) continue;
+    const left = ((block.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
+    const width = ((block.end_time - block.start_time) / GANTT_HOURS) * 100;
     
-    const color = getShiftColor(block.shift_type);
-    const hasMultiple = block.blocks_in_shift > 1;
-    const hasDefault = block.default_driver_id && !block.assigned_driver_id;
-    const isIncluded = block.include_in_dispatch === 1;
+    // Dispatch status indicator
+    const dispatchClass = block.include_in_dispatch === 1 ? 'dispatch-included' : 'dispatch-omitted';
+    const dispatchIcon = block.include_in_dispatch === 1 ? '✓' : '✗';
     
-    html += `<div class="roster-gantt-block" 
-      style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: ${color};"
-      draggable="true"
-      data-block-id="${block.id}"
-      data-shift-id="${block.shift_template_id}"
-      data-entry-id="${block.entry_id || ''}"
-      data-has-multiple="${hasMultiple}"
-      ondragstart="onBlockDragStart(event)"
-      onclick="showBlockInfo('${block.id}')"
-    >`;
-    
-    // Dispatch toggle button
-    const toggleClass = isIncluded ? 'included' : 'omitted';
-    const toggleIcon = isIncluded ? '✓' : '○';
-    const toggleTitle = isIncluded ? 'Included in dispatch - click to omit' : 'Omitted from dispatch - click to include';
-    html += `<button class="dispatch-toggle-btn ${toggleClass}" 
-      onclick="event.stopPropagation(); toggleBlockDispatch('${block.id}', '${block.shift_template_id}', ${!isIncluded})" 
-      title="${toggleTitle}">${toggleIcon}</button>`;
-    
-    html += `<div class="roster-gantt-block-name">${block.shift_code} / ${block.block_name}</div>`;
-    html += `<div class="roster-gantt-block-time">${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}</div>`;
-    
-    if (hasDefault) {
-      html += `<button class="quick-assign-btn" onclick="event.stopPropagation(); quickAssign('${block.id}', '${block.shift_template_id}', '${block.default_driver_id}')" title="Assign to ${block.default_driver_name}">⚡</button>`;
-    }
-    
-    html += `</div>`;
+    html += `
+      <div class="roster-gantt-block unassigned ${dispatchClass}" 
+           draggable="true"
+           data-block-id="${block.id}"
+           data-shift-id="${block.shift_template_id}"
+           data-entry-id="${block.entry_id || ''}"
+           style="left: ${left}%; width: ${width}%;"
+           onclick="showBlockContextMenu(event, '${block.id}', '${block.shift_template_id}', ${block.include_in_dispatch || 0})"
+           title="${block.shift_code} / ${block.block_name}\n${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}\n${block.include_in_dispatch === 1 ? 'Included in dispatch' : 'Omitted from dispatch'}">
+        <div class="roster-block-content">
+          <span class="roster-block-dispatch-icon">${dispatchIcon}</span>
+          <span class="roster-block-code">${block.shift_code}</span>
+          <span class="roster-block-name">${block.block_name}</span>
+        </div>
+      </div>
+    `;
   }
   
   html += `</div></div>`;
@@ -741,17 +794,13 @@ function renderUnassignedShiftRow(shiftCode, blocks) {
 }
 
 function renderGanttRow(driver, blocks) {
-  const driverId = driver.id;
-  const driverName = `${driver.first_name} ${driver.last_name}`;
-  const driverNumber = driver.employee_number;
-  
-  let html = `<div class="roster-gantt-row" data-driver-id="${driverId}">`;
+  let html = `<div class="roster-gantt-row" data-driver-id="${driver.id}">`;
   html += `<div class="roster-gantt-driver">`;
-  html += `<div class="roster-gantt-driver-name">${driverName}</div>`;
-  html += `<div class="roster-gantt-driver-id">${driverNumber}</div>`;
+  html += `<div class="roster-gantt-driver-name">${driver.first_name} ${driver.last_name}</div>`;
+  html += `<div class="roster-gantt-driver-id">#${driver.employee_number}</div>`;
   html += `</div>`;
   
-  html += `<div class="roster-gantt-blocks" data-driver-id="${driverId}">`;
+  html += `<div class="roster-gantt-blocks" data-driver-id="${driver.id}">`;
   
   // Grid lines
   for (let h = 0; h < GANTT_HOURS; h++) {
@@ -760,93 +809,165 @@ function renderGanttRow(driver, blocks) {
   
   // Blocks
   for (const block of blocks) {
-    const startPct = ((block.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
-    const widthPct = ((block.end_time - block.start_time) / GANTT_HOURS) * 100;
-    if (startPct < 0 || startPct >= 100) continue;
+    const left = ((block.start_time - GANTT_START_HOUR) / GANTT_HOURS) * 100;
+    const width = ((block.end_time - block.start_time) / GANTT_HOURS) * 100;
     
-    const color = getShiftColor(block.shift_type);
-    const hasMultiple = block.blocks_in_shift > 1;
-    
-    html += `<div class="roster-gantt-block" 
-      style="left: ${Math.max(0, startPct)}%; width: ${Math.min(widthPct, 100 - startPct)}%; background: ${color};"
-      draggable="true"
-      data-block-id="${block.id}"
-      data-shift-id="${block.shift_template_id}"
-      data-entry-id="${block.entry_id || ''}"
-      data-has-multiple="${hasMultiple}"
-      ondragstart="onBlockDragStart(event)"
-      onclick="showBlockInfo('${block.id}')"
-    >`;
-    html += `<div class="roster-gantt-block-name">${block.shift_code} / ${block.block_name}</div>`;
-    html += `<div class="roster-gantt-block-time">${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}</div>`;
-    html += `</div>`;
+    html += `
+      <div class="roster-gantt-block assigned" 
+           draggable="true"
+           data-block-id="${block.id}"
+           data-shift-id="${block.shift_template_id}"
+           data-entry-id="${block.entry_id || ''}"
+           style="left: ${left}%; width: ${width}%;"
+           title="${block.shift_code} / ${block.block_name}\n${formatDecimalTime(block.start_time)} - ${formatDecimalTime(block.end_time)}">
+        <div class="roster-block-content">
+          <span class="roster-block-code">${block.shift_code}</span>
+          <span class="roster-block-name">${block.block_name}</span>
+        </div>
+      </div>
+    `;
   }
   
   html += `</div></div>`;
   return html;
 }
 
-function getShiftColor(shiftType) {
-  const colors = {
-    regular: '#3b82f6',
-    charter: '#a855f7',
-    school: '#22c55e',
-  };
-  return colors[shiftType] || '#3b82f6';
+function formatDecimalTime(decimal) {
+  if (!decimal && decimal !== 0) return '--:--';
+  const hours = Math.floor(decimal);
+  const minutes = Math.round((decimal - hours) * 60);
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
 }
 
 // ============================================
-// DRAG & DROP
+// BLOCK CONTEXT MENU (for dispatch toggle)
+// ============================================
+
+function showBlockContextMenu(event, blockId, shiftId, currentInclude) {
+  event.stopPropagation();
+  
+  // Remove any existing context menu
+  const existingMenu = document.querySelector('.block-context-menu');
+  if (existingMenu) existingMenu.remove();
+  
+  const menu = document.createElement('div');
+  menu.className = 'block-context-menu';
+  menu.innerHTML = `
+    <div class="context-menu-item" onclick="toggleBlockDispatch('${blockId}', '${shiftId}', ${!currentInclude}); this.parentElement.remove();">
+      ${currentInclude ? '✗ Omit from Dispatch' : '✓ Include in Dispatch'}
+    </div>
+    <div class="context-menu-item" onclick="showBlockInfo('${blockId}'); this.parentElement.remove();">
+      ℹ️ Block Info
+    </div>
+  `;
+  
+  menu.style.left = event.pageX + 'px';
+  menu.style.top = event.pageY + 'px';
+  
+  document.body.appendChild(menu);
+  
+  // Close on click outside
+  setTimeout(() => {
+    document.addEventListener('click', function closeMenu() {
+      menu.remove();
+      document.removeEventListener('click', closeMenu);
+    });
+  }, 10);
+}
+
+// ============================================
+// DRAG AND DROP
 // ============================================
 
 function setupDragDrop() {
-  document.querySelectorAll('.roster-gantt-blocks').forEach(container => {
-    container.addEventListener('dragover', e => {
-      e.preventDefault();
-      container.classList.add('drag-over');
-    });
-    
-    container.addEventListener('dragleave', () => {
-      container.classList.remove('drag-over');
-    });
-    
-    container.addEventListener('drop', async e => {
-      e.preventDefault();
-      container.classList.remove('drag-over');
-      
-      const blockId = e.dataTransfer.getData('blockId');
-      const shiftId = e.dataTransfer.getData('shiftId');
-      const hasMultiple = e.dataTransfer.getData('hasMultiple') === 'true';
-      const newDriverId = container.dataset.driverId || null;
-      
-      if (hasMultiple && newDriverId) {
-        // Show modal asking about connected blocks
-        pendingAssignment = { blockId, shiftId, driverId: newDriverId };
-        showConnectedModal();
-      } else {
-        // Direct assign
-        await doAssign(blockId, shiftId, newDriverId, false);
-      }
-    });
+  const blocks = document.querySelectorAll('.roster-gantt-block');
+  const dropZones = document.querySelectorAll('.roster-gantt-blocks');
+  
+  blocks.forEach(block => {
+    block.addEventListener('dragstart', handleDragStart);
+    block.addEventListener('dragend', handleDragEnd);
+  });
+  
+  dropZones.forEach(zone => {
+    zone.addEventListener('dragover', handleDragOver);
+    zone.addEventListener('dragleave', handleDragLeave);
+    zone.addEventListener('drop', handleDrop);
   });
 }
 
-function onBlockDragStart(e) {
-  const target = e.target.closest('.roster-gantt-block');
-  e.dataTransfer.setData('blockId', target.dataset.blockId);
-  e.dataTransfer.setData('shiftId', target.dataset.shiftId);
-  e.dataTransfer.setData('hasMultiple', target.dataset.hasMultiple);
-  target.classList.add('dragging');
-  setTimeout(() => target.classList.remove('dragging'), 100);
+let draggedBlock = null;
+
+function handleDragStart(e) {
+  draggedBlock = e.target;
+  e.target.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
 }
 
-// ============================================
-// ASSIGNMENT API
-// ============================================
+function handleDragEnd(e) {
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.roster-gantt-blocks').forEach(zone => {
+    zone.classList.remove('drag-over');
+  });
+  draggedBlock = null;
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('drag-over');
+}
+
+function handleDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+
+async function handleDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  
+  if (!draggedBlock) return;
+  
+  const targetDriverId = e.currentTarget.dataset.driverId;
+  const blockId = draggedBlock.dataset.blockId;
+  const shiftId = draggedBlock.dataset.shiftId;
+  const entryId = draggedBlock.dataset.entryId;
+  
+  // Find the block to check if it has multiple blocks in shift
+  let hasMultiple = false;
+  if (dayViewData) {
+    const allBlocks = [...dayViewData.unassigned, ...Object.values(dayViewData.by_driver).flat()];
+    const block = allBlocks.find(b => b.id === blockId);
+    hasMultiple = block?.blocks_in_shift > 1;
+  }
+  
+  // If moving to "unassigned" (empty driver_id) and has entry_id, unassign it
+  if (!targetDriverId && entryId) {
+    try {
+      await apiRequest('/roster/unassign', {
+        method: 'POST',
+        body: { entry_id: entryId }
+      });
+      showToast('Block unassigned');
+      await loadDayView();
+    } catch (err) {
+      showToast(err.message || 'Failed to unassign', 'error');
+    }
+    return;
+  }
+  
+  // Assigning to a driver
+  if (targetDriverId) {
+    if (hasMultiple) {
+      pendingAssignment = { blockId, shiftId, driverId: targetDriverId };
+      showConnectedModal();
+    } else {
+      await doAssign(blockId, shiftId, targetDriverId, false);
+    }
+  }
+}
 
 async function doAssign(blockId, shiftId, driverId, includeConnected) {
   try {
-    const result = await apiRequest('/roster/assign', {
+    await apiRequest('/roster/assign', {
       method: 'POST',
       body: {
         roster_id: currentRosterId,
@@ -854,17 +975,10 @@ async function doAssign(blockId, shiftId, driverId, includeConnected) {
         duty_block_id: blockId,
         date: formatDateISO(currentRosterDate),
         driver_id: driverId,
-        include_connected: includeConnected,
+        include_connected: includeConnected
       }
     });
-    
-    // Check if API returned an error
-    if (result.error) {
-      showToast(result.error, 'error');
-      return;
-    }
-    
-    showToast(driverId ? 'Block assigned' : 'Block unassigned');
+    showToast(includeConnected ? 'All blocks assigned' : 'Block assigned');
     await loadDayView();
   } catch (err) {
     showToast(err.message || 'Assignment failed', 'error');
@@ -1093,4 +1207,3 @@ async function deleteRoster(id) {
 async function loadRoster() { await loadRosters(); }
 function renderRosterTable() { renderRosterList(); }
 function showAddRosterEntryModal() { showAddRosterModal(); }
-

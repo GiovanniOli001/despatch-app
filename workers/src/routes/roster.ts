@@ -462,6 +462,8 @@ async function unpublishRoster(env: Env, id: string): Promise<Response> {
   
   if (!roster) return error('Roster not found', 404);
   
+  const now = new Date().toISOString();
+  
   // Delete all roster_duty_lines for this roster's entries
   // This ensures fresh duty lines (without cancelled status) are created on next publish
   await env.DB.prepare(`
@@ -472,12 +474,20 @@ async function unpublishRoster(env: Env, id: string): Promise<Response> {
     )
   `).bind(id).run();
   
+  // FIX: Clear all driver assignments from roster_entries
+  // This ensures assignments reset to unassigned state when republishing
+  await env.DB.prepare(`
+    UPDATE roster_entries 
+    SET driver_id = NULL, updated_at = ?
+    WHERE roster_id = ? AND deleted_at IS NULL
+  `).bind(now, id).run();
+  
   // Revert to draft
   await env.DB.prepare(`
     UPDATE rosters SET status = 'draft', updated_at = ? WHERE id = ?
-  `).bind(new Date().toISOString(), id).run();
+  `).bind(now, id).run();
   
-  return json({ success: true, message: 'Roster unpublished (reverted to draft)' });
+  return json({ success: true, message: 'Roster unpublished (reverted to draft, all assignments cleared)' });
 }
 
 // ============================================
@@ -549,10 +559,6 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
     const unassigned: any[] = [];
     const byDriver: Record<string, any[]> = {};
     
-    for (const d of drivers.results as any[]) {
-      byDriver[d.id] = [];
-    }
-    
     for (const block of blocks.results as any[]) {
       const entry = entryMap[block.id];
       
@@ -563,43 +569,39 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
         shift_name: block.shift_name,
         shift_type: block.shift_type,
         block_name: block.block_name,
-        start_time: block.start_time || 6,
-        end_time: block.end_time || 18,
+        sequence: block.sequence,
+        start_time: block.start_time,
+        end_time: block.end_time,
         default_driver_id: block.default_driver_id,
         default_driver_name: block.default_driver_name,
         blocks_in_shift: block.blocks_in_shift,
-        // Entry info
         entry_id: entry?.entry_id || null,
-        assigned_driver_id: entry?.driver_id || null,
-        assigned_driver_name: entry?.driver_name || null,
-        // Dispatch toggle info (for unassigned blocks)
         include_in_dispatch: entry?.include_in_dispatch || 0,
       };
       
-      if (entry?.driver_id && byDriver[entry.driver_id]) {
-        byDriver[entry.driver_id].push(blockData);
+      if (entry?.driver_id) {
+        const driverId = entry.driver_id;
+        if (!byDriver[driverId]) {
+          byDriver[driverId] = [];
+        }
+        byDriver[driverId].push({
+          ...blockData,
+          driver_id: driverId,
+          driver_name: entry.driver_name,
+          driver_number: entry.driver_number,
+        });
       } else {
         unassigned.push(blockData);
       }
     }
     
-    // Calculate counts for the header
-    const includedCount = unassigned.filter(b => b.include_in_dispatch === 1).length;
-    const omittedCount = unassigned.filter(b => b.include_in_dispatch === 0).length;
-    
     return json({
       data: {
-        roster_id: rosterId,
-        roster_status: (roster as any).status,
+        roster,
         date,
         drivers: drivers.results,
         unassigned,
         by_driver: byDriver,
-        dispatch_stats: {
-          included: includedCount,
-          omitted: omittedCount,
-          total: unassigned.length
-        }
       }
     });
   } catch (err) {
@@ -615,139 +617,121 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
 async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
   const { roster_id, shift_template_id, duty_block_id, date, driver_id, include_connected } = input;
   
-  if (!shift_template_id || !duty_block_id || !date) {
-    return error('shift_template_id, duty_block_id, and date are required');
+  if (!roster_id || !shift_template_id || !duty_block_id || !date) {
+    return error('roster_id, shift_template_id, duty_block_id, and date are required');
   }
   
-  // Use provided roster_id or find roster for this date
-  let rosterId = roster_id;
-  if (!rosterId) {
-    const roster = await env.DB.prepare(`
-      SELECT id FROM rosters 
-      WHERE tenant_id = ? AND deleted_at IS NULL AND start_date <= ? AND end_date >= ?
-      LIMIT 1
-    `).bind(TENANT_ID, date, date).first();
-    
-    if (!roster) return error('No roster found for this date', 404);
-    rosterId = (roster as any).id;
-  }
+  // Get block info (for times)
+  const block = await env.DB.prepare(`
+    SELECT 
+      db.id,
+      db.name,
+      db.sequence,
+      st.code,
+      (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = ?) as start_time,
+      (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = ?) as end_time
+    FROM shift_template_duty_blocks db
+    JOIN shift_templates st ON db.shift_template_id = st.id
+    WHERE db.id = ?
+  `).bind(duty_block_id, duty_block_id, duty_block_id).first();
   
-  // Get blocks to assign
-  let blocksToAssign: any[] = [];
+  if (!block) return error('Duty block not found', 404);
   
-  if (include_connected) {
-    const result = await env.DB.prepare(`
-      SELECT id,
-        (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as start_time,
-        (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as end_time
-      FROM shift_template_duty_blocks db
-      WHERE shift_template_id = ?
-      ORDER BY sequence
-    `).bind(shift_template_id).all();
-    blocksToAssign = result.results as any[];
-  } else {
-    const block = await env.DB.prepare(`
-      SELECT id,
-        (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as start_time,
-        (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as end_time
-      FROM shift_template_duty_blocks db
+  const now = new Date().toISOString();
+  const blockData = block as any;
+  
+  // Check for existing entry
+  const existing = await env.DB.prepare(`
+    SELECT id FROM roster_entries 
+    WHERE roster_id = ? AND duty_block_id = ? AND date = ? AND deleted_at IS NULL
+  `).bind(roster_id, duty_block_id, date).first();
+  
+  if (existing) {
+    // Update existing entry
+    await env.DB.prepare(`
+      UPDATE roster_entries 
+      SET driver_id = ?, updated_at = ?
       WHERE id = ?
-    `).bind(duty_block_id).first();
-    if (block) blocksToAssign = [block];
+    `).bind(driver_id, now, (existing as any).id).run();
+  } else {
+    // Create new entry
+    const entryId = uuid();
+    await env.DB.prepare(`
+      INSERT INTO roster_entries (
+        id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
+        name, start_time, end_time, driver_id, status, source, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 'manual', ?, ?)
+    `).bind(
+      entryId, TENANT_ID, roster_id, shift_template_id, duty_block_id, date,
+      `${blockData.code} - ${blockData.name}`, blockData.start_time, blockData.end_time,
+      driver_id, now, now
+    ).run();
   }
   
-  if (blocksToAssign.length === 0) return error('Block not found', 404);
-  
-  // Check overlaps if assigning to driver - checks across ALL rosters
-  if (driver_id) {
-    for (const block of blocksToAssign) {
-      const startTime = block.start_time || 6;
-      const endTime = block.end_time || 18;
+  // If include_connected, also assign other blocks in same shift
+  if (include_connected && driver_id) {
+    const otherBlocks = await env.DB.prepare(`
+      SELECT 
+        db.id as duty_block_id,
+        db.name,
+        (SELECT MIN(start_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as start_time,
+        (SELECT MAX(end_time) FROM shift_template_duty_lines WHERE duty_block_id = db.id) as end_time
+      FROM shift_template_duty_blocks db
+      WHERE db.shift_template_id = ? AND db.id != ?
+    `).bind(shift_template_id, duty_block_id).all();
+    
+    for (const otherBlock of otherBlocks.results as any[]) {
+      // Check for existing entry for this block
+      const existingOther = await env.DB.prepare(`
+        SELECT id, driver_id FROM roster_entries 
+        WHERE roster_id = ? AND duty_block_id = ? AND date = ? AND deleted_at IS NULL
+      `).bind(roster_id, otherBlock.duty_block_id, date).first();
       
-      // Only exclude if same roster AND same block (we're updating an existing entry)
-      // Different rosters with same block SHOULD conflict
-      // Also exclude deleted rosters AND deleted shift templates
-      const overlap = await env.DB.prepare(`
-        SELECT re.id, db.name as block_name, st.code as shift_code, r.code as roster_code
-        FROM roster_entries re
-        JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
-        JOIN shift_templates st ON re.shift_template_id = st.id
-        JOIN rosters r ON re.roster_id = r.id
-        WHERE re.date = ? AND re.driver_id = ? 
-        AND re.deleted_at IS NULL
-        AND r.deleted_at IS NULL
-        AND st.deleted_at IS NULL
-        AND NOT (re.roster_id = ? AND re.duty_block_id = ?)
-        AND (
-          (re.start_time < ? AND re.end_time > ?) OR
-          (re.start_time >= ? AND re.start_time < ?) OR
-          (re.end_time > ? AND re.end_time <= ?)
-        )
-        LIMIT 1
-      `).bind(date, driver_id, rosterId, block.id, endTime, startTime, startTime, endTime, startTime, endTime).first();
-      
-      if (overlap) {
-        const o = overlap as any;
-        return error(`Conflict: ${o.shift_code} - ${o.block_name} in roster "${o.roster_code}"`);
+      if (existingOther) {
+        // Only update if currently unassigned
+        if (!(existingOther as any).driver_id) {
+          await env.DB.prepare(`
+            UPDATE roster_entries 
+            SET driver_id = ?, updated_at = ?
+            WHERE id = ?
+          `).bind(driver_id, now, (existingOther as any).id).run();
+        }
+      } else {
+        // Create new entry
+        const newEntryId = uuid();
+        await env.DB.prepare(`
+          INSERT INTO roster_entries (
+            id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
+            name, start_time, end_time, driver_id, status, source, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'scheduled', 'manual', ?, ?)
+        `).bind(
+          newEntryId, TENANT_ID, roster_id, shift_template_id, otherBlock.duty_block_id, date,
+          `${blockData.code} - ${otherBlock.name}`, otherBlock.start_time, otherBlock.end_time,
+          driver_id, now, now
+        ).run();
       }
     }
   }
   
-  const now = new Date().toISOString();
-  const createdIds: string[] = [];
-  
-  for (const block of blocksToAssign) {
-    // Check existing - must match roster_id too!
-    const existing = await env.DB.prepare(`
-      SELECT id FROM roster_entries WHERE roster_id = ? AND duty_block_id = ? AND date = ? AND deleted_at IS NULL
-    `).bind(rosterId, block.id, date).first();
-    
-    if (existing) {
-      await env.DB.prepare(`
-        UPDATE roster_entries SET driver_id = ?, updated_at = ? WHERE id = ?
-      `).bind(driver_id, now, (existing as any).id).run();
-      createdIds.push((existing as any).id);
-      // Copy duty lines if they don't exist yet
-      await copyDutyLinesToRosterEntry(env, (existing as any).id, block.id);
-    } else {
-      const id = uuid();
-      await env.DB.prepare(`
-        INSERT INTO roster_entries (
-          id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
-          name, start_time, end_time, driver_id, status, source, include_in_dispatch, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, 'Assigned Block', ?, ?, ?, 'scheduled', 'manual', 0, ?, ?)
-      `).bind(id, TENANT_ID, rosterId, shift_template_id, block.id, date,
-        block.start_time || 6, block.end_time || 18, driver_id, now, now).run();
-      createdIds.push(id);
-      // Copy duty lines from template to instance
-      await copyDutyLinesToRosterEntry(env, id, block.id);
-    }
-  }
-  
-  return json({ data: { assigned: createdIds.length, entry_ids: createdIds } });
+  return json({ success: true, message: driver_id ? 'Block assigned' : 'Block unassigned' });
 }
 
-// Helper: Copy duty lines from template to roster instance
+// Helper: Copy duty lines from template to roster entry
 async function copyDutyLinesToRosterEntry(env: Env, entryId: string, dutyBlockId: string): Promise<void> {
   try {
-    // Check if duty lines already exist for this entry
+    // First check if duty lines already exist for this entry
     const existingLines = await env.DB.prepare(`
-      SELECT COUNT(*) as count FROM roster_duty_lines 
-      WHERE roster_entry_id = ? AND deleted_at IS NULL
-    `).bind(entryId).first() as { count: number } | null;
+      SELECT COUNT(*) as count FROM roster_duty_lines WHERE roster_entry_id = ?
+    `).bind(entryId).first();
     
-    if (existingLines && existingLines.count > 0) {
-      // Lines already exist, don't duplicate
+    if ((existingLines as any)?.count > 0) {
+      // Lines already exist, don't re-copy
       return;
     }
     
-    // Get duty lines from the shift template
+    // Get template duty lines
     const templateLines = await env.DB.prepare(`
-      SELECT id, sequence, start_time, end_time, duty_type, description, vehicle_id, pay_type,
-             location_name, location_lat, location_lng
-      FROM shift_template_duty_lines
-      WHERE duty_block_id = ?
-      ORDER BY sequence
+      SELECT * FROM shift_template_duty_lines WHERE duty_block_id = ? ORDER BY sequence
     `).bind(dutyBlockId).all();
     
     if (templateLines.results.length === 0) return;

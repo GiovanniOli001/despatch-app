@@ -120,6 +120,11 @@ export async function handleOpsCalendar(
       return getAllRosters(env);
     }
 
+    // POST /api/ops-calendar/clear-all - Clear all dispatch data (full reset)
+    if (method === 'POST' && seg1 === 'clear-all') {
+      return clearAllDispatch(env);
+    }
+
     return error('Not found', 404);
   } catch (err) {
     console.error('OpsCalendar API error:', err);
@@ -300,4 +305,57 @@ async function getAllRosters(env: Env): Promise<Response> {
     success: true,
     data
   });
+}
+
+/**
+ * Clear All Dispatch Data
+ * 
+ * This performs a FULL RESET:
+ * 1. Deletes all roster_duty_lines (instance-level duty data)
+ * 2. Deletes all roster_entries (assignments)
+ * 3. Clears calendar dates from all rosters (unschedule them)
+ * 4. Resets all roster status to 'draft'
+ * 
+ * CAUTION: This is a destructive operation that cannot be undone!
+ */
+async function clearAllDispatch(env: Env): Promise<Response> {
+  const now = new Date().toISOString();
+  
+  try {
+    // Step 1: Delete all roster_duty_lines (must delete first due to FK relationship)
+    const dutyLinesResult = await env.DB.prepare(`
+      DELETE FROM roster_duty_lines 
+      WHERE tenant_id = ?
+    `).bind(TENANT_ID).run();
+    
+    // Step 2: Delete all roster_entries (soft delete to maintain integrity)
+    // Actually hard delete since we're doing a full reset
+    const entriesResult = await env.DB.prepare(`
+      DELETE FROM roster_entries 
+      WHERE tenant_id = ?
+    `).bind(TENANT_ID).run();
+    
+    // Step 3 & 4: Clear calendar dates and reset status for all rosters
+    const rostersResult = await env.DB.prepare(`
+      UPDATE rosters 
+      SET calendar_start_date = NULL, 
+          calendar_end_date = NULL, 
+          status = 'draft',
+          updated_at = ?
+      WHERE tenant_id = ? AND deleted_at IS NULL
+    `).bind(now, TENANT_ID).run();
+    
+    return json({
+      success: true,
+      message: 'All dispatch data cleared successfully',
+      details: {
+        dutyLinesDeleted: dutyLinesResult.meta?.changes || 0,
+        entriesDeleted: entriesResult.meta?.changes || 0,
+        rostersReset: rostersResult.meta?.changes || 0
+      }
+    });
+  } catch (err) {
+    console.error('clearAllDispatch error:', err);
+    return error(err instanceof Error ? err.message : 'Failed to clear dispatch data', 500);
+  }
 }
