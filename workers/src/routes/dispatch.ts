@@ -347,6 +347,52 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     templateDutyLines = templateLinesResult.results as any[];
   }
 
+  // Get adhoc shifts for this date
+  const adhocShiftsResult = await env.DB.prepare(`
+    SELECT 
+      das.id as entry_id,
+      das.date,
+      das.employee_id as driver_id,
+      das.name,
+      das.start_time,
+      das.end_time,
+      das.vehicle_id,
+      das.status
+    FROM dispatch_adhoc_shifts das
+    WHERE das.tenant_id = ?
+      AND das.date = ?
+      AND das.deleted_at IS NULL
+      AND das.status = 'active'
+    ORDER BY das.start_time
+  `).bind(TENANT_ID, date).all();
+
+  const adhocShifts = adhocShiftsResult.results as any[];
+
+  // Get adhoc duty lines
+  const adhocShiftIds = adhocShifts.map(s => s.entry_id);
+  let adhocDutyLines: any[] = [];
+  if (adhocShiftIds.length > 0) {
+    const placeholders = adhocShiftIds.map(() => '?').join(',');
+    const adhocLinesResult = await env.DB.prepare(`
+      SELECT dadl.*, v.fleet_number as vehicle_number
+      FROM dispatch_adhoc_duty_lines dadl
+      LEFT JOIN vehicles v ON dadl.vehicle_id = v.id
+      WHERE dadl.adhoc_shift_id IN (${placeholders})
+      AND dadl.deleted_at IS NULL
+      ORDER BY dadl.sequence
+    `).bind(...adhocShiftIds).all();
+    adhocDutyLines = adhocLinesResult.results as any[];
+  }
+
+  // Build lookup map for adhoc duty lines
+  const adhocDutyLinesByShift = new Map<string, any[]>();
+  for (const line of adhocDutyLines) {
+    if (!adhocDutyLinesByShift.has(line.adhoc_shift_id)) {
+      adhocDutyLinesByShift.set(line.adhoc_shift_id, []);
+    }
+    adhocDutyLinesByShift.get(line.adhoc_shift_id)!.push(line);
+  }
+
   // Build lookup maps
   const dutyLinesByEntry = new Map<string, any[]>();
   for (const line of rosterDutyLines) {
@@ -449,6 +495,87 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       shiftsByDriver.get(entry.driver_id)!.push(shift);
     } else {
       unassignedShifts.push(shift);
+    }
+  }
+
+  // Process adhoc shifts
+  for (const adhocShift of adhocShifts) {
+    const adhocLines = adhocDutyLinesByShift.get(adhocShift.entry_id) || [];
+    
+    const duties: DispatchDuty[] = adhocLines.map((line: any) => ({
+      id: line.id,
+      type: mapDutyType(line.duty_type),
+      start: line.start_time,
+      end: line.end_time,
+      description: line.description || 'Adhoc Duty',
+      vehicle: line.vehicle_id || null,
+      vehicleId: line.vehicle_id || null,
+      locationId: null,
+      fromLocationId: null,
+      toLocationId: null,
+      payType: line.pay_type || 'STD',
+      locationName: line.location_name || null,
+      locationLat: line.location_lat || null,
+      locationLng: line.location_lng || null,
+      isTemplate: false
+    }));
+
+    if (duties.length === 0) {
+      duties.push({
+        id: `placeholder-${adhocShift.entry_id}`,
+        type: 'driving',
+        start: adhocShift.start_time,
+        end: adhocShift.end_time,
+        description: '[No duty lines defined]',
+        vehicle: null,
+        vehicleId: null,
+        locationId: null,
+        fromLocationId: null,
+        toLocationId: null,
+        payType: 'STD',
+        locationName: null,
+        locationLat: null,
+        locationLng: null
+      });
+    }
+
+    // Track vehicle usage for adhoc duties
+    for (const duty of duties) {
+      if (duty.vehicleId) {
+        if (!vehicleUsage.has(duty.vehicleId)) {
+          vehicleUsage.set(duty.vehicleId, []);
+        }
+        vehicleUsage.get(duty.vehicleId)!.push({
+          shiftId: adhocShift.entry_id,
+          start: duty.start,
+          end: duty.end,
+          driverId: adhocShift.driver_id
+        });
+      }
+    }
+
+    const shift: DispatchShift = {
+      id: `shift-${adhocShift.entry_id}`,
+      entryId: adhocShift.entry_id,
+      name: 'ADHOC',
+      type: 'adhoc',
+      start: adhocShift.start_time,
+      end: adhocShift.end_time,
+      rosterId: null as any,
+      rosterCode: 'ADHOC',
+      blockId: null as any,
+      blockName: 'Adhoc',
+      duties,
+      pickupLocation: null,
+      dropoffLocation: null
+    };
+
+    // Adhoc shifts always have a driver
+    if (adhocShift.driver_id) {
+      if (!shiftsByDriver.has(adhocShift.driver_id)) {
+        shiftsByDriver.set(adhocShift.driver_id, []);
+      }
+      shiftsByDriver.get(adhocShift.driver_id)!.push(shift);
     }
   }
 
@@ -685,15 +812,25 @@ async function updateDutyLine(
   bindings.push(new Date().toISOString());
   bindings.push(duty_line_id);
 
-  const result = await env.DB.prepare(`
+  // Try updating roster_duty_lines first
+  const rosterResult = await env.DB.prepare(`
     UPDATE roster_duty_lines SET ${setClause.join(', ')} WHERE id = ? AND deleted_at IS NULL
   `).bind(...bindings).run();
 
-  if (result.meta.changes === 0) {
-    return error('Duty line not found', 404);
+  if (rosterResult.meta.changes > 0) {
+    return json({ success: true });
   }
 
-  return json({ success: true });
+  // Try updating dispatch_adhoc_duty_lines
+  const adhocResult = await env.DB.prepare(`
+    UPDATE dispatch_adhoc_duty_lines SET ${setClause.join(', ')} WHERE id = ? AND deleted_at IS NULL
+  `).bind(...bindings).run();
+
+  if (adhocResult.meta.changes > 0) {
+    return json({ success: true });
+  }
+
+  return error('Duty line not found', 404);
 }
 
 async function createDutyLine(
@@ -716,49 +853,92 @@ async function createDutyLine(
     return error('roster_entry_id is required');
   }
 
-  // Verify roster entry exists
-  const entry = await env.DB.prepare(`
+  const now = new Date().toISOString();
+  const id = uuid();
+
+  // Check if this is a roster entry
+  const rosterEntry = await env.DB.prepare(`
     SELECT id FROM roster_entries WHERE id = ? AND deleted_at IS NULL
   `).bind(input.roster_entry_id).first();
 
-  if (!entry) {
-    return error('Roster entry not found', 404);
+  if (rosterEntry) {
+    // Add to roster_duty_lines
+    const maxSeq = await env.DB.prepare(`
+      SELECT MAX(sequence) as max_seq FROM roster_duty_lines WHERE roster_entry_id = ?
+    `).bind(input.roster_entry_id).first<{ max_seq: number | null }>();
+
+    const sequence = (maxSeq?.max_seq || 0) + 1;
+
+    await env.DB.prepare(`
+      INSERT INTO roster_duty_lines (
+        id, tenant_id, roster_entry_id, sequence, start_time, end_time,
+        duty_type, description, vehicle_id, pay_type,
+        location_name, location_lat, location_lng,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      TENANT_ID,
+      input.roster_entry_id,
+      sequence,
+      input.start_time,
+      input.end_time,
+      input.duty_type || 'driving',
+      input.description || null,
+      input.vehicle_id || null,
+      input.pay_type || 'STD',
+      input.location_name || null,
+      input.location_lat || null,
+      input.location_lng || null,
+      now,
+      now
+    ).run();
+
+    return json({ success: true, data: { id } }, 201);
   }
 
-  const maxSeq = await env.DB.prepare(`
-    SELECT MAX(sequence) as max_seq FROM roster_duty_lines WHERE roster_entry_id = ?
-  `).bind(input.roster_entry_id).first<{ max_seq: number | null }>();
+  // Check if this is an adhoc shift
+  const adhocShift = await env.DB.prepare(`
+    SELECT id FROM dispatch_adhoc_shifts WHERE id = ? AND deleted_at IS NULL
+  `).bind(input.roster_entry_id).first();
 
-  const sequence = (maxSeq?.max_seq || 0) + 1;
-  const id = uuid();
-  const now = new Date().toISOString();
+  if (adhocShift) {
+    // Add to dispatch_adhoc_duty_lines
+    const maxSeq = await env.DB.prepare(`
+      SELECT MAX(sequence) as max_seq FROM dispatch_adhoc_duty_lines WHERE adhoc_shift_id = ?
+    `).bind(input.roster_entry_id).first<{ max_seq: number | null }>();
 
-  await env.DB.prepare(`
-    INSERT INTO roster_duty_lines (
-      id, tenant_id, roster_entry_id, sequence, start_time, end_time,
-      duty_type, description, vehicle_id, pay_type,
-      location_name, location_lat, location_lng,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    id,
-    TENANT_ID,
-    input.roster_entry_id,
-    sequence,
-    input.start_time,
-    input.end_time,
-    input.duty_type || 'driving',
-    input.description || null,
-    input.vehicle_id || null,
-    input.pay_type || 'STD',
-    input.location_name || null,
-    input.location_lat || null,
-    input.location_lng || null,
-    now,
-    now
-  ).run();
+    const sequence = (maxSeq?.max_seq || 0) + 1;
 
-  return json({ success: true, data: { id } }, 201);
+    await env.DB.prepare(`
+      INSERT INTO dispatch_adhoc_duty_lines (
+        id, tenant_id, adhoc_shift_id, sequence, start_time, end_time,
+        duty_type, description, vehicle_id, pay_type,
+        location_name, location_lat, location_lng,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id,
+      TENANT_ID,
+      input.roster_entry_id,
+      sequence,
+      input.start_time,
+      input.end_time,
+      input.duty_type || 'driving',
+      input.description || null,
+      input.vehicle_id || null,
+      input.pay_type || 'STD',
+      input.location_name || null,
+      input.location_lat || null,
+      input.location_lng || null,
+      now,
+      now
+    ).run();
+
+    return json({ success: true, data: { id } }, 201);
+  }
+
+  return error('Entry not found', 404);
 }
 
 async function cancelDutyLine(
@@ -776,13 +956,12 @@ async function cancelDutyLine(
 
   const now = new Date().toISOString();
 
-  // Check if duty line exists in roster_duty_lines (editable instance)
-  const existing = await env.DB.prepare(`
+  // Check if duty line exists in roster_duty_lines
+  const rosterLine = await env.DB.prepare(`
     SELECT id FROM roster_duty_lines WHERE id = ? AND deleted_at IS NULL
   `).bind(duty_line_id).first();
 
-  if (existing) {
-    // Soft delete the roster duty line
+  if (rosterLine) {
     await env.DB.prepare(`
       UPDATE roster_duty_lines 
       SET deleted_at = ?, updated_at = ?
@@ -791,15 +970,26 @@ async function cancelDutyLine(
     return json({ success: true, message: 'Duty cancelled' });
   }
 
+  // Check if duty line exists in dispatch_adhoc_duty_lines
+  const adhocLine = await env.DB.prepare(`
+    SELECT id FROM dispatch_adhoc_duty_lines WHERE id = ? AND deleted_at IS NULL
+  `).bind(duty_line_id).first();
+
+  if (adhocLine) {
+    await env.DB.prepare(`
+      UPDATE dispatch_adhoc_duty_lines 
+      SET deleted_at = ?, updated_at = ?
+      WHERE id = ?
+    `).bind(now, now, duty_line_id).run();
+    return json({ success: true, message: 'Duty cancelled' });
+  }
+
   // Check if it's a template duty line - these can't be directly cancelled
-  // but we need to return success for demo purposes
   const templateLine = await env.DB.prepare(`
     SELECT id FROM shift_template_duty_lines WHERE id = ?
   `).bind(duty_line_id).first();
 
   if (templateLine) {
-    // Template lines can't be cancelled directly - they're read-only
-    // Return success to avoid confusing the user
     return json({ success: true, message: 'Duty cancelled (template)' });
   }
 
@@ -820,15 +1010,28 @@ async function reinstateDutyLine(
 
   const now = new Date().toISOString();
 
-  // Check if duty line exists (including deleted ones)
-  const existing = await env.DB.prepare(`
-    SELECT id, deleted_at FROM roster_duty_lines WHERE id = ?
-  `).bind(duty_line_id).first<{ id: string; deleted_at: string | null }>();
+  // Check if duty line exists in roster_duty_lines (including deleted ones)
+  const rosterLine = await env.DB.prepare(`
+    SELECT id FROM roster_duty_lines WHERE id = ?
+  `).bind(duty_line_id).first();
 
-  if (existing) {
-    // Restore the roster duty line by clearing deleted_at
+  if (rosterLine) {
     await env.DB.prepare(`
       UPDATE roster_duty_lines 
+      SET deleted_at = NULL, updated_at = ?
+      WHERE id = ?
+    `).bind(now, duty_line_id).run();
+    return json({ success: true, message: 'Duty reinstated' });
+  }
+
+  // Check if duty line exists in dispatch_adhoc_duty_lines (including deleted ones)
+  const adhocLine = await env.DB.prepare(`
+    SELECT id FROM dispatch_adhoc_duty_lines WHERE id = ?
+  `).bind(duty_line_id).first();
+
+  if (adhocLine) {
+    await env.DB.prepare(`
+      UPDATE dispatch_adhoc_duty_lines 
       SET deleted_at = NULL, updated_at = ?
       WHERE id = ?
     `).bind(now, duty_line_id).run();
@@ -841,7 +1044,6 @@ async function reinstateDutyLine(
   `).bind(duty_line_id).first();
 
   if (templateLine) {
-    // Template lines - just return success
     return json({ success: true, message: 'Duty reinstated (template)' });
   }
 
@@ -867,99 +1069,38 @@ async function createAdhocShift(
   }
 ): Promise<Response> {
   const { date, employee_id, duty } = input;
-
-  // Find or create adhoc roster (check ALL rosters, not just non-deleted)
-  let adhocRoster = await env.DB.prepare(`
-    SELECT id, deleted_at FROM rosters 
-    WHERE tenant_id = ? AND code = 'ADHOC'
-  `).bind(TENANT_ID).first<{ id: string; deleted_at: string | null }>();
-
   const now = new Date().toISOString();
 
-  if (!adhocRoster) {
-    // Create new ADHOC roster
-    const rosterId = uuid();
-    await env.DB.prepare(`
-      INSERT INTO rosters (id, tenant_id, code, name, start_date, end_date, status, created_at, updated_at)
-      VALUES (?, ?, 'ADHOC', 'Adhoc Shifts', '2020-01-01', '2099-12-31', 'published', ?, ?)
-    `).bind(rosterId, TENANT_ID, now, now).run();
-    adhocRoster = { id: rosterId, deleted_at: null };
-  } else if (adhocRoster.deleted_at) {
-    // Restore soft-deleted ADHOC roster
-    await env.DB.prepare(`
-      UPDATE rosters SET deleted_at = NULL, status = 'published', updated_at = ? WHERE id = ?
-    `).bind(now, adhocRoster.id).run();
-  }
-
-  // Find or create adhoc shift template (check ALL, not just non-deleted)
-  let adhocTemplate = await env.DB.prepare(`
-    SELECT id, deleted_at FROM shift_templates 
-    WHERE tenant_id = ? AND code = 'ADHOC'
-  `).bind(TENANT_ID).first<{ id: string; deleted_at: string | null }>();
-
-  if (!adhocTemplate) {
-    const templateId = uuid();
-    await env.DB.prepare(`
-      INSERT INTO shift_templates (id, tenant_id, code, name, shift_type, default_start, default_end, is_active, created_at, updated_at)
-      VALUES (?, ?, 'ADHOC', 'Adhoc Duty', 'regular', 0, 24, 1, ?, ?)
-    `).bind(templateId, TENANT_ID, now, now).run();
-    adhocTemplate = { id: templateId, deleted_at: null };
-  } else if (adhocTemplate.deleted_at) {
-    // Restore soft-deleted template
-    await env.DB.prepare(`
-      UPDATE shift_templates SET deleted_at = NULL, is_active = 1, updated_at = ? WHERE id = ?
-    `).bind(now, adhocTemplate.id).run();
-  }
-
-  // Find or create adhoc duty block
-  let adhocBlock = await env.DB.prepare(`
-    SELECT id FROM shift_template_duty_blocks 
-    WHERE shift_template_id = ? AND name = 'Adhoc'
-  `).bind(adhocTemplate.id).first<{ id: string }>();
-
-  if (!adhocBlock) {
-    const blockId = uuid();
-    await env.DB.prepare(`
-      INSERT INTO shift_template_duty_blocks (id, shift_template_id, sequence, name, created_at, updated_at)
-      VALUES (?, ?, 1, 'Adhoc', ?, ?)
-    `).bind(blockId, adhocTemplate.id, now, now).run();
-    adhocBlock = { id: blockId };
-  }
-
-  // Create roster entry
-  const entryId = uuid();
+  // Create adhoc shift (standalone - no roster or template involved)
+  const shiftId = uuid();
   await env.DB.prepare(`
-    INSERT INTO roster_entries (
-      id, tenant_id, roster_id, shift_template_id, duty_block_id, date, name,
-      shift_type, driver_id, start_time, end_time, include_in_dispatch, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'regular', ?, ?, ?, 1, ?, ?)
+    INSERT INTO dispatch_adhoc_shifts (
+      id, tenant_id, date, employee_id, name, start_time, end_time, vehicle_id, status, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'ADHOC', ?, ?, ?, 'active', ?, ?)
   `).bind(
-    entryId,
+    shiftId,
     TENANT_ID,
-    adhocRoster.id,
-    adhocTemplate.id,
-    adhocBlock.id,
     date,
-    'Adhoc',
     employee_id,
     duty.start_time,
     duty.end_time,
+    duty.vehicle_id || null,
     now,
     now
   ).run();
 
-  // Create duty line
+  // Create first duty line for this adhoc shift
   const dutyLineId = uuid();
   await env.DB.prepare(`
-    INSERT INTO roster_duty_lines (
-      id, tenant_id, roster_entry_id, sequence, start_time, end_time,
+    INSERT INTO dispatch_adhoc_duty_lines (
+      id, tenant_id, adhoc_shift_id, sequence, start_time, end_time,
       duty_type, description, vehicle_id, pay_type, location_name, location_lat, location_lng,
       created_at, updated_at
     ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     dutyLineId,
     TENANT_ID,
-    entryId,
+    shiftId,
     duty.start_time,
     duty.end_time,
     duty.duty_type || 'driving',
@@ -976,7 +1117,7 @@ async function createAdhocShift(
   return json({ 
     success: true, 
     data: { 
-      entry_id: entryId,
+      entry_id: shiftId,
       duty_line_id: dutyLineId 
     } 
   }, 201);

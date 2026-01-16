@@ -3578,9 +3578,11 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
         newStart = shift.start;
         newEnd = refDuty.start;
       } else {
-        // No gap - try to extend shift backwards by 30 min
+        // No gap - try to extend shift backwards by 30 min from the duty's start
         const extension = 0.5;
-        const newShiftStart = Math.max(5, shift.start - extension);
+        // Use the earlier of shift.start or refDuty.start as the base for extension
+        const baseStart = Math.min(shift.start, refDuty.start);
+        const newShiftStart = Math.max(5, baseStart - extension);
         
         // Check if extension would overlap with another shift
         if (wouldOverlapOtherShift(newShiftStart, shift.end)) {
@@ -3588,7 +3590,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
           return;
         }
         
-        if (newShiftStart < shift.start) {
+        if (newShiftStart < refDuty.start) {
           shift.start = newShiftStart;
           newStart = shift.start;
           newEnd = refDuty.start;
@@ -3620,9 +3622,11 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
         newStart = refDuty.end;
         newEnd = shift.end;
       } else {
-        // No gap - try to extend shift forward by 30 min
+        // No gap - try to extend shift forward by 30 min from the duty's end
         const extension = 0.5;
-        const newShiftEnd = Math.min(24, shift.end + extension);
+        // Use the later of shift.end or refDuty.end as the base for extension
+        const baseEnd = Math.max(shift.end, refDuty.end);
+        const newShiftEnd = Math.min(24, baseEnd + extension);
         
         // Check if extension would overlap with another shift
         if (wouldOverlapOtherShift(shift.start, newShiftEnd)) {
@@ -3630,7 +3634,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
           return;
         }
         
-        if (newShiftEnd > shift.end) {
+        if (newShiftEnd > refDuty.end) {
           shift.end = newShiftEnd;
           newStart = refDuty.end;
           newEnd = shift.end;
@@ -3651,6 +3655,19 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
         showToast('No gap between duties', 'error');
         return;
       }
+    }
+  }
+  
+  // Final validation: ensure end time is after start time
+  // This catches edge cases like overnight shifts or corrupted data
+  if (newEnd <= newStart) {
+    // Default to 30 min duration from start
+    newEnd = Math.min(24, newStart + 0.5);
+    
+    // If still invalid (start is already at or past 24), show error
+    if (newEnd <= newStart) {
+      showToast('Cannot add duty - invalid time range', 'error');
+      return;
     }
   }
   

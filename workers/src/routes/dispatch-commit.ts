@@ -114,7 +114,7 @@ async function generatePayRecords(
   employeeId?: string
 ): Promise<number> {
   // Get all duty lines for this date from published rosters
-  let query = `
+  let rosterQuery = `
     SELECT 
       rdl.id as duty_line_id,
       rdl.duty_type,
@@ -126,7 +126,8 @@ async function generatePayRecords(
       stdb.name as block_name,
       st.id as shift_template_id,
       st.name as shift_name,
-      e.default_pay_type_id
+      e.default_pay_type_id,
+      'roster' as source_type
     FROM roster_duty_lines rdl
     JOIN roster_entries re ON rdl.roster_entry_id = re.id
     JOIN rosters r ON re.roster_id = r.id
@@ -137,18 +138,58 @@ async function generatePayRecords(
       AND r.status = 'published'
       AND re.date = ?
       AND re.driver_id IS NOT NULL
+      AND rdl.deleted_at IS NULL
   `;
   
-  const bindings: any[] = [TENANT_ID, date];
+  const rosterBindings: any[] = [TENANT_ID, date];
   
   if (scope === 'individual' && employeeId) {
-    query += ` AND re.driver_id = ?`;
-    bindings.push(employeeId);
+    rosterQuery += ` AND re.driver_id = ?`;
+    rosterBindings.push(employeeId);
   }
 
-  const dutyLines = await env.DB.prepare(query).bind(...bindings).all();
+  const rosterDutyLines = await env.DB.prepare(rosterQuery).bind(...rosterBindings).all();
 
-  if (!dutyLines.results || dutyLines.results.length === 0) {
+  // Get adhoc duty lines for this date
+  let adhocQuery = `
+    SELECT 
+      dadl.id as duty_line_id,
+      dadl.duty_type,
+      dadl.start_time,
+      dadl.end_time,
+      dadl.pay_type,
+      das.employee_id as driver_id,
+      NULL as duty_block_id,
+      'Adhoc' as block_name,
+      NULL as shift_template_id,
+      'ADHOC' as shift_name,
+      e.default_pay_type_id,
+      'adhoc' as source_type
+    FROM dispatch_adhoc_duty_lines dadl
+    JOIN dispatch_adhoc_shifts das ON dadl.adhoc_shift_id = das.id
+    LEFT JOIN employees e ON das.employee_id = e.id
+    WHERE das.tenant_id = ?
+      AND das.date = ?
+      AND das.deleted_at IS NULL
+      AND dadl.deleted_at IS NULL
+  `;
+  
+  const adhocBindings: any[] = [TENANT_ID, date];
+  
+  if (scope === 'individual' && employeeId) {
+    adhocQuery += ` AND das.employee_id = ?`;
+    adhocBindings.push(employeeId);
+  }
+
+  const adhocDutyLines = await env.DB.prepare(adhocQuery).bind(...adhocBindings).all();
+
+  // Merge all duty lines
+  const allDutyLines = [
+    ...(rosterDutyLines.results || []),
+    ...(adhocDutyLines.results || [])
+  ] as any[];
+
+  if (allDutyLines.length === 0) {
     return 0;
   }
 
@@ -163,7 +204,7 @@ async function generatePayRecords(
   const now = new Date().toISOString();
   let recordsCreated = 0;
 
-  for (const line of dutyLines.results as any[]) {
+  for (const line of allDutyLines) {
     // Calculate hours
     const hours = (line.end_time - line.start_time);
     if (hours <= 0) continue;
@@ -204,7 +245,7 @@ async function generatePayRecords(
         pay_type_id, pay_type_code, hours, rate, total_amount,
         source_duty_line_id, source_type, is_manual, notes,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'roster', 0, NULL, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?)
     `).bind(
       uuid(),
       TENANT_ID,
@@ -220,6 +261,7 @@ async function generatePayRecords(
       rate,
       totalAmount,
       line.duty_line_id,
+      line.source_type,
       now,
       now
     ).run();
