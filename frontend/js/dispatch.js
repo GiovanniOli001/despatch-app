@@ -670,7 +670,11 @@ function renderDriverVertical() {
         let vehicleInfo = '';
         if (shift.duties && shift.duties.length > 0) {
           const vehicleIds = [...new Set(shift.duties.filter(d => d.vehicle).map(d => d.vehicle))];
-          vehicleInfo = vehicleIds.join(', ');
+          const vehicleRegos = vehicleIds.map(vid => {
+            const v = vehicles.find(veh => veh.id === vid);
+            return v ? v.rego : vid;
+          });
+          vehicleInfo = vehicleRegos.join(', ');
         }
         
         blocksHtml += `
@@ -2128,7 +2132,9 @@ function renderDriverRowStyleBCD(driver, idx, style) {
           } else {
             segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
             if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
+              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
               vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
             } else {
@@ -2186,7 +2192,9 @@ function renderDriverRowStyleBCD(driver, idx, style) {
             
             segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
             if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
+              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
               vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
             } else {
@@ -2260,7 +2268,9 @@ function renderDriverRowStyleE(driver, idx) {
           
           if (!isCancelled) {
             if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
+              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
               vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
             } else {
@@ -2318,7 +2328,9 @@ function renderDriverRowStyleE(driver, idx) {
             
             segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
             if (duty.vehicle) {
-              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${duty.vehicle}">${duty.vehicle}</div>`;
+              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
+              vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
               vehicleStripHTML += `<div class="vehicle-segment missing" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="No vehicle">—</div>`;
             } else {
@@ -5488,7 +5500,7 @@ async function saveEdit() {
                 end_time: end,
                 duty_type: type,
                 description: description || 'Adhoc duty',
-                vehicle_number: vehicle || null,
+                vehicle_id: vehicle || null,
                 pay_type: 'STD',
                 location_name: locationName,
                 location_lat: locationLat,
@@ -5554,7 +5566,7 @@ async function saveEdit() {
               end_time: end,
               duty_type: type,
               description: description,
-              vehicle_number: vehicle || null,
+              vehicle_id: vehicle || null,
               pay_type: 'STD',
               location_name: locationName,
               location_lat: locationLat,
@@ -6426,7 +6438,7 @@ async function executeBulkAssignVehicle(vehicleId) {
           method: 'POST',
           body: {
             duty_line_id: duty.id,
-            vehicle_number: vehicleId
+            vehicle_id: vehicleId
           }
         }));
       

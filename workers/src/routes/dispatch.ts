@@ -732,7 +732,7 @@ async function createAdhocShift(
       end_time: number;
       duty_type?: string;
       description?: string;
-      vehicle_number?: string | null;
+      vehicle_id?: string | null;
       pay_type?: string;
       location_name?: string | null;
       location_lat?: number | null;
@@ -814,9 +814,9 @@ async function createAdhocShift(
   await env.DB.prepare(`
     INSERT INTO roster_duty_lines (
       id, roster_entry_id, sequence, start_time, end_time,
-      duty_type, description, pay_type, location_name, location_lat, location_lng,
+      duty_type, description, vehicle_id, pay_type, location_name, location_lat, location_lng,
       created_at, updated_at
-    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     dutyLineId,
     entryId,
@@ -824,6 +824,7 @@ async function createAdhocShift(
     duty.end_time,
     duty.duty_type || 'driving',
     duty.description || 'Adhoc Duty',
+    duty.vehicle_id || null,
     duty.pay_type || 'STD',
     duty.location_name || null,
     duty.location_lat || null,
