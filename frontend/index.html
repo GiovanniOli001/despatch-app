@@ -584,6 +584,7 @@
       <div class="modal-tabs">
         <button class="modal-tab active" onclick="switchEmployeeTab('general')">General</button>
         <button class="modal-tab" onclick="switchEmployeeTab('custom')">Custom Fields</button>
+        <button class="modal-tab" onclick="switchEmployeeTab('payrecords')" style="display: none;">Pay Records</button>
       </div>
       <div class="crud-modal-body" style="padding: 0;">
         <form id="employeeForm" onsubmit="event.preventDefault(); saveEmployee();">
@@ -651,6 +652,15 @@
           <div class="modal-tab-content" id="empTabCustom">
             <div id="empCustomFieldsContainer">
               <div style="padding: 20px; text-align: center; color: var(--text-muted);">Loading custom fields...</div>
+            </div>
+          </div>
+          
+          <!-- Pay Records Tab -->
+          <div class="modal-tab-content" id="empTabPayRecords">
+            <div id="empPayRecordsContainer">
+              <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+                <p>Click the "Pay Records" tab to load pay records.</p>
+              </div>
             </div>
           </div>
         </form>
@@ -763,6 +773,56 @@
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeCustomFieldModal()">Cancel</button>
         <button class="btn-primary" onclick="saveCustomField()">Save Field</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Pay Record Edit Modal -->
+  <div class="crud-modal-overlay" id="payRecordEditOverlay">
+    <div class="crud-modal" style="max-width: 400px;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title">Edit Pay Record</span>
+        <button class="crud-modal-close" onclick="closePayRecordEditModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="payRecordEditForm" onsubmit="event.preventDefault(); savePayRecordEdit();">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Hours *</label>
+              <input type="number" id="prEditHours" class="form-input" step="0.01" min="0" required oninput="updatePayRecordAmountPreview()">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Rate ($/hr) *</label>
+              <input type="number" id="prEditRate" class="form-input" step="0.01" min="0" required oninput="updatePayRecordAmountPreview()">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Pay Type</label>
+              <select id="prEditPayType" class="form-input">
+                <option value="STD">STD - Standard</option>
+                <option value="OT">OT - Overtime</option>
+                <option value="DT">DT - Double Time</option>
+                <option value="PEN">PEN - Penalty</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Calculated Amount</label>
+              <div id="prEditAmountPreview" class="form-input" style="background: var(--bg-tertiary); display: flex; align-items: center;">$0.00</div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Notes</label>
+            <input type="text" id="prEditNotes" class="form-input" placeholder="Reason for adjustment...">
+          </div>
+          <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
+            ⚠️ This record will be marked as manually edited.
+          </p>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closePayRecordEditModal()">Cancel</button>
+        <button class="btn-primary" onclick="savePayRecordEdit()">Save Changes</button>
       </div>
     </div>
   </div>

@@ -45,6 +45,13 @@ interface DailyStatusInput {
   notes?: string;
 }
 
+interface PayRecordUpdateInput {
+  hours?: number;
+  rate?: number;
+  pay_type_code?: string;
+  notes?: string;
+}
+
 const TENANT_ID = 'default'; // MVP: single tenant
 
 export async function handleEmployees(
@@ -69,6 +76,18 @@ export async function handleEmployees(
   // GET /api/employees/:id/status/:date - Get daily status
   if (method === 'GET' && id && subResource === 'status' && segments[2]) {
     return getEmployeeStatus(env, id, segments[2]);
+  }
+
+  // GET /api/employees/:id/pay-records - Get pay records for employee
+  if (method === 'GET' && id && subResource === 'pay-records') {
+    return getEmployeePayRecords(env, id, new URL(request.url).searchParams);
+  }
+
+  // PUT /api/employees/pay-records/:id - Update a pay record
+  if (method === 'PUT' && id === 'pay-records' && subResource) {
+    const body = await parseBody<PayRecordUpdateInput>(request);
+    if (!body) return error('Invalid request body');
+    return updatePayRecord(env, subResource, body);
   }
 
   // POST /api/employees - Create
@@ -362,4 +381,162 @@ async function setEmployeeStatus(
   ).run();
 
   return getEmployeeStatus(env, employeeId, date);
+}
+
+// ============================================
+// PAY RECORDS
+// ============================================
+
+async function getEmployeePayRecords(env: Env, employeeId: string, params: URLSearchParams): Promise<Response> {
+  // Verify employee exists
+  const employee = await env.DB.prepare(`
+    SELECT id, first_name, last_name FROM employees 
+    WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(employeeId, TENANT_ID).first();
+
+  if (!employee) {
+    return error('Employee not found', 404);
+  }
+
+  // Build query with filters
+  let query = `
+    SELECT * FROM employee_pay_records 
+    WHERE tenant_id = ? AND employee_id = ?
+  `;
+  const bindings: (string | number)[] = [TENANT_ID, employeeId];
+
+  // Date range filter
+  const dateFrom = params.get('date_from');
+  const dateTo = params.get('date_to');
+  
+  if (dateFrom) {
+    query += ` AND work_date >= ?`;
+    bindings.push(dateFrom);
+  }
+  
+  if (dateTo) {
+    query += ` AND work_date <= ?`;
+    bindings.push(dateTo);
+  }
+
+  // Pay type filter
+  const payType = params.get('pay_type');
+  if (payType) {
+    query += ` AND pay_type_code = ?`;
+    bindings.push(payType);
+  }
+
+  query += ` ORDER BY work_date DESC, shift_name, created_at`;
+
+  const result = await env.DB.prepare(query).bind(...bindings).all();
+  const records = result.results || [];
+
+  // Calculate totals
+  let totalHours = 0;
+  let totalAmount = 0;
+  const byPayType: Record<string, { hours: number; amount: number }> = {};
+
+  for (const rec of records as any[]) {
+    totalHours += rec.hours || 0;
+    totalAmount += rec.total_amount || 0;
+    
+    const code = rec.pay_type_code || 'UNK';
+    if (!byPayType[code]) {
+      byPayType[code] = { hours: 0, amount: 0 };
+    }
+    byPayType[code].hours += rec.hours || 0;
+    byPayType[code].amount += rec.total_amount || 0;
+  }
+
+  return json({
+    success: true,
+    data: {
+      employee: employee,
+      records: records,
+      totals: {
+        total_hours: totalHours,
+        total_amount: totalAmount,
+        by_pay_type: byPayType
+      }
+    }
+  });
+}
+
+async function updatePayRecord(env: Env, recordId: string, input: PayRecordUpdateInput): Promise<Response> {
+  // Get existing record
+  const existing = await env.DB.prepare(`
+    SELECT * FROM employee_pay_records WHERE id = ? AND tenant_id = ?
+  `).bind(recordId, TENANT_ID).first();
+
+  if (!existing) {
+    return error('Pay record not found', 404);
+  }
+
+  const record = existing as any;
+  const now = new Date().toISOString();
+
+  // Calculate new values
+  const hours = input.hours !== undefined ? input.hours : record.hours;
+  const rate = input.rate !== undefined ? input.rate : record.rate;
+  const totalAmount = hours * rate;
+
+  // Build update
+  const updates: string[] = [];
+  const bindings: (string | number | null)[] = [];
+
+  if (input.hours !== undefined) {
+    updates.push('hours = ?');
+    bindings.push(input.hours);
+  }
+
+  if (input.rate !== undefined) {
+    updates.push('rate = ?');
+    bindings.push(input.rate);
+  }
+
+  if (input.pay_type_code !== undefined) {
+    updates.push('pay_type_code = ?');
+    bindings.push(input.pay_type_code);
+  }
+
+  if (input.notes !== undefined) {
+    updates.push('notes = ?');
+    bindings.push(input.notes);
+  }
+
+  // Always update total_amount if hours or rate changed
+  if (input.hours !== undefined || input.rate !== undefined) {
+    updates.push('total_amount = ?');
+    bindings.push(totalAmount);
+  }
+
+  // Mark as manual edit
+  updates.push('is_manual = 1');
+  updates.push('updated_at = ?');
+  bindings.push(now);
+
+  bindings.push(recordId);
+
+  await env.DB.prepare(`
+    UPDATE employee_pay_records SET ${updates.join(', ')} WHERE id = ?
+  `).bind(...bindings).run();
+
+  // Log to audit
+  await env.DB.prepare(`
+    INSERT INTO audit_log (id, tenant_id, entity_type, entity_id, action, changed_by, changed_at, notes)
+    VALUES (?, ?, 'employee_pay_record', ?, 'update', 'system', ?, ?)
+  `).bind(
+    uuid(),
+    TENANT_ID,
+    recordId,
+    now,
+    `Manual edit: hours=${hours}, rate=${rate}, total=${totalAmount}`
+  ).run();
+
+  // Return updated record
+  const updated = await env.DB.prepare(`
+    SELECT * FROM employee_pay_records WHERE id = ?
+  `).bind(recordId).first();
+
+  return json({ success: true, data: updated });
 }

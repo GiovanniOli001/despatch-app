@@ -80,6 +80,12 @@ function switchEmployeeTab(tabName) {
     document.getElementById('empTabGeneral').classList.add('active');
   } else if (tabName === 'custom') {
     document.getElementById('empTabCustom').classList.add('active');
+  } else if (tabName === 'payrecords') {
+    document.getElementById('empTabPayRecords').classList.add('active');
+    // Load pay records if we have an employee ID
+    if (editingEmployeeId) {
+      loadEmployeePayRecords(editingEmployeeId);
+    }
   }
 }
 
@@ -94,6 +100,12 @@ async function showAddEmployeeModal() {
   });
   document.getElementById('empTabGeneral').classList.add('active');
   document.getElementById('empTabCustom').classList.remove('active');
+  
+  // Hide Pay Records tab for new employees
+  const payRecordsTab = document.querySelector('#employeeModalOverlay .modal-tab[onclick*="payrecords"]');
+  if (payRecordsTab) payRecordsTab.style.display = 'none';
+  const payRecordsContent = document.getElementById('empTabPayRecords');
+  if (payRecordsContent) payRecordsContent.classList.remove('active');
   
   // Load pay types dropdown
   await populatePayTypeDropdown();
@@ -128,9 +140,18 @@ async function editEmployee(id) {
   });
   document.getElementById('empTabGeneral').classList.add('active');
   document.getElementById('empTabCustom').classList.remove('active');
+  const payRecordsContent = document.getElementById('empTabPayRecords');
+  if (payRecordsContent) payRecordsContent.classList.remove('active');
+  
+  // Show Pay Records tab for existing employees
+  const payRecordsTab = document.querySelector('#employeeModalOverlay .modal-tab[onclick*="payrecords"]');
+  if (payRecordsTab) payRecordsTab.style.display = '';
   
   // Load custom fields with values for this employee
   await loadCustomFieldsForEmployee(id);
+  
+  // Reset pay records filters
+  resetPayRecordsFilters();
   
   document.getElementById('employeeModalOverlay').classList.add('show');
 }
@@ -981,5 +1002,229 @@ async function deletePayType(id, name) {
     loadPayTypes();
   } catch (err) {
     showToast(err.message || 'Failed to delete pay type', 'error');
+  }
+}
+
+// ============================================
+// EMPLOYEE PAY RECORDS
+// ============================================
+
+let employeePayRecordsData = [];
+let payRecordsFilters = {
+  date_from: '',
+  date_to: '',
+  pay_type: ''
+};
+let editingPayRecordId = null;
+
+function resetPayRecordsFilters() {
+  payRecordsFilters = { date_from: '', date_to: '', pay_type: '' };
+  employeePayRecordsData = [];
+  
+  const container = document.getElementById('empPayRecordsContainer');
+  if (container) {
+    container.innerHTML = `
+      <div style="padding: 20px; text-align: center; color: var(--text-muted);">
+        <p>Click the "Pay Records" tab to load pay records.</p>
+      </div>
+    `;
+  }
+}
+
+async function loadEmployeePayRecords(employeeId) {
+  const container = document.getElementById('empPayRecordsContainer');
+  if (!container) return;
+  
+  container.innerHTML = '<div class="loading-cell" style="padding: 20px;">Loading pay records...</div>';
+  
+  try {
+    const params = new URLSearchParams();
+    if (payRecordsFilters.date_from) params.set('date_from', payRecordsFilters.date_from);
+    if (payRecordsFilters.date_to) params.set('date_to', payRecordsFilters.date_to);
+    if (payRecordsFilters.pay_type) params.set('pay_type', payRecordsFilters.pay_type);
+    
+    const result = await apiRequest(`/employees/${employeeId}/pay-records?${params}`);
+    employeePayRecordsData = result.data?.records || [];
+    const totals = result.data?.totals || { total_hours: 0, total_amount: 0, by_pay_type: {} };
+    
+    renderPayRecordsTab(totals);
+  } catch (err) {
+    container.innerHTML = `<div style="padding: 20px; color: var(--accent-red);">Error: ${err.message}</div>`;
+  }
+}
+
+function renderPayRecordsTab(totals) {
+  const container = document.getElementById('empPayRecordsContainer');
+  if (!container) return;
+  
+  // Get unique pay types for filter dropdown
+  const payTypeCodes = [...new Set(employeePayRecordsData.map(r => r.pay_type_code).filter(Boolean))];
+  
+  let html = `
+    <div class="pay-records-filters">
+      <div class="filter-row">
+        <div class="filter-group">
+          <label>From Date</label>
+          <input type="date" id="prFilterDateFrom" value="${payRecordsFilters.date_from}" 
+                 onchange="updatePayRecordsFilter('date_from', this.value)">
+        </div>
+        <div class="filter-group">
+          <label>To Date</label>
+          <input type="date" id="prFilterDateTo" value="${payRecordsFilters.date_to}"
+                 onchange="updatePayRecordsFilter('date_to', this.value)">
+        </div>
+        <div class="filter-group">
+          <label>Pay Type</label>
+          <select id="prFilterPayType" onchange="updatePayRecordsFilter('pay_type', this.value)">
+            <option value="">All Types</option>
+            ${payTypeCodes.map(code => `<option value="${code}" ${payRecordsFilters.pay_type === code ? 'selected' : ''}>${code}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-group">
+          <button class="action-btn" onclick="applyPayRecordsFilters()">Apply</button>
+          <button class="action-btn" onclick="clearPayRecordsFilters()">Clear</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="pay-records-table-wrapper">
+      <table class="pay-records-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Shift</th>
+            <th>Duty</th>
+            <th>Pay Type</th>
+            <th>Hours</th>
+            <th>Rate</th>
+            <th>Amount</th>
+            <th>Note</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+  
+  if (employeePayRecordsData.length === 0) {
+    html += `<tr><td colspan="9" class="loading-cell">No pay records found</td></tr>`;
+  } else {
+    for (const rec of employeePayRecordsData) {
+      const isManual = rec.is_manual ? '<span class="badge badge-warning" title="Manually edited">M</span>' : '';
+      html += `
+        <tr data-record-id="${rec.id}" class="${rec.is_manual ? 'manual-edit' : ''}">
+          <td>${rec.work_date}</td>
+          <td>${escapeHtml(rec.shift_name || '—')}</td>
+          <td>${escapeHtml(rec.duty_name || '—')}</td>
+          <td><span class="badge badge-info">${escapeHtml(rec.pay_type_code || 'STD')}</span></td>
+          <td class="numeric">${parseFloat(rec.hours).toFixed(2)}</td>
+          <td class="numeric">$${parseFloat(rec.rate).toFixed(2)}</td>
+          <td class="numeric">$${parseFloat(rec.total_amount).toFixed(2)}</td>
+          <td>${escapeHtml(rec.notes || '')} ${isManual}</td>
+          <td>
+            <button class="action-btn small" onclick="editPayRecord('${rec.id}')">Edit</button>
+          </td>
+        </tr>
+      `;
+    }
+  }
+  
+  html += `
+        </tbody>
+        <tfoot>
+          <tr class="totals-row">
+            <td colspan="4"><strong>Totals</strong></td>
+            <td class="numeric"><strong>${totals.total_hours.toFixed(2)}</strong></td>
+            <td></td>
+            <td class="numeric"><strong>$${totals.total_amount.toFixed(2)}</strong></td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    
+    <div class="pay-records-summary">
+      <strong>By Pay Type:</strong>
+      ${Object.entries(totals.by_pay_type).map(([code, data]) => 
+        `<span class="pay-type-summary">${code}: ${data.hours.toFixed(2)} hrs / $${data.amount.toFixed(2)}</span>`
+      ).join('')}
+    </div>
+  `;
+  
+  container.innerHTML = html;
+}
+
+function updatePayRecordsFilter(key, value) {
+  payRecordsFilters[key] = value;
+}
+
+function applyPayRecordsFilters() {
+  if (editingEmployeeId) {
+    loadEmployeePayRecords(editingEmployeeId);
+  }
+}
+
+function clearPayRecordsFilters() {
+  payRecordsFilters = { date_from: '', date_to: '', pay_type: '' };
+  document.getElementById('prFilterDateFrom').value = '';
+  document.getElementById('prFilterDateTo').value = '';
+  document.getElementById('prFilterPayType').value = '';
+  if (editingEmployeeId) {
+    loadEmployeePayRecords(editingEmployeeId);
+  }
+}
+
+function editPayRecord(id) {
+  const record = employeePayRecordsData.find(r => r.id === id);
+  if (!record) return;
+  
+  editingPayRecordId = id;
+  document.getElementById('prEditHours').value = record.hours;
+  document.getElementById('prEditRate').value = record.rate;
+  document.getElementById('prEditPayType').value = record.pay_type_code || 'STD';
+  document.getElementById('prEditNotes').value = record.notes || '';
+  
+  // Calculate amount display
+  updatePayRecordAmountPreview();
+  
+  document.getElementById('payRecordEditOverlay').classList.add('show');
+}
+
+function closePayRecordEditModal() {
+  document.getElementById('payRecordEditOverlay').classList.remove('show');
+  editingPayRecordId = null;
+}
+
+function updatePayRecordAmountPreview() {
+  const hours = parseFloat(document.getElementById('prEditHours').value) || 0;
+  const rate = parseFloat(document.getElementById('prEditRate').value) || 0;
+  const amount = hours * rate;
+  document.getElementById('prEditAmountPreview').textContent = `$${amount.toFixed(2)}`;
+}
+
+async function savePayRecordEdit() {
+  if (!editingPayRecordId) return;
+  
+  const data = {
+    hours: parseFloat(document.getElementById('prEditHours').value),
+    rate: parseFloat(document.getElementById('prEditRate').value),
+    pay_type_code: document.getElementById('prEditPayType').value,
+    notes: document.getElementById('prEditNotes').value || null
+  };
+  
+  if (isNaN(data.hours) || isNaN(data.rate)) {
+    showToast('Hours and rate must be valid numbers', 'error');
+    return;
+  }
+  
+  try {
+    await apiRequest(`/employees/pay-records/${editingPayRecordId}`, { method: 'PUT', body: data });
+    showToast('Pay record updated');
+    closePayRecordEditModal();
+    // Reload pay records
+    if (editingEmployeeId) {
+      loadEmployeePayRecords(editingEmployeeId);
+    }
+  } catch (err) {
+    showToast(err.message || 'Failed to update pay record', 'error');
   }
 }
