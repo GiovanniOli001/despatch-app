@@ -241,6 +241,7 @@ See [PROJECT-MD.txt](PROJECT-MD.txt) for complete technical documentation includ
 - Troubleshooting guide
 - Deployment procedures
 - **Critical rules for AI assistants modifying the codebase**
+- **Mandatory verification summary requirement for all code changes**
 
 ## License
 

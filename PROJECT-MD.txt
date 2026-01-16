@@ -577,6 +577,34 @@ When assigning a driver to a duty block, check for:
 8. **Times are decimal hours** - 6.5 = 06:30
 9. **User is in Brisbane, QLD** - Australian context
 10. **Load order matters** - api.js → app.js → dispatch.js → hrm.js → etc.
+11. **ALWAYS provide verification summary** - See below
+
+### ⚠️ MANDATORY VERIFICATION SUMMARY
+
+**Every code update MUST include a verification summary table before deployment.**
+
+Example format:
+```
+| Check | Before | After | Status |
+|-------|--------|-------|--------|
+| [file].js functions | X | X | ✅ |
+| [file].js line count | X | X | ✅ |
+| Key functions present | X refs | X refs | ✅ |
+| Related CSS intact | Yes | Yes | ✅ |
+
+**Files modified:** N
+**Lines changed:** ~N
+**Method:** str_replace only
+```
+
+**Why this is required:**
+A previous incident caused feature loss when a large file was regenerated instead of surgically modified. The verification summary proves that existing functionality was preserved.
+
+**Verification checklist:**
+- Count functions before and after
+- Count line numbers before and after
+- Grep for key function names to confirm presence
+- Confirm modification method was str_replace (not file regeneration)
 
 ---
 
