@@ -2,7 +2,7 @@
 
 Bus and coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch.
 
-**Version:** 1.6.0 | **Last Updated:** January 16, 2026
+**Version:** 1.7.0 | **Last Updated:** January 16, 2026
 
 ## Live App
 
@@ -31,100 +31,15 @@ Bus and coach dispatch operations system for managing drivers, vehicles, shifts,
 - **Published Roster Protection** - Blocks editing when published
 - **Duty Cancellation** - Cancel/reinstate duties with reason tracking
 - **Custom Fields** - Configurable employee fields with layout designer
+- **Pay Types** - Hourly rate definitions (STD, OT, etc.)
+- **Dispatch Commit** - Lock days and generate pay records
+
+### In Progress
+- Employee Pay Records Tab (Phase 4)
 
 ### Planned
-- Charters module (quote-to-invoice)
-- Maintenance tracking
-- Reporting/exports
-
-## Database Schema
-
-### Key Tables & Relationships
-
-```
-shift_templates
-    └── shift_template_duty_blocks (FK: shift_template_id)
-            └── shift_template_duty_lines (FK: duty_block_id)
-
-rosters
-    └── roster_entries (FK: roster_id, shift_template_id, duty_block_id)
-            └── roster_duty_lines (FK: roster_entry_id)
-
-employees (referenced by duty_blocks.driver_id, roster_entries.driver_id)
-    └── employee_custom_field_values (FK: employee_id, field_definition_id)
-
-employee_custom_field_definitions (custom field schema)
-vehicles (referenced by duty_lines.vehicle_id)
-```
-
-### Foreign Key Deletion Order (CRITICAL!)
-When purging data, delete in this order to avoid FK constraint errors:
-1. `roster_duty_lines`
-2. `roster_entries`
-3. `rosters`
-4. `shift_template_duty_lines`
-5. `shift_template_duty_blocks`
-6. `shift_templates`
-
-## Quick Start
-
-### Prerequisites
-
-- [Node.js](https://nodejs.org) (LTS version)
-- [Git](https://git-scm.com)
-- [Cloudflare account](https://dash.cloudflare.com)
-
-### Initial Setup
-
-```bash
-# Clone the repo
-git clone https://github.com/GiovanniOli001/despatch-app.git
-cd despatch-app
-
-# Install dependencies
-cd workers && npm install
-
-# Login to Cloudflare
-npx wrangler login
-
-# Create database (first time only)
-npx wrangler d1 create dispatch-db
-# Copy the database_id into wrangler.toml
-
-# Initialize schema
-npx wrangler d1 execute dispatch-db --remote --file=src/db/schema.sql
-
-# Deploy API
-npx wrangler deploy
-```
-
-### Making Changes
-
-Edit files, then:
-
-```bash
-# Deploy backend
-cd workers
-npx wrangler deploy
-
-# Deploy frontend
-cd ..
-git add .
-git commit -m "your message"
-git push
-```
-
-Cloudflare auto-deploys frontend in ~30 seconds.
-
-### ⚠️ Backend Modification Warning
-
-Backend TypeScript files (especially `dispatch.ts`) require extra care:
-
-1. **Verify schema** before writing SQL: `npx wrangler d1 execute dispatch-db --remote --command="PRAGMA table_info(table_name);"`
-2. **Type check** before deploy: `cd workers && npx tsc --noEmit`
-3. **Monitor logs** during testing: `npx wrangler tail`
-
-See PROJECT-MD.txt for full backend modification protocol.
+- Reports & exports
+- Charters module
 
 ## Project Structure
 
@@ -137,7 +52,7 @@ dispatch-app/
 │   └── js/
 │       ├── api.js              ← API client
 │       ├── app.js              ← Constants, navigation, utilities
-│       ├── dispatch.js         ← Dispatch screen (~7,600 lines)
+│       ├── dispatch.js         ← Dispatch screen (~7,900 lines)
 │       ├── hrm.js              ← Employees + custom fields
 │       ├── vehicles.js         ← Vehicle CRUD
 │       ├── shifts.js           ← Shift templates
@@ -153,105 +68,133 @@ dispatch-app/
         │   ├── shifts.ts
         │   ├── roster.ts
         │   ├── dispatch.ts
+        │   ├── dispatch-commit.ts
         │   ├── ops-calendar.ts
         │   └── config.ts
         └── db/
             └── schema.sql
 ```
 
+## Quick Start
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org) (LTS version)
+- [Git](https://git-scm.com)
+- [Cloudflare account](https://dash.cloudflare.com)
+
+### Initial Setup
+
+```bash
+git clone https://github.com/GiovanniOli001/despatch-app.git
+cd despatch-app
+cd workers && npm install
+npx wrangler login
+npx wrangler d1 create dispatch-db
+npx wrangler d1 execute dispatch-db --remote --file=src/db/schema.sql
+npx wrangler deploy
+```
+
+### Making Changes
+
+**Backend:**
+```
+cd workers
+npx wrangler deploy
+```
+
+**Frontend:**
+```
+git add .
+git commit -m "your message"
+git push
+```
+
+Cloudflare auto-deploys frontend in ~30 seconds.
+
+## Database Schema
+
+### Key Tables
+| Table | Purpose |
+|-------|---------|
+| employees | Driver/staff records |
+| vehicles | Fleet management |
+| shift_templates | Reusable shift definitions |
+| shift_template_duty_blocks | Duty blocks within shifts |
+| shift_template_duty_lines | Individual duty lines |
+| rosters | Roster containers (week/period) |
+| roster_entries | Assigned duties per date |
+| roster_duty_lines | Instance-level duty data |
+| pay_types | Hourly rate definitions |
+| dispatch_commits | Committed date tracking |
+| employee_pay_records | Generated pay records |
+
+### Foreign Key Deletion Order
+When purging data, delete in this order:
+1. `roster_duty_lines`
+2. `roster_entries`
+3. `rosters`
+4. `shift_template_duty_lines`
+5. `shift_template_duty_blocks`
+6. `shift_templates`
+
 ## API Endpoints
 
 | Resource | Key Endpoints |
 |----------|---------------|
-| Dispatch | `GET /api/dispatch/:date`, create-duty-line, create-adhoc-shift, update-duty-line, cancel-duty-line, reinstate-duty-line |
-| Roster | `GET/POST /api/roster/containers`, publish, unpublish, assign, unassign |
-| Shifts | `GET/POST /api/shifts`, lock-status, duplicate |
-| Employees | Full CRUD at `/api/employees` |
-| Employee Fields | `/api/employee-fields/definitions`, `/api/employee-fields/values/:id` |
-| Vehicles | Full CRUD at `/api/vehicles` |
-
-## Roster Workflow
-
-1. **Create Shift Template** - Define duty blocks and lines
-2. **Create Roster** - Date range container (e.g., "Week 3 Jan")
-3. **Assign Duties** - Drag blocks to drivers in roster view
-4. **Schedule to Calendar** - Set calendar dates
-5. **Publish** - Makes duties visible in Dispatch
-6. **Unpublish** - Removes from Dispatch, allows editing
-
-### Published Roster Protection
-When published:
-- Shifts used in roster cannot be edited/deleted
-- Roster details cannot be modified
-- Must unpublish first to make changes
-
-## HRM Custom Fields
-
-The HRM module supports configurable custom fields for employees:
-
-### Field Types
-- **Text** - Free text input
-- **Number** - Numeric input
-- **Date** - Date picker with calendar button
-- **Boolean** - Yes/No checkbox
-- **Select** - Dropdown with custom options
-
-### Layout Designer
-- Arrange fields in rows via drag-and-drop
-- Set field width (half or full)
-- Fields automatically rendered in employee modal
-
-### Access
-- Click ⚙️ button in HRM screen header
-- "Fields" tab to add/edit field definitions
-- "Layout Designer" tab to arrange fields
-
-## Version History
-
-### v1.6.0 (January 16, 2026)
-- Frontend restructured into modular files (CSS, JS modules)
-- Improved maintainability with separate files per feature
-- No functional changes - same features, better organization
-
-### v1.5.0 (January 16, 2026)
-- HRM custom fields with configurable types (text, number, date, boolean, select)
-- Layout Designer for arranging custom fields
-- Employee modal tabs (General / Custom Fields)
-- Date picker button for date fields
-- Required field validation
-
-### v1.4.0 (January 15, 2026)
-- Duty cancellation with visual indicators and reason tracking
-- Cancel/reinstate individual duties or bulk cancel shifts
-- Vehicle sync respects cancelled state across date changes
-- Roster unpublish/republish resets cancelled states
-
-### v1.3.0 (January 15, 2026)
-- Published roster protection for shifts and rosters
-- Fixed shift editing FK constraint errors
-- Fixed bulk vehicle assignment persistence
-- Ops Calendar publish/unpublish workflow
-
-### v1.2.0 (January 15, 2026)
-- Adhoc shift creation with database persistence
-- Location autocomplete fixes
-
-### v1.1.0 (January 2026)
-- Roster module with drag-drop
-- Dispatch day view with inline editing
-
-### v1.0.0 (December 2025)
-- Initial release with HRM, Vehicles, Shift Templates
+| Dispatch | GET /:date, commit, cancel-duty-line, create-adhoc-shift |
+| Roster | containers, publish, unpublish, assign |
+| Shifts | CRUD + lock-status |
+| Employees | Full CRUD |
+| Pay Types | CRUD |
 
 ## Documentation
 
-See [PROJECT-MD.txt](PROJECT-MD.txt) for complete technical documentation including:
+See **[PROJECT-MD.txt](PROJECT-MD.txt)** for complete technical documentation including:
 - Full database schema with all columns
+- Backend modification protocol
+- Lessons learned
 - API endpoint details
-- Troubleshooting guide
 - Deployment procedures
-- **Critical rules for AI assistants modifying the codebase**
-- **Mandatory verification summary requirement for all code changes**
+
+## ⚠️ Backend Modification Warning
+
+Before making backend changes:
+1. Verify schema: `npx wrangler d1 execute dispatch-db --remote --command="PRAGMA table_info(table_name);"`
+2. Type check: `npx tsc --noEmit`
+3. Monitor logs: `npx wrangler tail`
+
+See PROJECT-MD.txt Section 2 for full protocol.
+
+## Version History
+
+### v1.7.0 (January 16, 2026)
+- Pay Types Admin (Phase 1)
+- Employee Pay Type Association (Phase 2)
+- Dispatch Commit system (Phase 3)
+- Comprehensive documentation with verified schema
+- Backend modification protocol
+
+### v1.6.0 (January 16, 2026)
+- Frontend restructured into modular files
+
+### v1.5.0 (January 16, 2026)
+- HRM custom fields with layout designer
+
+### v1.4.0 (January 15, 2026)
+- Duty cancellation with visual indicators
+
+### v1.3.0 (January 15, 2026)
+- Published roster protection
+
+### v1.2.0 (January 15, 2026)
+- Adhoc shift creation
+
+### v1.1.0 (January 2026)
+- Roster module with drag-drop
+
+### v1.0.0 (December 2025)
+- Initial release
 
 ## License
 

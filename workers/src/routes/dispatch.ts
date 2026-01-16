@@ -12,6 +12,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
+import { getCommitStatus, commitDay, uncommitDay, getPayRecordsForDate } from './dispatch-commit';
 
 const TENANT_ID = 'default';
 
@@ -87,6 +88,32 @@ export async function handleDispatch(
   const seg2 = segments[1];
 
   try {
+    // ========================================
+    // COMMIT ENDPOINTS
+    // ========================================
+    
+    // GET /api/dispatch/commit-status/:date - Get commit status
+    if (method === 'GET' && seg1 === 'commit-status' && seg2) {
+      return getCommitStatus(env, seg2);
+    }
+    
+    // GET /api/dispatch/pay-records/:date - Get pay records for date
+    if (method === 'GET' && seg1 === 'pay-records' && seg2) {
+      return getPayRecordsForDate(env, seg2);
+    }
+    
+    // POST /api/dispatch/commit - Commit a day
+    if (method === 'POST' && seg1 === 'commit') {
+      const body = await parseBody<{ date: string; scope: 'all' | 'individual'; employee_id?: string; notes?: string }>(request);
+      if (!body) return error('Invalid request body');
+      return commitDay(env, body);
+    }
+    
+    // DELETE /api/dispatch/commit/:id - Uncommit
+    if (method === 'DELETE' && seg1 === 'commit' && seg2) {
+      return uncommitDay(env, seg2);
+    }
+
     // ========================================
     // EXISTING ENDPOINTS
     // ========================================

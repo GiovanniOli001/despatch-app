@@ -135,7 +135,7 @@ async function generatePayRecords(
     LEFT JOIN employees e ON re.driver_id = e.id
     WHERE r.tenant_id = ?
       AND r.status = 'published'
-      AND re.calendar_date = ?
+      AND re.date = ?
       AND re.driver_id IS NOT NULL
   `;
   
