@@ -868,28 +868,34 @@ async function createAdhocShift(
 ): Promise<Response> {
   const { date, employee_id, duty } = input;
 
-  // Find or create adhoc roster
+  // Find or create adhoc roster (check ALL rosters, not just non-deleted)
   let adhocRoster = await env.DB.prepare(`
-    SELECT id FROM rosters 
-    WHERE tenant_id = ? AND code = 'ADHOC' AND deleted_at IS NULL
-  `).bind(TENANT_ID).first<{ id: string }>();
+    SELECT id, deleted_at FROM rosters 
+    WHERE tenant_id = ? AND code = 'ADHOC'
+  `).bind(TENANT_ID).first<{ id: string; deleted_at: string | null }>();
 
   const now = new Date().toISOString();
 
   if (!adhocRoster) {
+    // Create new ADHOC roster
     const rosterId = uuid();
     await env.DB.prepare(`
       INSERT INTO rosters (id, tenant_id, code, name, start_date, end_date, status, created_at, updated_at)
       VALUES (?, ?, 'ADHOC', 'Adhoc Shifts', '2020-01-01', '2099-12-31', 'published', ?, ?)
     `).bind(rosterId, TENANT_ID, now, now).run();
-    adhocRoster = { id: rosterId };
+    adhocRoster = { id: rosterId, deleted_at: null };
+  } else if (adhocRoster.deleted_at) {
+    // Restore soft-deleted ADHOC roster
+    await env.DB.prepare(`
+      UPDATE rosters SET deleted_at = NULL, status = 'published', updated_at = ? WHERE id = ?
+    `).bind(now, adhocRoster.id).run();
   }
 
-  // Find or create adhoc shift template
+  // Find or create adhoc shift template (check ALL, not just non-deleted)
   let adhocTemplate = await env.DB.prepare(`
-    SELECT id FROM shift_templates 
-    WHERE tenant_id = ? AND code = 'ADHOC' AND deleted_at IS NULL
-  `).bind(TENANT_ID).first<{ id: string }>();
+    SELECT id, deleted_at FROM shift_templates 
+    WHERE tenant_id = ? AND code = 'ADHOC'
+  `).bind(TENANT_ID).first<{ id: string; deleted_at: string | null }>();
 
   if (!adhocTemplate) {
     const templateId = uuid();
@@ -897,7 +903,12 @@ async function createAdhocShift(
       INSERT INTO shift_templates (id, tenant_id, code, name, shift_type, default_start, default_end, is_active, created_at, updated_at)
       VALUES (?, ?, 'ADHOC', 'Adhoc Duty', 'regular', 0, 24, 1, ?, ?)
     `).bind(templateId, TENANT_ID, now, now).run();
-    adhocTemplate = { id: templateId };
+    adhocTemplate = { id: templateId, deleted_at: null };
+  } else if (adhocTemplate.deleted_at) {
+    // Restore soft-deleted template
+    await env.DB.prepare(`
+      UPDATE shift_templates SET deleted_at = NULL, is_active = 1, updated_at = ? WHERE id = ?
+    `).bind(now, adhocTemplate.id).run();
   }
 
   // Find or create adhoc duty block
