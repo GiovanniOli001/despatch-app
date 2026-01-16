@@ -12,6 +12,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
+import { getCommitStatus, commitDay, uncommitDay, getPayRecordsForDate } from './dispatch-commit';
 
 const TENANT_ID = 'default';
 
@@ -21,7 +22,7 @@ const TENANT_ID = 'default';
 
 interface DispatchDuty {
   id: string;
-  type: string;  // 'driving', 'oov', 'break', 'waiting', 'dead', 'charter'
+  type: string;
   start: number;
   end: number;
   description: string;
@@ -31,19 +32,16 @@ interface DispatchDuty {
   fromLocationId: string | null;
   toLocationId: string | null;
   payType: string;
-  locationName: string | null;  // Free text or selected location
-  locationLat: number | null;   // For smart assignment
-  locationLng: number | null;   // For smart assignment
-  cancelled: boolean;           // Cancellation status
-  cancelReason: string | null;  // Reason for cancellation
-  cancelledAt: string | null;   // When cancelled
+  locationName: string | null;
+  locationLat: number | null;
+  locationLng: number | null;
 }
 
 interface DispatchShift {
   id: string;
   entryId: string;
   name: string;
-  type: string;  // 'shift', 'charter'
+  type: string;
   start: number;
   end: number;
   rosterId: string;
@@ -62,7 +60,7 @@ interface DispatchDriver {
   phone: string | null;
   licence: string | null;
   depot: any;
-  status: string;  // 'working', 'available', 'leave'
+  status: string;
   shifts: DispatchShift[];
 }
 
@@ -71,7 +69,7 @@ interface DispatchVehicle {
   rego: string;
   capacity: number;
   depot: any;
-  status: string;  // 'available', 'in_use', 'maintenance'
+  status: string;
   shifts: any[];
 }
 
@@ -89,6 +87,36 @@ export async function handleDispatch(
   const seg2 = segments[1];
 
   try {
+    // ========================================
+    // COMMIT ENDPOINTS
+    // ========================================
+    
+    // GET /api/dispatch/commit-status/:date - Get commit status
+    if (method === 'GET' && seg1 === 'commit-status' && seg2) {
+      return getCommitStatus(env, seg2);
+    }
+    
+    // GET /api/dispatch/pay-records/:date - Get pay records for date
+    if (method === 'GET' && seg1 === 'pay-records' && seg2) {
+      return getPayRecordsForDate(env, seg2);
+    }
+    
+    // POST /api/dispatch/commit - Commit a day
+    if (method === 'POST' && seg1 === 'commit') {
+      const body = await parseBody<{ date: string; scope: 'all' | 'individual'; employee_id?: string; notes?: string }>(request);
+      if (!body) return error('Invalid request body');
+      return commitDay(env, body);
+    }
+    
+    // DELETE /api/dispatch/commit/:id - Uncommit
+    if (method === 'DELETE' && seg1 === 'commit' && seg2) {
+      return uncommitDay(env, seg2);
+    }
+
+    // ========================================
+    // EXISTING ENDPOINTS
+    // ========================================
+
     // GET /api/dispatch/:date - Full day data
     if (method === 'GET' && seg1 && !seg2) {
       return getDispatchDay(env, seg1);
@@ -134,7 +162,7 @@ export async function handleDispatch(
       return updateDutyLine(env, body);
     }
 
-    // POST /api/dispatch/create-duty-line - Create a new duty line for an existing roster entry
+    // POST /api/dispatch/create-duty-line - Create a new duty line
     if (method === 'POST' && seg1 === 'create-duty-line') {
       const body = await parseBody<{
         roster_entry_id: string;
@@ -153,7 +181,7 @@ export async function handleDispatch(
       return createDutyLine(env, body);
     }
 
-    // POST /api/dispatch/create-adhoc-shift - Create an adhoc roster entry with duty
+    // POST /api/dispatch/create-adhoc-shift - Create an adhoc roster entry
     if (method === 'POST' && seg1 === 'create-adhoc-shift') {
       const body = await parseBody<{
         date: string;
@@ -174,295 +202,155 @@ export async function handleDispatch(
       return createAdhocShift(env, body);
     }
 
-    // POST /api/dispatch/cancel-duty-line - Cancel a duty line
-    if (method === 'POST' && seg1 === 'cancel-duty-line') {
-      const body = await parseBody<{
-        duty_line_id: string;
-        reason?: string;
-      }>(request);
-      if (!body) return error('Invalid request body');
-      return cancelDutyLine(env, body);
-    }
-
-    // POST /api/dispatch/reinstate-duty-line - Reinstate a cancelled duty line
-    if (method === 'POST' && seg1 === 'reinstate-duty-line') {
-      const body = await parseBody<{
-        duty_line_id: string;
-      }>(request);
-      if (!body) return error('Invalid request body');
-      return reinstateDutyLine(env, body);
-    }
-
     return error('Not found', 404);
   } catch (err) {
     console.error('Dispatch API error:', err);
-    return error(err instanceof Error ? err.message : 'Internal error', 500);
+    return error(err instanceof Error ? err.message : 'Internal server error', 500);
   }
 }
 
 // ============================================
-// MAIN DISPATCH DAY VIEW
+// HELPER FUNCTIONS
+// ============================================
+
+function mapDutyType(type: string): string {
+  const typeMap: Record<string, string> = {
+    'driving': 'driving',
+    'oov': 'oov',
+    'break': 'break',
+    'waiting': 'waiting',
+    'dead': 'dead',
+    'charter': 'charter'
+  };
+  return typeMap[type?.toLowerCase()] || 'driving';
+}
+
+// ============================================
+// GET DISPATCH DAY
 // ============================================
 
 async function getDispatchDay(env: Env, date: string): Promise<Response> {
-  // Get default depot (TODO: support multi-depot)
-  const depot = await env.DB.prepare(`
-    SELECT id, name, code, lat, lng FROM depots 
-    WHERE tenant_id = ? AND is_primary = 1 AND deleted_at IS NULL
-    LIMIT 1
-  `).bind(TENANT_ID).first() || { id: 'TODO', name: '[NO DEPOT CONFIGURED]', code: 'NONE', lat: 0, lng: 0 };
+  const depot = {
+    id: 'depot-001',
+    name: 'Main Depot',
+    timezone: 'Australia/Brisbane'
+  };
 
-  // ========================================
-  // 1. GET ALL EMPLOYEES (DRIVERS)
-  // ========================================
+  // Get employees
   const employeesResult = await env.DB.prepare(`
-    SELECT 
-      e.id,
-      e.employee_number,
-      e.first_name,
-      e.last_name,
-      e.phone,
-      e.licence_number,
-      e.depot_id,
-      e.status as emp_status,
-      COALESCE(eds.status, 'available') as daily_status,
-      eds.leave_type
-    FROM employees e
-    LEFT JOIN employee_daily_status eds ON e.id = eds.employee_id AND eds.date = ?
-    WHERE e.tenant_id = ? AND e.deleted_at IS NULL AND e.role = 'driver'
-    ORDER BY e.last_name, e.first_name
-  `).bind(date, TENANT_ID).all();
+    SELECT id, employee_number, first_name, last_name, phone, licence_number, role, status
+    FROM employees 
+    WHERE tenant_id = ? AND deleted_at IS NULL AND role = 'driver' AND status = 'active'
+    ORDER BY last_name, first_name
+  `).bind(TENANT_ID).all();
 
-  // ========================================
-  // 2. GET ALL VEHICLES
-  // ========================================
+  // Get employee daily statuses
+  const dailyStatuses = await env.DB.prepare(`
+    SELECT employee_id, status as daily_status, leave_type
+    FROM employee_daily_status
+    WHERE date = ?
+  `).bind(date).all();
+  
+  const statusMap = new Map((dailyStatuses.results as any[]).map(s => [s.employee_id, s]));
+
+  // Get vehicles
   const vehiclesResult = await env.DB.prepare(`
-    SELECT 
-      v.id,
-      v.fleet_number,
-      v.rego,
-      v.capacity,
-      v.make,
-      v.model,
-      v.depot_id,
-      v.status as veh_status,
-      COALESCE(vds.status, 'available') as daily_status,
-      vds.reason as daily_reason
-    FROM vehicles v
-    LEFT JOIN vehicle_daily_status vds ON v.id = vds.vehicle_id AND vds.date = ?
-    WHERE v.tenant_id = ? AND v.deleted_at IS NULL
-    ORDER BY v.fleet_number
-  `).bind(date, TENANT_ID).all();
+    SELECT id, fleet_number, registration, capacity, status
+    FROM vehicles
+    WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active'
+    ORDER BY fleet_number
+  `).bind(TENANT_ID).all();
 
-  // ========================================
-  // 3. GET ROSTER ENTRIES FROM PUBLISHED ROSTERS
-  // This includes:
-  // - Assigned entries (driver_id IS NOT NULL)
-  // - Unassigned entries marked for dispatch (driver_id IS NULL AND include_in_dispatch = 1)
-  // ========================================
+  // Get roster entries for this date from PUBLISHED rosters
   const entriesResult = await env.DB.prepare(`
     SELECT 
       re.id as entry_id,
       re.roster_id,
       re.shift_template_id,
       re.duty_block_id,
-      re.date,
+      re.calendar_date,
       re.driver_id,
+      re.vehicle_id,
       re.start_time,
       re.end_time,
-      re.status as entry_status,
       re.include_in_dispatch,
       r.code as roster_code,
       r.name as roster_name,
       st.code as shift_code,
       st.name as shift_name,
       st.shift_type,
-      db.name as block_name,
-      db.sequence as block_sequence
+      stdb.name as block_name,
+      stdb.sequence as block_sequence
     FROM roster_entries re
     JOIN rosters r ON re.roster_id = r.id
     JOIN shift_templates st ON re.shift_template_id = st.id
-    JOIN shift_template_duty_blocks db ON re.duty_block_id = db.id
-    WHERE re.date = ?
-      AND re.deleted_at IS NULL
+    JOIN shift_template_duty_blocks stdb ON re.duty_block_id = stdb.id
+    WHERE r.tenant_id = ?
       AND r.status = 'published'
       AND r.deleted_at IS NULL
-      AND (re.driver_id IS NOT NULL OR re.include_in_dispatch = 1)
-    ORDER BY re.start_time, st.code
-  `).bind(date).all();
-
-  // Also get adhoc entries (no template)
-  const adhocEntriesResult = await env.DB.prepare(`
-    SELECT 
-      re.id as entry_id,
-      NULL as roster_id,
-      NULL as shift_template_id,
-      NULL as duty_block_id,
-      re.date,
-      re.driver_id,
-      re.start_time,
-      re.end_time,
-      re.status as entry_status,
-      1 as include_in_dispatch,
-      NULL as roster_code,
-      re.name as roster_name,
-      re.name as shift_code,
-      re.name as shift_name,
-      re.shift_type,
-      re.name as block_name,
-      1 as block_sequence
-    FROM roster_entries re
-    WHERE re.date = ?
-      AND re.shift_template_id IS NULL
+      AND re.calendar_date = ?
       AND re.deleted_at IS NULL
-      AND re.driver_id IS NOT NULL
-    ORDER BY re.start_time
-  `).bind(date).all();
+      AND (re.driver_id IS NOT NULL OR re.include_in_dispatch = 1)
+    ORDER BY re.start_time, stdb.sequence
+  `).bind(TENANT_ID, date).all();
 
-  // Merge rostered and adhoc entries
-  const allEntries = [
-    ...(entriesResult.results as any[]),
-    ...(adhocEntriesResult.results as any[])
-  ];
+  const allEntries = entriesResult.results as any[];
 
-  // ========================================
-  // 4. GET DUTY LINES FOR ALL ENTRIES
-  // ========================================
-  // Get all roster entry IDs
+  // Get roster duty lines (instance-specific overrides)
   const entryIds = allEntries.map(e => e.entry_id);
-  
-  // Build duty lines map (keyed by roster_entry_id)
-  const dutyLinesByEntry = new Map<string, any[]>();
-  
-  // Try to get from roster_duty_lines first (may not exist for old entries)
+  let rosterDutyLines: any[] = [];
   if (entryIds.length > 0) {
-    try {
-      const placeholders = entryIds.map(() => '?').join(',');
-      const linesResult = await env.DB.prepare(`
-        SELECT 
-          rdl.id,
-          rdl.roster_entry_id,
-          rdl.sequence,
-          rdl.start_time,
-          rdl.end_time,
-          rdl.duty_type,
-          rdl.vehicle_id,
-          rdl.pay_type,
-          rdl.description,
-          rdl.location_name,
-          rdl.location_lat,
-          rdl.location_lng,
-          dt.code as duty_type_code,
-          dt.name as duty_type_name,
-          dt.color as duty_type_color,
-          COALESCE(rdl.vehicle_number, v.fleet_number) as vehicle_number,
-          CASE WHEN ddc.id IS NOT NULL THEN 1 ELSE 0 END as cancelled,
-          ddc.reason as cancel_reason,
-          ddc.cancelled_at
-        FROM roster_duty_lines rdl
-        LEFT JOIN duty_types dt ON rdl.duty_type = dt.code OR rdl.duty_type = dt.id
-        LEFT JOIN vehicles v ON rdl.vehicle_id = v.id
-        LEFT JOIN dispatch_duty_cancellations ddc ON rdl.id = ddc.roster_duty_line_id
-        WHERE rdl.roster_entry_id IN (${placeholders}) AND rdl.deleted_at IS NULL
-        ORDER BY rdl.roster_entry_id, rdl.sequence
-      `).bind(...entryIds).all();
-
-      for (const line of linesResult.results as any[]) {
-        if (!dutyLinesByEntry.has(line.roster_entry_id)) {
-          dutyLinesByEntry.set(line.roster_entry_id, []);
-        }
-        dutyLinesByEntry.get(line.roster_entry_id)!.push(line);
-      }
-    } catch (err) {
-      // Table might not exist yet - that's OK, will fall back to template
-      console.log('roster_duty_lines query failed, falling back to template:', err);
-    }
+    const placeholders = entryIds.map(() => '?').join(',');
+    const rosterLinesResult = await env.DB.prepare(`
+      SELECT rdl.*, v.fleet_number as vehicle_number
+      FROM roster_duty_lines rdl
+      LEFT JOIN vehicles v ON rdl.vehicle_id = v.id
+      WHERE rdl.roster_entry_id IN (${placeholders})
+      ORDER BY rdl.sequence
+    `).bind(...entryIds).all();
+    rosterDutyLines = rosterLinesResult.results as any[];
   }
-  
-  // Fallback: If no roster_duty_lines exist (entries created before migration),
-  // fall back to reading from shift_template_duty_lines
-  const blockIds = [...new Set(allEntries.map(e => e.duty_block_id).filter(id => id != null))];
-  const dutyLinesByBlock = new Map<string, any[]>();
-  
+
+  // Get template duty lines as fallback
+  const blockIds = [...new Set(allEntries.map(e => e.duty_block_id))];
+  let templateDutyLines: any[] = [];
   if (blockIds.length > 0) {
-    try {
-      const placeholders = blockIds.map(() => '?').join(',');
-      const linesResult = await env.DB.prepare(`
-        SELECT 
-          dl.id,
-          dl.duty_block_id,
-          dl.sequence,
-          dl.start_time,
-          dl.end_time,
-          dl.duty_type,
-          dl.vehicle_id,
-          dl.pay_type,
-          dl.description,
-          dl.location_name,
-          dl.location_lat,
-          dl.location_lng,
-          dt.code as duty_type_code,
-          dt.name as duty_type_name,
-          dt.color as duty_type_color,
-          v.fleet_number as vehicle_number
-        FROM shift_template_duty_lines dl
-        LEFT JOIN duty_types dt ON dl.duty_type = dt.code OR dl.duty_type = dt.id
-        LEFT JOIN vehicles v ON dl.vehicle_id = v.id
-        WHERE dl.duty_block_id IN (${placeholders})
-        ORDER BY dl.duty_block_id, dl.sequence
-      `).bind(...blockIds).all();
+    const placeholders = blockIds.map(() => '?').join(',');
+    const templateLinesResult = await env.DB.prepare(`
+      SELECT stdl.*, v.fleet_number as vehicle_number
+      FROM shift_template_duty_lines stdl
+      LEFT JOIN vehicles v ON stdl.vehicle_id = v.id
+      WHERE stdl.duty_block_id IN (${placeholders})
+      ORDER BY stdl.sequence
+    `).bind(...blockIds).all();
+    templateDutyLines = templateLinesResult.results as any[];
+  }
 
-      for (const line of linesResult.results as any[]) {
-        if (!dutyLinesByBlock.has(line.duty_block_id)) {
-          dutyLinesByBlock.set(line.duty_block_id, []);
-        }
-        dutyLinesByBlock.get(line.duty_block_id)!.push(line);
-      }
-    } catch (err) {
-      console.log('Failed to load template duty lines:', err);
+  // Build lookup maps
+  const dutyLinesByEntry = new Map<string, any[]>();
+  for (const line of rosterDutyLines) {
+    if (!dutyLinesByEntry.has(line.roster_entry_id)) {
+      dutyLinesByEntry.set(line.roster_entry_id, []);
     }
+    dutyLinesByEntry.get(line.roster_entry_id)!.push(line);
   }
 
-  // ========================================
-  // 5. MAP DUTY TYPE CODES TO FRONTEND TYPES
-  // ========================================
-  const dutyTypeMap: Record<string, string> = {
-    'DRIVE': 'driving',
-    'driving': 'driving',
-    'OOV': 'oov',
-    'oov': 'oov',
-    'out_of_vehicle': 'oov',
-    'BREAK': 'break',
-    'break': 'break',
-    'meal_break': 'break',
-    'WAIT': 'waiting',
-    'waiting': 'waiting',
-    'DEAD': 'dead',
-    'dead': 'dead',
-    'dead_running': 'dead',
-    'CHARTER': 'charter',
-    'charter': 'charter',
-    // Fallback
-    'default': 'driving'
-  };
-
-  function mapDutyType(code: string | null): string {
-    if (!code) return 'driving';
-    return dutyTypeMap[code] || dutyTypeMap[code.toLowerCase()] || 'driving';
+  const dutyLinesByBlock = new Map<string, any[]>();
+  for (const line of templateDutyLines) {
+    if (!dutyLinesByBlock.has(line.duty_block_id)) {
+      dutyLinesByBlock.set(line.duty_block_id, []);
+    }
+    dutyLinesByBlock.get(line.duty_block_id)!.push(line);
   }
 
-  // ========================================
-  // 6. BUILD SHIFTS FROM ENTRIES + DUTY LINES
-  // ========================================
+  // Build shifts
   const shiftsByDriver = new Map<string, DispatchShift[]>();
   const unassignedShifts: DispatchShift[] = [];
   const vehicleUsage = new Map<string, { shiftId: string; start: number; end: number; driverId: string | null }[]>();
 
   for (const entry of allEntries) {
-    // Prefer roster_duty_lines (instance-specific), fall back to template lines
     const dutyLines = dutyLinesByEntry.get(entry.entry_id) || dutyLinesByBlock.get(entry.duty_block_id) || [];
     
-    // Convert duty lines to frontend format
     const duties: DispatchDuty[] = dutyLines.map((line: any) => ({
       id: line.id,
       type: mapDutyType(line.duty_type || line.duty_type_code),
@@ -471,26 +359,22 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       description: line.description || `${line.duty_type_name || line.duty_type || 'Duty'}`,
       vehicle: line.vehicle_number || null,
       vehicleId: line.vehicle_id || null,
-      locationId: null,  // Legacy field
+      locationId: null,
       fromLocationId: null,
       toLocationId: null,
       payType: line.pay_type || 'STD',
       locationName: line.location_name || null,
       locationLat: line.location_lat || null,
-      locationLng: line.location_lng || null,
-      cancelled: line.cancelled === 1,
-      cancelReason: line.cancel_reason || null,
-      cancelledAt: line.cancelled_at || null
+      locationLng: line.location_lng || null
     }));
 
-    // If no duty lines, create a placeholder
     if (duties.length === 0) {
       duties.push({
         id: `placeholder-${entry.entry_id}`,
         type: 'driving',
         start: entry.start_time,
         end: entry.end_time,
-        description: '[TODO: No duty lines defined for this block]',
+        description: '[No duty lines defined]',
         vehicle: null,
         vehicleId: null,
         locationId: null,
@@ -499,14 +383,10 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
         payType: 'STD',
         locationName: null,
         locationLat: null,
-        locationLng: null,
-        cancelled: false,
-        cancelReason: null,
-        cancelledAt: null
+        locationLng: null
       });
     }
 
-    // Track vehicle usage
     for (const duty of duties) {
       if (duty.vehicleId) {
         if (!vehicleUsage.has(duty.vehicleId)) {
@@ -533,7 +413,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       blockId: entry.duty_block_id,
       blockName: entry.block_name,
       duties,
-      pickupLocation: null,  // TODO: Add from locations table
+      pickupLocation: null,
       dropoffLocation: null
     };
 
@@ -547,15 +427,13 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     }
   }
 
-  // ========================================
-  // 7. BUILD DRIVER OBJECTS
-  // ========================================
+  // Build drivers array
   const drivers: DispatchDriver[] = (employeesResult.results as any[]).map(emp => {
     const shifts = shiftsByDriver.get(emp.id) || [];
+    const dailyStatus = statusMap.get(emp.id);
     
-    // Determine driver status
     let status: string;
-    if (emp.daily_status === 'leave' || emp.daily_status === 'sick') {
+    if (dailyStatus?.daily_status === 'leave' || dailyStatus?.daily_status === 'sick') {
       status = 'leave';
     } else if (shifts.length > 0) {
       status = 'working';
@@ -569,172 +447,56 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       fullName: `${emp.first_name} ${emp.last_name}`,
       phone: emp.phone,
       licence: emp.licence_number,
-      depot: depot,
+      depot,
       status,
       shifts
     };
   });
 
-  // Sort drivers: leave first, then working, then available
   const statusOrder: Record<string, number> = { leave: 0, working: 1, available: 2 };
   drivers.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
-  // ========================================
-  // 8. BUILD VEHICLE OBJECTS
-  // ========================================
-  const vehicles: DispatchVehicle[] = (vehiclesResult.results as any[]).map(veh => {
-    const usage = vehicleUsage.get(veh.id) || [];
-    
-    // Determine vehicle status
-    let status: string;
-    if (veh.daily_status === 'maintenance') {
-      status = 'maintenance';
-    } else if (usage.length > 0) {
-      status = 'in_use';
-    } else {
-      status = 'available';
-    }
-
-    // Build vehicle shifts from usage - include driver name for display
-    const vehicleShifts = usage.map(u => {
-      // Find driver name
-      let driverName = null;
-      if (u.driverId) {
-        const driverObj = drivers.find(d => d.id === u.driverId);
-        driverName = driverObj?.name || null;
-      }
-      
-      // Find the original shift to get its name
-      let shiftName = 'Shift';
-      const driverShifts = shiftsByDriver.get(u.driverId || '');
-      if (driverShifts) {
-        const originalShift = driverShifts.find(s => s.entryId === u.shiftId);
-        if (originalShift) {
-          shiftName = originalShift.name;
-        }
-      }
-      
-      return {
-        id: `vshift-${veh.id}-${u.shiftId}`,
-        entryId: u.shiftId,
-        name: shiftName,
-        start: u.start,
-        end: u.end,
-        driverId: u.driverId,
-        type: 'assigned',
-        duties: [{
-          id: `vduty-${veh.id}-${u.shiftId}`,
-          type: 'driving',
-          start: u.start,
-          end: u.end,
-          driver: driverName,
-          driverId: u.driverId,
-          vehicle: veh.fleet_number
-        }]
-      };
-    });
-
-    // Add maintenance block if in maintenance
-    if (veh.daily_status === 'maintenance') {
-      vehicleShifts.push({
-        id: `vshift-maint-${veh.id}`,
-        entryId: '',
-        name: 'Maintenance',
-        start: 5,
-        end: 23,
-        driverId: null,
-        type: 'maintenance',
-        duties: []
-      });
-    }
-
+  // Build vehicles array
+  const vehicles: DispatchVehicle[] = (vehiclesResult.results as any[]).map(v => {
+    const usage = vehicleUsage.get(v.id) || [];
     return {
-      id: veh.fleet_number,  // Frontend uses fleet_number as ID
-      rego: veh.rego,
-      capacity: veh.capacity,
-      depot: depot,
-      status,
-      shifts: vehicleShifts
+      id: v.id,
+      rego: v.registration,
+      capacity: v.capacity,
+      depot,
+      status: usage.length > 0 ? 'in_use' : 'available',
+      shifts: usage
     };
   });
 
-  // Sort vehicles: maintenance first, then in_use, then available
-  const vehStatusOrder: Record<string, number> = { maintenance: 0, in_use: 1, available: 2 };
-  vehicles.sort((a, b) => vehStatusOrder[a.status] - vehStatusOrder[b.status]);
-
-  // ========================================
-  // 9. BUILD UNASSIGNED JOBS
-  // ========================================
-  const unassignedJobs = unassignedShifts.map(shift => ({
-    id: shift.id,
-    entryId: shift.entryId,
-    name: shift.name,
-    type: shift.type,
-    start: shift.start,
-    end: shift.end,
-    depot: depot,
-    customer: null,  // TODO: Pull from customers table for charters
-    pickupLocation: shift.pickupLocation,
-    dropoffLocation: shift.dropoffLocation,
-    duties: shift.duties,
-    rosterId: shift.rosterId,
-    rosterCode: shift.rosterCode
-  }));
-
-  // ========================================
-  // 10. CALCULATE STATS
-  // ========================================
-  const stats = {
-    drivers_available: drivers.filter(d => d.status === 'available').length,
-    drivers_working: drivers.filter(d => d.status === 'working').length,
-    drivers_leave: drivers.filter(d => d.status === 'leave').length,
-    vehicles_available: vehicles.filter(v => v.status === 'available').length,
-    vehicles_in_use: vehicles.filter(v => v.status === 'in_use').length,
-    vehicles_maintenance: vehicles.filter(v => v.status === 'maintenance').length,
-    unassigned_count: unassignedJobs.length,
-    total_shifts: allEntries.length
-  };
-
-  // ========================================
-  // 11. BUILD TODO/PLACEHOLDER LIST
-  // ========================================
-  const todos: string[] = [];
+  // Get commit status for this date
+  const commitsResult = await env.DB.prepare(`
+    SELECT * FROM dispatch_commits WHERE tenant_id = ? AND commit_date = ?
+  `).bind(TENANT_ID, date).all();
   
-  if ((depot as any).id === 'TODO') {
-    todos.push('No depot configured - add a depot in the database');
-  }
-  
-  // Check for missing duty lines
-  const blocksWithoutLines = blockIds.filter(id => !dutyLinesByBlock.has(id) || dutyLinesByBlock.get(id)!.length === 0);
-  if (blocksWithoutLines.length > 0) {
-    todos.push(`${blocksWithoutLines.length} duty block(s) have no duty lines defined`);
-  }
-
-  // Check for missing locations
-  todos.push('Locations not yet implemented - pickup/dropoff will show as null');
+  const allCommit = (commitsResult.results as any[]).find(c => c.scope === 'all');
+  const individualCommits = (commitsResult.results as any[]).filter(c => c.scope === 'individual');
 
   return json({
-    data: {
-      date,
-      stats,
-      drivers,
-      vehicles,
-      unassigned: unassignedJobs,
-      _meta: {
-        source: 'real_data',
-        todos,
-        publishedRosters: [...new Set(allEntries.map(e => e.roster_code).filter(c => c != null))]
-      }
+    date,
+    depot,
+    drivers,
+    vehicles,
+    unassignedShifts,
+    commitStatus: {
+      is_fully_committed: !!allCommit,
+      all_commit: allCommit || null,
+      committed_employee_ids: individualCommits.map(c => c.employee_id)
     }
   });
 }
 
 // ============================================
-// ASSIGNMENT ACTIONS
+// ASSIGNMENT FUNCTIONS
 // ============================================
 
 async function assignToEntry(
-  env: Env, 
+  env: Env,
   input: { roster_entry_id: string; driver_id?: string; vehicle_id?: string }
 ): Promise<Response> {
   const { roster_entry_id, driver_id, vehicle_id } = input;
@@ -748,7 +510,6 @@ async function assignToEntry(
   }
 
   if (vehicle_id !== undefined) {
-    // TODO: Vehicle assignment at entry level - consider duty line level
     updates.push('vehicle_id = ?');
     bindings.push(vehicle_id || null);
   }
@@ -778,7 +539,6 @@ async function transferEntry(
 ): Promise<Response> {
   const { roster_entry_id, to_driver_id, to_vehicle_id } = input;
   
-  // Get current entry
   const entry = await env.DB.prepare(`
     SELECT * FROM roster_entries WHERE id = ? AND deleted_at IS NULL
   `).bind(roster_entry_id).first();
@@ -814,15 +574,7 @@ async function transferEntry(
 
   return json({ 
     success: true, 
-    message: 'Transfer complete',
-    from: {
-      driver_id: (entry as any).driver_id,
-      vehicle_id: (entry as any).vehicle_id
-    },
-    to: {
-      driver_id: to_driver_id,
-      vehicle_id: to_vehicle_id
-    }
+    message: 'Transfer complete'
   });
 }
 
@@ -836,8 +588,6 @@ async function unassignEntry(
   
   if (unassign === 'driver' || unassign === 'both') {
     updates.push('driver_id = NULL');
-    // When unassigning driver from dispatch, auto-include in dispatch
-    // so it appears in unassigned section
     updates.push('include_in_dispatch = 1');
   }
   
@@ -846,7 +596,7 @@ async function unassignEntry(
   }
 
   updates.push('updated_at = ?');
-
+  
   const result = await env.DB.prepare(`
     UPDATE roster_entries SET ${updates.join(', ')} WHERE id = ?
   `).bind(new Date().toISOString(), roster_entry_id).run();
@@ -855,30 +605,12 @@ async function unassignEntry(
     return error('Entry not found', 404);
   }
 
-  return json({ success: true, message: `Unassigned ${unassign}` });
+  return json({ success: true });
 }
 
 // ============================================
-// HELPER: Recalculate roster_entry times from duty lines
+// DUTY LINE FUNCTIONS
 // ============================================
-async function recalculateRosterEntryTimes(env: Env, roster_entry_id: string): Promise<void> {
-  // Get MIN start_time and MAX end_time from all duty lines for this entry
-  const times = await env.DB.prepare(`
-    SELECT 
-      MIN(start_time) as min_start,
-      MAX(end_time) as max_end
-    FROM roster_duty_lines 
-    WHERE roster_entry_id = ? AND deleted_at IS NULL
-  `).bind(roster_entry_id).first() as { min_start: number | null; max_end: number | null } | null;
-
-  if (times && times.min_start !== null && times.max_end !== null) {
-    await env.DB.prepare(`
-      UPDATE roster_entries 
-      SET start_time = ?, end_time = ?, updated_at = ?
-      WHERE id = ?
-    `).bind(times.min_start, times.max_end, new Date().toISOString(), roster_entry_id).run();
-  }
-}
 
 async function updateDutyLine(
   env: Env,
@@ -889,123 +621,47 @@ async function updateDutyLine(
     duty_type?: string;
     description?: string;
     vehicle_id?: string | null;
-    vehicle_number?: string | null;  // Accept fleet number too
+    vehicle_number?: string | null;
     pay_type?: string;
     location_name?: string | null;
     location_lat?: number | null;
     location_lng?: number | null;
   }
 ): Promise<Response> {
-  const { duty_line_id, start_time, end_time, duty_type, description, vehicle_id, vehicle_number, pay_type, location_name, location_lat, location_lng } = input;
-  
-  if (!duty_line_id) {
-    return error('duty_line_id is required');
+  const { duty_line_id, ...updates } = input;
+
+  const setClause: string[] = [];
+  const bindings: any[] = [];
+
+  if (updates.start_time !== undefined) { setClause.push('start_time = ?'); bindings.push(updates.start_time); }
+  if (updates.end_time !== undefined) { setClause.push('end_time = ?'); bindings.push(updates.end_time); }
+  if (updates.duty_type !== undefined) { setClause.push('duty_type = ?'); bindings.push(updates.duty_type); }
+  if (updates.description !== undefined) { setClause.push('description = ?'); bindings.push(updates.description); }
+  if (updates.vehicle_id !== undefined) { setClause.push('vehicle_id = ?'); bindings.push(updates.vehicle_id); }
+  if (updates.pay_type !== undefined) { setClause.push('pay_type = ?'); bindings.push(updates.pay_type); }
+  if (updates.location_name !== undefined) { setClause.push('location_name = ?'); bindings.push(updates.location_name); }
+  if (updates.location_lat !== undefined) { setClause.push('location_lat = ?'); bindings.push(updates.location_lat); }
+  if (updates.location_lng !== undefined) { setClause.push('location_lng = ?'); bindings.push(updates.location_lng); }
+
+  if (setClause.length === 0) {
+    return error('No updates provided');
   }
 
-  // Check if duty line exists in roster_duty_lines (instance-specific edits)
-  const existingLine = await env.DB.prepare(`
-    SELECT id, roster_entry_id FROM roster_duty_lines WHERE id = ? AND deleted_at IS NULL
-  `).bind(duty_line_id).first() as { id: string; roster_entry_id: string } | null;
-
-  if (!existingLine) {
-    return error('Duty line not found', 404);
-  }
-
-  const updates: string[] = [];
-  const bindings: (string | number | null)[] = [];
-
-  if (start_time !== undefined) {
-    updates.push('start_time = ?');
-    bindings.push(start_time);
-  }
-
-  if (end_time !== undefined) {
-    updates.push('end_time = ?');
-    bindings.push(end_time);
-  }
-
-  if (duty_type !== undefined) {
-    updates.push('duty_type = ?');
-    bindings.push(duty_type);
-  }
-
-  if (description !== undefined) {
-    updates.push('description = ?');
-    bindings.push(description);
-  }
-
-  // Handle location fields
-  if (location_name !== undefined) {
-    updates.push('location_name = ?');
-    bindings.push(location_name);
-  }
-  if (location_lat !== undefined) {
-    updates.push('location_lat = ?');
-    bindings.push(location_lat);
-  }
-  if (location_lng !== undefined) {
-    updates.push('location_lng = ?');
-    bindings.push(location_lng);
-  }
-
-  // Handle vehicle - accept either vehicle_id (UUID) or vehicle_number (fleet number)
-  if (vehicle_id !== undefined || vehicle_number !== undefined) {
-    let resolvedVehicleId: string | null = null;
-    let resolvedVehicleNumber: string | null = null;
-    
-    if (vehicle_number) {
-      // Look up vehicle by fleet number
-      const vehicle = await env.DB.prepare(`
-        SELECT id, fleet_number FROM vehicles WHERE fleet_number = ? AND deleted_at IS NULL
-      `).bind(vehicle_number).first() as { id: string; fleet_number: string } | null;
-      
-      if (vehicle) {
-        resolvedVehicleId = vehicle.id;
-        resolvedVehicleNumber = vehicle.fleet_number;
-      }
-    } else if (vehicle_id) {
-      // Look up vehicle by ID
-      const vehicle = await env.DB.prepare(`
-        SELECT id, fleet_number FROM vehicles WHERE id = ? AND deleted_at IS NULL
-      `).bind(vehicle_id).first() as { id: string; fleet_number: string } | null;
-      
-      if (vehicle) {
-        resolvedVehicleId = vehicle.id;
-        resolvedVehicleNumber = vehicle.fleet_number;
-      }
-    }
-    
-    updates.push('vehicle_id = ?');
-    bindings.push(resolvedVehicleId);
-    updates.push('vehicle_number = ?');
-    bindings.push(resolvedVehicleNumber);
-  }
-
-  if (pay_type !== undefined) {
-    updates.push('pay_type = ?');
-    bindings.push(pay_type);
-  }
-
-  if (updates.length === 0) {
-    return error('No fields to update');
-  }
-
-  updates.push('updated_at = ?');
+  setClause.push('updated_at = ?');
   bindings.push(new Date().toISOString());
   bindings.push(duty_line_id);
 
-  // Update roster_duty_lines (instance-specific, NOT the template)
-  await env.DB.prepare(`
-    UPDATE roster_duty_lines SET ${updates.join(', ')} WHERE id = ?
+  const result = await env.DB.prepare(`
+    UPDATE roster_duty_lines SET ${setClause.join(', ')} WHERE id = ?
   `).bind(...bindings).run();
 
-  // Recalculate parent roster_entry times based on all duty lines
-  await recalculateRosterEntryTimes(env, existingLine.roster_entry_id);
+  if (result.meta.changes === 0) {
+    return error('Duty line not found', 404);
+  }
 
-  return json({ success: true, message: 'Duty line updated' });
+  return json({ success: true });
 }
 
-// Create a new duty line for an existing roster entry
 async function createDutyLine(
   env: Env,
   input: {
@@ -1022,92 +678,44 @@ async function createDutyLine(
     location_lng?: number | null;
   }
 ): Promise<Response> {
-  const { roster_entry_id, start_time, end_time, duty_type, description, vehicle_id, vehicle_number, pay_type, location_name, location_lat, location_lng } = input;
-  
-  if (!roster_entry_id) {
-    return error('roster_entry_id is required');
-  }
-  
-  if (start_time === undefined || end_time === undefined) {
-    return error('start_time and end_time are required');
-  }
-
-  // Check if roster entry exists
-  const entry = await env.DB.prepare(`
-    SELECT id FROM roster_entries WHERE id = ? AND deleted_at IS NULL
-  `).bind(roster_entry_id).first();
-
-  if (!entry) {
-    return error('Roster entry not found', 404);
-  }
-
-  // Get the next sequence number
   const maxSeq = await env.DB.prepare(`
-    SELECT MAX(sequence) as max_seq FROM roster_duty_lines WHERE roster_entry_id = ? AND deleted_at IS NULL
-  `).bind(roster_entry_id).first() as { max_seq: number | null } | null;
-  
+    SELECT MAX(sequence) as max_seq FROM roster_duty_lines WHERE roster_entry_id = ?
+  `).bind(input.roster_entry_id).first<{ max_seq: number | null }>();
+
   const sequence = (maxSeq?.max_seq || 0) + 1;
-
-  // Resolve vehicle
-  let resolvedVehicleId: string | null = null;
-  let resolvedVehicleNumber: string | null = null;
-  
-  if (vehicle_number) {
-    const vehicle = await env.DB.prepare(`
-      SELECT id, fleet_number FROM vehicles WHERE fleet_number = ? AND deleted_at IS NULL
-    `).bind(vehicle_number).first() as { id: string; fleet_number: string } | null;
-    
-    if (vehicle) {
-      resolvedVehicleId = vehicle.id;
-      resolvedVehicleNumber = vehicle.fleet_number;
-    }
-  } else if (vehicle_id) {
-    const vehicle = await env.DB.prepare(`
-      SELECT id, fleet_number FROM vehicles WHERE id = ? AND deleted_at IS NULL
-    `).bind(vehicle_id).first() as { id: string; fleet_number: string } | null;
-    
-    if (vehicle) {
-      resolvedVehicleId = vehicle.id;
-      resolvedVehicleNumber = vehicle.fleet_number;
-    }
-  }
-
+  const id = uuid();
   const now = new Date().toISOString();
-  const newId = crypto.randomUUID();
 
   await env.DB.prepare(`
     INSERT INTO roster_duty_lines (
-      id, tenant_id, roster_entry_id, sequence,
-      start_time, end_time, duty_type, description, 
-      vehicle_id, vehicle_number, pay_type,
+      id, roster_entry_id, sequence, start_time, end_time,
+      duty_type, description, vehicle_id, pay_type,
       location_name, location_lat, location_lng,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    newId, TENANT_ID, roster_entry_id, sequence,
-    start_time, end_time, duty_type || 'driving', description || null,
-    resolvedVehicleId, resolvedVehicleNumber, pay_type || 'STD',
-    location_name || null, location_lat || null, location_lng || null,
-    now, now
+    id,
+    input.roster_entry_id,
+    sequence,
+    input.start_time,
+    input.end_time,
+    input.duty_type || 'driving',
+    input.description || null,
+    input.vehicle_id || null,
+    input.pay_type || 'STD',
+    input.location_name || null,
+    input.location_lat || null,
+    input.location_lng || null,
+    now,
+    now
   ).run();
 
-  // Recalculate parent roster_entry times based on all duty lines
-  await recalculateRosterEntryTimes(env, roster_entry_id);
-
-  return json({ 
-    success: true, 
-    message: 'Duty line created',
-    duty_line_id: newId 
-  });
+  return json({ success: true, data: { id } }, 201);
 }
-
-// ============================================
-// CREATE ADHOC SHIFT (roster entry + duty)
-// ============================================
 
 async function createAdhocShift(
   env: Env,
-  body: {
+  input: {
     date: string;
     employee_id: string;
     duty: {
@@ -1123,157 +731,103 @@ async function createAdhocShift(
     };
   }
 ): Promise<Response> {
-  const { date, employee_id, duty } = body;
+  const { date, employee_id, duty } = input;
 
-  if (!date || !employee_id || !duty) {
-    return error('Missing required fields: date, employee_id, duty');
-  }
-
-  // Use description as name, or generate adhoc name
-  const shiftName = duty.description || `ADHOC-${Date.now().toString(36).toUpperCase()}`;
-  
-  // Resolve vehicle if provided
-  let resolvedVehicleId: string | null = null;
-  let resolvedVehicleNumber: string | null = duty.vehicle_number || null;
-  
-  if (duty.vehicle_number) {
-    const vehicle = await env.DB.prepare(`
-      SELECT id, fleet_number FROM vehicles 
-      WHERE fleet_number = ? AND tenant_id = ? AND deleted_at IS NULL
-    `).bind(duty.vehicle_number, TENANT_ID).first() as { id: string; fleet_number: string } | null;
-    
-    if (vehicle) {
-      resolvedVehicleId = vehicle.id;
-      resolvedVehicleNumber = vehicle.fleet_number;
-    }
-  }
+  // Find or create adhoc roster
+  let adhocRoster = await env.DB.prepare(`
+    SELECT id FROM rosters 
+    WHERE tenant_id = ? AND code = 'ADHOC' AND deleted_at IS NULL
+  `).bind(TENANT_ID).first<{ id: string }>();
 
   const now = new Date().toISOString();
-  const entryId = crypto.randomUUID();
-  const dutyLineId = crypto.randomUUID();
 
-  // Create roster entry (no template = adhoc)
+  if (!adhocRoster) {
+    const rosterId = uuid();
+    await env.DB.prepare(`
+      INSERT INTO rosters (id, tenant_id, code, name, start_date, end_date, status, created_at, updated_at)
+      VALUES (?, ?, 'ADHOC', 'Adhoc Shifts', '2020-01-01', '2099-12-31', 'published', ?, ?)
+    `).bind(rosterId, TENANT_ID, now, now).run();
+    adhocRoster = { id: rosterId };
+  }
+
+  // Find or create adhoc shift template
+  let adhocTemplate = await env.DB.prepare(`
+    SELECT id FROM shift_templates 
+    WHERE tenant_id = ? AND code = 'ADHOC' AND deleted_at IS NULL
+  `).bind(TENANT_ID).first<{ id: string }>();
+
+  if (!adhocTemplate) {
+    const templateId = uuid();
+    await env.DB.prepare(`
+      INSERT INTO shift_templates (id, tenant_id, code, name, shift_type, start_time, end_time, status, created_at, updated_at)
+      VALUES (?, ?, 'ADHOC', 'Adhoc Duty', 'regular', 0, 24, 'active', ?, ?)
+    `).bind(templateId, TENANT_ID, now, now).run();
+    adhocTemplate = { id: templateId };
+  }
+
+  // Find or create adhoc duty block
+  let adhocBlock = await env.DB.prepare(`
+    SELECT id FROM shift_template_duty_blocks 
+    WHERE shift_template_id = ? AND name = 'Adhoc'
+  `).bind(adhocTemplate.id).first<{ id: string }>();
+
+  if (!adhocBlock) {
+    const blockId = uuid();
+    await env.DB.prepare(`
+      INSERT INTO shift_template_duty_blocks (id, shift_template_id, sequence, name, created_at, updated_at)
+      VALUES (?, ?, 1, 'Adhoc', ?, ?)
+    `).bind(blockId, adhocTemplate.id, now, now).run();
+    adhocBlock = { id: blockId };
+  }
+
+  // Create roster entry
+  const entryId = uuid();
   await env.DB.prepare(`
     INSERT INTO roster_entries (
-      id, tenant_id, shift_template_id, date, name, shift_type,
-      start_time, end_time, driver_id, status, source,
-      created_at, updated_at
-    ) VALUES (?, ?, NULL, ?, ?, 'adhoc', ?, ?, ?, 'scheduled', 'manual', ?, ?)
+      id, roster_id, shift_template_id, duty_block_id, calendar_date,
+      driver_id, start_time, end_time, include_in_dispatch, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).bind(
-    entryId, TENANT_ID, date, shiftName,
-    duty.start_time, duty.end_time, employee_id,
-    now, now
+    entryId,
+    adhocRoster.id,
+    adhocTemplate.id,
+    adhocBlock.id,
+    date,
+    employee_id,
+    duty.start_time,
+    duty.end_time,
+    now,
+    now
   ).run();
 
   // Create duty line
+  const dutyLineId = uuid();
   await env.DB.prepare(`
     INSERT INTO roster_duty_lines (
-      id, tenant_id, roster_entry_id, sequence,
-      start_time, end_time, duty_type, description,
-      vehicle_id, vehicle_number, pay_type,
-      location_name, location_lat, location_lng,
+      id, roster_entry_id, sequence, start_time, end_time,
+      duty_type, description, pay_type, location_name, location_lat, location_lng,
       created_at, updated_at
-    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    dutyLineId, TENANT_ID, entryId,
-    duty.start_time, duty.end_time, 
-    duty.duty_type || 'driving', duty.description || 'Adhoc duty',
-    resolvedVehicleId, resolvedVehicleNumber, duty.pay_type || 'STD',
-    duty.location_name || null, duty.location_lat || null, duty.location_lng || null,
-    now, now
+    dutyLineId,
+    entryId,
+    duty.start_time,
+    duty.end_time,
+    duty.duty_type || 'driving',
+    duty.description || 'Adhoc Duty',
+    duty.pay_type || 'STD',
+    duty.location_name || null,
+    duty.location_lat || null,
+    duty.location_lng || null,
+    now,
+    now
   ).run();
 
-  return json({
-    success: true,
-    message: 'Adhoc shift created',
-    entry_id: entryId,
-    duty_line_id: dutyLineId,
-    adhoc_code: shiftName
-  });
-}
-
-// ============================================
-// CANCEL DUTY LINE
-// ============================================
-
-async function cancelDutyLine(
-  env: Env,
-  input: {
-    duty_line_id: string;
-    reason?: string;
-  }
-): Promise<Response> {
-  const { duty_line_id, reason } = input;
-
-  if (!duty_line_id) {
-    return error('duty_line_id is required');
-  }
-
-  // Verify duty line exists
-  const dutyLine = await env.DB.prepare(`
-    SELECT id, roster_entry_id FROM roster_duty_lines 
-    WHERE id = ? AND deleted_at IS NULL
-  `).bind(duty_line_id).first() as { id: string; roster_entry_id: string } | null;
-
-  if (!dutyLine) {
-    return error('Duty line not found', 404);
-  }
-
-  // Check if already cancelled
-  const existingCancel = await env.DB.prepare(`
-    SELECT id FROM dispatch_duty_cancellations 
-    WHERE roster_duty_line_id = ?
-  `).bind(duty_line_id).first();
-
-  if (existingCancel) {
-    return error('Duty line is already cancelled');
-  }
-
-  const now = new Date().toISOString();
-  const cancelId = crypto.randomUUID();
-
-  // Create cancellation record
-  await env.DB.prepare(`
-    INSERT INTO dispatch_duty_cancellations (
-      id, tenant_id, roster_duty_line_id, reason, cancelled_at, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `).bind(cancelId, TENANT_ID, duty_line_id, reason || null, now, now).run();
-
-  return json({
-    success: true,
-    message: 'Duty line cancelled',
-    cancellation_id: cancelId
-  });
-}
-
-// ============================================
-// REINSTATE DUTY LINE
-// ============================================
-
-async function reinstateDutyLine(
-  env: Env,
-  input: {
-    duty_line_id: string;
-  }
-): Promise<Response> {
-  const { duty_line_id } = input;
-
-  if (!duty_line_id) {
-    return error('duty_line_id is required');
-  }
-
-  // Find and delete the cancellation record
-  const result = await env.DB.prepare(`
-    DELETE FROM dispatch_duty_cancellations 
-    WHERE roster_duty_line_id = ?
-  `).bind(duty_line_id).run();
-
-  if (result.meta.changes === 0) {
-    return error('No cancellation found for this duty line', 404);
-  }
-
-  return json({
-    success: true,
-    message: 'Duty line reinstated'
-  });
+  return json({ 
+    success: true, 
+    data: { 
+      entry_id: entryId,
+      duty_line_id: dutyLineId 
+    } 
+  }, 201);
 }

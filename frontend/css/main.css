@@ -364,6 +364,78 @@
     .stat-label { font-size: 13px; color: var(--text-secondary); }
     .stat-value { font-weight: 600; font-size: 14px; font-family: 'JetBrains Mono', monospace; }
 
+    /* Commit Bar */
+    .commit-bar {
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .commit-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+    
+    .commit-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+    
+    .commit-indicator.committed {
+      background: var(--accent-green);
+    }
+    
+    .commit-indicator.partial {
+      background: var(--accent-amber);
+    }
+    
+    .commit-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    
+    .commit-preview {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 12px;
+    }
+    
+    .commit-preview-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      text-transform: uppercase;
+    }
+    
+    .commit-preview-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 13px;
+    }
+    
+    .commit-preview-total {
+      border-top: 1px solid var(--border);
+      margin-top: 8px;
+      padding-top: 8px;
+      font-weight: 600;
+    }
+
     .main-content { display: flex; height: calc(100vh - 110px); }
     .heatmap-view { display: flex; width: 100%; height: 100%; }
     .heatmap-left { flex: 1; display: flex; flex-direction: column; overflow: hidden; }

@@ -7604,3 +7604,226 @@ async function confirmConnected(includeAll) {
   await doAssign(blockId, shiftId, driverId, includeAll);
 }
 
+
+// ============================================
+// DISPATCH COMMIT FUNCTIONALITY
+// ============================================
+
+let currentCommitStatus = null;
+
+async function loadCommitStatus() {
+  try {
+    const dateStr = formatDateISO(currentDate);
+    const result = await apiRequest(`/dispatch/commit-status/${dateStr}`);
+    currentCommitStatus = result.data;
+    updateCommitUI();
+  } catch (err) {
+    console.warn('Failed to load commit status:', err);
+    currentCommitStatus = null;
+    updateCommitUI();
+  }
+}
+
+function updateCommitUI() {
+  const indicator = document.getElementById('commitIndicator');
+  const statusText = document.getElementById('commitStatusText');
+  const btnCommit = document.getElementById('btnCommitDay');
+  const btnUncommit = document.getElementById('btnUncommit');
+  
+  if (!indicator || !statusText) return;
+  
+  if (!currentCommitStatus) {
+    indicator.className = 'commit-indicator';
+    statusText.textContent = 'Not committed';
+    if (btnCommit) btnCommit.style.display = '';
+    if (btnUncommit) btnUncommit.style.display = 'none';
+    return;
+  }
+  
+  if (currentCommitStatus.is_fully_committed) {
+    indicator.className = 'commit-indicator committed';
+    const commitTime = new Date(currentCommitStatus.all_commit.committed_at).toLocaleTimeString();
+    statusText.textContent = `Committed at ${commitTime}`;
+    if (btnCommit) btnCommit.style.display = 'none';
+    if (btnUncommit) btnUncommit.style.display = '';
+  } else if (currentCommitStatus.committed_employee_ids?.length > 0) {
+    indicator.className = 'commit-indicator partial';
+    statusText.textContent = `${currentCommitStatus.committed_employee_ids.length} driver(s) committed`;
+    if (btnCommit) btnCommit.style.display = '';
+    if (btnUncommit) btnUncommit.style.display = '';
+  } else {
+    indicator.className = 'commit-indicator';
+    statusText.textContent = 'Not committed';
+    if (btnCommit) btnCommit.style.display = '';
+    if (btnUncommit) btnUncommit.style.display = 'none';
+  }
+}
+
+function showCommitModal() {
+  // Populate driver dropdown
+  const driverSelect = document.getElementById('commitDriver');
+  if (driverSelect && drivers) {
+    const workingDrivers = drivers.filter(d => d.status === 'working');
+    driverSelect.innerHTML = '<option value="">-- Select Driver --</option>' +
+      workingDrivers.map(d => `<option value="${d.id}">${d.fullName}</option>`).join('');
+  }
+  
+  // Reset form
+  document.getElementById('commitScope').value = 'all';
+  document.getElementById('commitDriverSelect').style.display = 'none';
+  document.getElementById('commitNotes').value = '';
+  
+  updateCommitPreview();
+  document.getElementById('commitModalOverlay').classList.add('show');
+}
+
+function closeCommitModal() {
+  document.getElementById('commitModalOverlay').classList.remove('show');
+}
+
+function updateCommitPreview() {
+  const scope = document.getElementById('commitScope').value;
+  const driverSelectDiv = document.getElementById('commitDriverSelect');
+  const previewContent = document.getElementById('commitPreviewContent');
+  
+  // Show/hide driver dropdown
+  driverSelectDiv.style.display = scope === 'individual' ? 'block' : 'none';
+  
+  // Calculate preview
+  if (scope === 'all') {
+    const workingDrivers = drivers ? drivers.filter(d => d.status === 'working') : [];
+    let totalHours = 0;
+    let totalDuties = 0;
+    
+    workingDrivers.forEach(driver => {
+      (driver.shifts || []).forEach(shift => {
+        (shift.duties || []).forEach(duty => {
+          totalDuties++;
+          totalHours += (duty.end - duty.start);
+        });
+      });
+    });
+    
+    previewContent.innerHTML = `
+      <div class="commit-preview-item">
+        <span>Drivers</span>
+        <span>${workingDrivers.length}</span>
+      </div>
+      <div class="commit-preview-item">
+        <span>Duty lines</span>
+        <span>${totalDuties}</span>
+      </div>
+      <div class="commit-preview-item commit-preview-total">
+        <span>Total hours</span>
+        <span>${totalHours.toFixed(1)}</span>
+      </div>
+    `;
+  } else {
+    previewContent.innerHTML = `
+      <div style="color: var(--text-muted); font-size: 13px;">
+        Select a driver to see preview
+      </div>
+    `;
+    
+    const driverId = document.getElementById('commitDriver').value;
+    if (driverId) {
+      const driver = drivers.find(d => d.id === driverId);
+      if (driver) {
+        let totalHours = 0;
+        let totalDuties = 0;
+        
+        (driver.shifts || []).forEach(shift => {
+          (shift.duties || []).forEach(duty => {
+            totalDuties++;
+            totalHours += (duty.end - duty.start);
+          });
+        });
+        
+        previewContent.innerHTML = `
+          <div class="commit-preview-item">
+            <span>Driver</span>
+            <span>${driver.fullName}</span>
+          </div>
+          <div class="commit-preview-item">
+            <span>Duty lines</span>
+            <span>${totalDuties}</span>
+          </div>
+          <div class="commit-preview-item commit-preview-total">
+            <span>Total hours</span>
+            <span>${totalHours.toFixed(1)}</span>
+          </div>
+        `;
+      }
+    }
+  }
+}
+
+async function executeCommit() {
+  const scope = document.getElementById('commitScope').value;
+  const notes = document.getElementById('commitNotes').value;
+  const dateStr = formatDateISO(currentDate);
+  
+  const payload = {
+    date: dateStr,
+    scope: scope,
+    notes: notes || null
+  };
+  
+  if (scope === 'individual') {
+    const driverId = document.getElementById('commitDriver').value;
+    if (!driverId) {
+      showToast('Please select a driver', 'error');
+      return;
+    }
+    payload.employee_id = driverId;
+  }
+  
+  try {
+    const result = await apiRequest('/dispatch/commit', { method: 'POST', body: payload });
+    closeCommitModal();
+    showToast(`Day committed - ${result.data.pay_records_created} pay records created`, 'success');
+    await loadCommitStatus();
+  } catch (err) {
+    showToast(err.message || 'Failed to commit', 'error');
+  }
+}
+
+async function uncommitDay() {
+  if (!currentCommitStatus) return;
+  
+  let commitToRemove = null;
+  
+  if (currentCommitStatus.is_fully_committed) {
+    commitToRemove = currentCommitStatus.all_commit;
+  } else if (currentCommitStatus.individual_commits?.length === 1) {
+    commitToRemove = currentCommitStatus.individual_commits[0];
+  } else if (currentCommitStatus.individual_commits?.length > 1) {
+    // Multiple individual commits - need to pick which one
+    showToast('Multiple individual commits exist. Please use the employee pay records to manage.', 'info');
+    return;
+  }
+  
+  if (!commitToRemove) {
+    showToast('No commit found to remove', 'error');
+    return;
+  }
+  
+  if (!confirm('Are you sure you want to uncommit? This will remove generated pay records.')) {
+    return;
+  }
+  
+  try {
+    await apiRequest(`/dispatch/commit/${commitToRemove.id}`, { method: 'DELETE' });
+    showToast('Day uncommitted', 'success');
+    await loadCommitStatus();
+  } catch (err) {
+    showToast(err.message || 'Failed to uncommit', 'error');
+  }
+}
+
+// Add commit status loading to dispatch data load
+const originalLoadDispatchData = loadDispatchData;
+loadDispatchData = async function() {
+  await originalLoadDispatchData();
+  await loadCommitStatus();
+};

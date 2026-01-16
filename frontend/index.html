@@ -169,6 +169,22 @@
             <span class="stat-value" id="statUnassigned">7</span>
           </div>
         </div>
+        
+        <!-- Commit Status Bar -->
+        <div class="commit-bar" id="commitBar">
+          <div class="commit-status" id="commitStatus">
+            <span class="commit-indicator" id="commitIndicator"></span>
+            <span id="commitStatusText">Not committed</span>
+          </div>
+          <div class="commit-actions">
+            <button class="btn-secondary btn-sm" onclick="showCommitModal()" id="btnCommitDay">
+              <span>📋</span> Commit Day
+            </button>
+            <button class="btn-secondary btn-sm" onclick="uncommitDay()" id="btnUncommit" style="display: none;">
+              <span>↩️</span> Uncommit
+            </button>
+          </div>
+        </div>
 
         <div class="main-content">
     <div class="heatmap-view">
@@ -795,6 +811,46 @@
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closePayTypeModal()">Cancel</button>
         <button class="btn-primary" onclick="savePayType()">Save</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Commit Day Modal -->
+  <div class="crud-modal-overlay" id="commitModalOverlay">
+    <div class="crud-modal" style="max-width: 500px;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title">Commit Dispatch Day</span>
+        <button class="crud-modal-close" onclick="closeCommitModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <p style="margin-bottom: 16px; color: var(--text-secondary);">
+          Committing will lock pay records for this date. This action can be undone.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Commit Scope</label>
+          <select id="commitScope" class="form-input" onchange="updateCommitPreview()">
+            <option value="all">All Drivers</option>
+            <option value="individual">Individual Driver</option>
+          </select>
+        </div>
+        <div class="form-group" id="commitDriverSelect" style="display: none;">
+          <label class="form-label">Select Driver</label>
+          <select id="commitDriver" class="form-input">
+            <option value="">-- Select Driver --</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Notes (optional)</label>
+          <textarea id="commitNotes" class="form-input" rows="2" placeholder="Add any notes about this commit..."></textarea>
+        </div>
+        <div id="commitPreview" class="commit-preview">
+          <div class="commit-preview-title">Preview</div>
+          <div id="commitPreviewContent">Loading...</div>
+        </div>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closeCommitModal()">Cancel</button>
+        <button class="btn-primary" onclick="executeCommit()">Commit</button>
       </div>
     </div>
   </div>
