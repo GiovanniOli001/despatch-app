@@ -3720,6 +3720,9 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
   const insertIdx = position === 'above' ? dutyIdx : dutyIdx + 1;
   shift.duties.splice(insertIdx, 0, newDuty);
   
+  // Sort duties by start time to maintain correct order
+  shift.duties.sort((a, b) => a.start - b.start);
+  
   // Update driver status if they were available
   if (driver.status === 'available') {
     driver.status = 'working';
