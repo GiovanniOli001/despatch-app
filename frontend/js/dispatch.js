@@ -2904,7 +2904,7 @@ function renderDriverDetailDriverCentric(driver) {
               <span class="duty-header-actions"></span>
             </div>
             <div class="duty-list">
-              ${shift.duties.map((duty, idx) => renderDutyItem(duty, driver.id, shift.id, idx)).join('')}
+              ${(shift.duties.sort((a, b) => a.start - b.start), shift.duties.map((duty, idx) => renderDutyItem(duty, driver.id, shift.id, idx)).join(''))}
             </div>
             ${renderShiftTotals(shift, driver.id)}
           </div>
@@ -4094,7 +4094,7 @@ function renderVehicleDetailVehicleCentric(vehicle) {
               <span class="duty-header-actions"></span>
             </div>
             <div class="duty-list">
-              ${shift.duties.map((duty, idx) => renderVehicleDutyItem(duty, vehicle.id, shift.id, idx)).join('')}
+              ${(shift.duties.sort((a, b) => a.start - b.start), shift.duties.map((duty, idx) => renderVehicleDutyItem(duty, vehicle.id, shift.id, idx)).join(''))}
             </div>
             ${renderVehicleShiftTotals(shift, vehicle.id)}
           </div>
