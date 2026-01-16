@@ -3410,16 +3410,39 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
     return;
   }
   
-  // Call API in real mode - pass vehicle_id directly
+  // Call API in real mode
   if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
-      const result = await apiRequest('/dispatch/update-duty-line', {
-        method: 'POST',
-        body: {
-          duty_line_id: duty.id,
-          vehicle_id: newVehicle
+      let result;
+      
+      // If duty is from template, create a new roster duty line
+      if (duty.isTemplate && shift.entryId) {
+        result = await apiRequest('/dispatch/create-duty-line', {
+          method: 'POST',
+          body: {
+            roster_entry_id: shift.entryId,
+            start_time: duty.start,
+            end_time: duty.end,
+            duty_type: duty.type,
+            description: duty.description,
+            vehicle_id: newVehicle,
+            pay_type: duty.payType || 'STD'
+          }
+        });
+        // Update duty ID if new one was created
+        if (result.data?.id) {
+          duty.id = result.data.id;
+          duty.isTemplate = false;
         }
-      });
+      } else {
+        result = await apiRequest('/dispatch/update-duty-line', {
+          method: 'POST',
+          body: {
+            duty_line_id: duty.id,
+            vehicle_id: newVehicle
+          }
+        });
+      }
       
       if (result.error) {
         showToast(result.error, 'error');
@@ -6418,9 +6441,11 @@ async function executeBulkAssignVehicle(vehicleId) {
   const shift = driver.shifts.find(s => s.id === bulkAssigning.shiftId);
   if (!shift) return;
   
-  // Find duties that need vehicles
+  const vehicle = vehicles.find(v => v.id === vehicleId);
+  
+  // Find duties that need vehicles (exclude cancelled)
   const dutiesToAssign = shift.duties.filter(duty => 
-    VEHICLE_REQUIRED_TYPES.includes(duty.type) && !duty.vehicle
+    VEHICLE_REQUIRED_TYPES.includes(duty.type) && !duty.vehicle && !duty.cancelled
   );
   
   if (dutiesToAssign.length === 0) {
@@ -6431,39 +6456,94 @@ async function executeBulkAssignVehicle(vehicleId) {
   
   // Call API for each duty in real mode
   if (dataSource === 'real') {
-    try {
-      const promises = dutiesToAssign
-        .filter(duty => duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-'))
-        .map(duty => apiRequest('/dispatch/update-duty-line', {
-          method: 'POST',
-          body: {
-            duty_line_id: duty.id,
-            vehicle_id: vehicleId
-          }
-        }));
+    let succeeded = 0;
+    let failed = 0;
+    
+    for (const duty of dutiesToAssign) {
+      // Skip placeholder and demo duties
+      if (!duty.id || duty.id.startsWith('placeholder-') || duty.id.startsWith('d-')) {
+        duty.vehicle = vehicleId;
+        duty.vehicleId = vehicleId;
+        syncVehicleSchedule(vehicleId, duty, driver);
+        succeeded++;
+        continue;
+      }
       
-      await Promise.all(promises);
-    } catch (err) {
-      showToast(err.message || 'Bulk assign failed', 'error');
-      bulkAssigning = null;
-      return;
+      try {
+        let result;
+        
+        // If duty is from template, create a new roster duty line
+        if (duty.isTemplate && shift.entryId) {
+          result = await apiRequest('/dispatch/create-duty-line', {
+            method: 'POST',
+            body: {
+              roster_entry_id: shift.entryId,
+              start_time: duty.start,
+              end_time: duty.end,
+              duty_type: duty.type,
+              description: duty.description,
+              vehicle_id: vehicleId,
+              pay_type: duty.payType || 'STD'
+            }
+          });
+          // Update duty ID if new one was created
+          if (result.data?.id) {
+            duty.id = result.data.id;
+            duty.isTemplate = false;
+          }
+        } else {
+          // Update existing roster duty line
+          result = await apiRequest('/dispatch/update-duty-line', {
+            method: 'POST',
+            body: {
+              duty_line_id: duty.id,
+              vehicle_id: vehicleId
+            }
+          });
+        }
+        
+        if (!result.error) {
+          duty.vehicle = vehicleId;
+          duty.vehicleId = vehicleId;
+          syncVehicleSchedule(vehicleId, duty, driver);
+          succeeded++;
+        } else {
+          failed++;
+        }
+      } catch (err) {
+        failed++;
+      }
     }
+    
+    // Update vehicle status if needed
+    if (vehicle && vehicle.status === 'available') {
+      vehicle.status = 'inuse';
+    }
+    
+    bulkAssigning = null;
+    if (failed > 0) {
+      showToast(`Assigned ${vehicle?.rego || vehicleId} to ${succeeded} duties, ${failed} failed`, 'warning');
+    } else {
+      showToast(`Assigned ${vehicle?.rego || vehicleId} to ${succeeded} duties`);
+    }
+    renderAll();
+    return;
   }
   
-  // Update local state
+  // Demo mode - Update local state
   dutiesToAssign.forEach(duty => {
     duty.vehicle = vehicleId;
+    duty.vehicleId = vehicleId;
     syncVehicleSchedule(vehicleId, duty, driver);
   });
   
   // Update vehicle status if needed
-  const vehicle = vehicles.find(v => v.id === vehicleId);
   if (vehicle && vehicle.status === 'available') {
     vehicle.status = 'inuse';
   }
   
   bulkAssigning = null;
-  showToast(`Assigned ${vehicleId} to ${dutiesToAssign.length} duties`);
+  showToast(`Assigned ${vehicle?.rego || vehicleId} to ${dutiesToAssign.length} duties`);
   renderAll();
 }
 

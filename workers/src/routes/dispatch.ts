@@ -35,6 +35,7 @@ interface DispatchDuty {
   locationName: string | null;
   locationLat: number | null;
   locationLng: number | null;
+  isTemplate?: boolean;
 }
 
 interface DispatchShift {
@@ -212,6 +213,15 @@ export async function handleDispatch(
       return cancelDutyLine(env, body);
     }
 
+    // POST /api/dispatch/reinstate-duty-line - Reinstate a cancelled duty line
+    if (method === 'POST' && seg1 === 'reinstate-duty-line') {
+      const body = await parseBody<{
+        duty_line_id: string;
+      }>(request);
+      if (!body) return error('Invalid request body');
+      return reinstateDutyLine(env, body);
+    }
+
     return error('Not found', 404);
   } catch (err) {
     console.error('Dispatch API error:', err);
@@ -360,7 +370,10 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
   const vehicleUsage = new Map<string, { shiftId: string; start: number; end: number; driverId: string | null }[]>();
 
   for (const entry of allEntries) {
-    const dutyLines = dutyLinesByEntry.get(entry.entry_id) || dutyLinesByBlock.get(entry.duty_block_id) || [];
+    const rosterLines = dutyLinesByEntry.get(entry.entry_id);
+    const templateLines = dutyLinesByBlock.get(entry.duty_block_id);
+    const dutyLines = rosterLines || templateLines || [];
+    const isFromTemplate = !rosterLines && !!templateLines;
     
     const duties: DispatchDuty[] = dutyLines.map((line: any) => ({
       id: line.id,
@@ -376,7 +389,8 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       payType: line.pay_type || 'STD',
       locationName: line.location_name || null,
       locationLat: line.location_lat || null,
-      locationLng: line.location_lng || null
+      locationLng: line.location_lng || null,
+      isTemplate: isFromTemplate
     }));
 
     if (duties.length === 0) {
@@ -773,6 +787,48 @@ async function cancelDutyLine(
     // Template lines can't be cancelled directly - they're read-only
     // Return success to avoid confusing the user
     return json({ success: true, message: 'Duty cancelled (template)' });
+  }
+
+  return error('Duty line not found', 404);
+}
+
+async function reinstateDutyLine(
+  env: Env,
+  input: {
+    duty_line_id: string;
+  }
+): Promise<Response> {
+  const { duty_line_id } = input;
+
+  if (!duty_line_id) {
+    return error('duty_line_id is required');
+  }
+
+  const now = new Date().toISOString();
+
+  // Check if duty line exists (including deleted ones)
+  const existing = await env.DB.prepare(`
+    SELECT id, deleted_at FROM roster_duty_lines WHERE id = ?
+  `).bind(duty_line_id).first<{ id: string; deleted_at: string | null }>();
+
+  if (existing) {
+    // Restore the roster duty line by clearing deleted_at
+    await env.DB.prepare(`
+      UPDATE roster_duty_lines 
+      SET deleted_at = NULL, updated_at = ?
+      WHERE id = ?
+    `).bind(now, duty_line_id).run();
+    return json({ success: true, message: 'Duty reinstated' });
+  }
+
+  // Check if it's a template duty line
+  const templateLine = await env.DB.prepare(`
+    SELECT id FROM shift_template_duty_lines WHERE id = ?
+  `).bind(duty_line_id).first();
+
+  if (templateLine) {
+    // Template lines - just return success
+    return json({ success: true, message: 'Duty reinstated (template)' });
   }
 
   return error('Duty line not found', 404);
