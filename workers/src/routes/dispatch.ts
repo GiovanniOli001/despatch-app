@@ -165,7 +165,7 @@ export async function handleDispatch(
           end_time: number;
           duty_type?: string;
           description?: string;
-          vehicle_number?: string | null;
+          vehicle_id?: string | null;
           pay_type?: string;
           location_name?: string | null;
           location_lat?: number | null;
@@ -685,6 +685,19 @@ async function createDutyLine(
     location_lng?: number | null;
   }
 ): Promise<Response> {
+  if (!input.roster_entry_id) {
+    return error('roster_entry_id is required');
+  }
+
+  // Verify roster entry exists
+  const entry = await env.DB.prepare(`
+    SELECT id FROM roster_entries WHERE id = ? AND deleted_at IS NULL
+  `).bind(input.roster_entry_id).first();
+
+  if (!entry) {
+    return error('Roster entry not found', 404);
+  }
+
   const maxSeq = await env.DB.prepare(`
     SELECT MAX(sequence) as max_seq FROM roster_duty_lines WHERE roster_entry_id = ?
   `).bind(input.roster_entry_id).first<{ max_seq: number | null }>();
@@ -878,11 +891,12 @@ async function createAdhocShift(
   const entryId = uuid();
   await env.DB.prepare(`
     INSERT INTO roster_entries (
-      id, roster_id, shift_template_id, duty_block_id, date,
+      id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
       driver_id, start_time, end_time, include_in_dispatch, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).bind(
     entryId,
+    TENANT_ID,
     adhocRoster.id,
     adhocTemplate.id,
     adhocBlock.id,
