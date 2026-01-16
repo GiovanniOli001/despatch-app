@@ -95,6 +95,9 @@ async function showAddEmployeeModal() {
   document.getElementById('empTabGeneral').classList.add('active');
   document.getElementById('empTabCustom').classList.remove('active');
   
+  // Load pay types dropdown
+  await populatePayTypeDropdown();
+  
   // Load custom fields (empty for new employee)
   await loadCustomFieldsForEmployee(null);
   
@@ -116,6 +119,9 @@ async function editEmployee(id) {
   document.getElementById('empRole').value = emp.role || 'driver';
   document.getElementById('empStatus').value = emp.status || 'active';
   
+  // Load pay types dropdown and set value
+  await populatePayTypeDropdown(emp.default_pay_type_id);
+  
   // Reset to General tab
   document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
     tab.classList.toggle('active', i === 0);
@@ -134,6 +140,33 @@ function closeEmployeeModal() {
   editingEmployeeId = null;
 }
 
+async function populatePayTypeDropdown(selectedId = null) {
+  const select = document.getElementById('empDefaultPayType');
+  
+  // If we already have payTypesData loaded, use it
+  let data = payTypesData;
+  
+  // If not loaded yet, fetch from API
+  if (!data || data.length === 0) {
+    try {
+      const result = await apiRequest('/pay-types');
+      data = result.data || [];
+    } catch (err) {
+      console.error('Failed to load pay types:', err);
+      data = [];
+    }
+  }
+  
+  // Build options
+  let html = '<option value="">-- Select Pay Type --</option>';
+  data.filter(pt => pt.is_active).forEach(pt => {
+    const selected = pt.id === selectedId ? 'selected' : '';
+    html += `<option value="${pt.id}" ${selected}>${escapeHtml(pt.code)} - ${escapeHtml(pt.name)} ($${parseFloat(pt.hourly_rate).toFixed(2)}/hr)</option>`;
+  });
+  
+  select.innerHTML = html;
+}
+
 async function saveEmployee() {
   const data = {
     employee_number: document.getElementById('empNumber').value,
@@ -144,6 +177,7 @@ async function saveEmployee() {
     licence_number: document.getElementById('empLicence').value || null,
     role: document.getElementById('empRole').value,
     status: document.getElementById('empStatus').value,
+    default_pay_type_id: document.getElementById('empDefaultPayType').value || null,
   };
   
   // Validate required custom fields
@@ -833,15 +867,8 @@ function switchHrmTab(tab) {
   
   if (tab === 'employees') {
     document.getElementById('hrmTabEmployees').classList.add('active');
-    document.getElementById('hrmHeaderActions').innerHTML = `
-      <button class="btn-settings" onclick="showEmployeeFieldsSettings()" title="Custom Fields Settings">⚙️</button>
-      <button class="btn-primary" onclick="showAddEmployeeModal()">+ Add Employee</button>
-    `;
   } else if (tab === 'pay-types') {
     document.getElementById('hrmTabPayTypes').classList.add('active');
-    document.getElementById('hrmHeaderActions').innerHTML = `
-      <button class="btn-primary" onclick="showAddPayTypeModal()">+ Add Pay Type</button>
-    `;
     loadPayTypes();
   }
 }
@@ -870,7 +897,7 @@ function renderPayTypesTable() {
   const tbody = document.getElementById('payTypesTableBody');
   
   if (payTypesData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No pay types found. Add one to get started.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No pay types found. Add one to get started.</td></tr>';
     return;
   }
   
@@ -879,7 +906,6 @@ function renderPayTypesTable() {
       <td><strong>${escapeHtml(pt.code)}</strong></td>
       <td>${escapeHtml(pt.name)}</td>
       <td>$${parseFloat(pt.hourly_rate).toFixed(2)}</td>
-      <td>${parseFloat(pt.multiplier).toFixed(2)}x</td>
       <td><span class="status-badge ${pt.is_active ? 'active' : 'inactive'}">${pt.is_active ? 'Active' : 'Inactive'}</span></td>
       <td>
         <button class="action-btn" onclick="editPayType('${pt.id}')">Edit</button>
@@ -893,7 +919,6 @@ function showAddPayTypeModal() {
   editingPayTypeId = null;
   document.getElementById('payTypeModalTitle').textContent = 'Add Pay Type';
   document.getElementById('payTypeForm').reset();
-  document.getElementById('payTypeMultiplier').value = '1.0';
   document.getElementById('payTypeOrder').value = '0';
   document.getElementById('payTypeStatus').value = '1';
   document.getElementById('payTypeModalOverlay').classList.add('show');
@@ -908,7 +933,6 @@ function editPayType(id) {
   document.getElementById('payTypeCode').value = pt.code;
   document.getElementById('payTypeName').value = pt.name;
   document.getElementById('payTypeRate').value = pt.hourly_rate;
-  document.getElementById('payTypeMultiplier').value = pt.multiplier || 1.0;
   document.getElementById('payTypeOrder').value = pt.display_order || 0;
   document.getElementById('payTypeStatus').value = pt.is_active ? '1' : '0';
   document.getElementById('payTypeModalOverlay').classList.add('show');
@@ -924,7 +948,6 @@ async function savePayType() {
     code: document.getElementById('payTypeCode').value.toUpperCase(),
     name: document.getElementById('payTypeName').value,
     hourly_rate: parseFloat(document.getElementById('payTypeRate').value),
-    multiplier: parseFloat(document.getElementById('payTypeMultiplier').value) || 1.0,
     display_order: parseInt(document.getElementById('payTypeOrder').value) || 0,
     is_active: parseInt(document.getElementById('payTypeStatus').value)
   };

@@ -14,7 +14,6 @@ interface PayTypeInput {
   code: string;
   name: string;
   hourly_rate: number;
-  multiplier?: number;
   display_order?: number;
   is_active?: number;
 }
@@ -69,7 +68,7 @@ export async function handlePayTypes(
 
 async function listPayTypes(env: Env): Promise<Response> {
   const result = await env.DB.prepare(`
-    SELECT id, code, name, hourly_rate, multiplier, display_order, is_active, created_at, updated_at
+    SELECT id, code, name, hourly_rate, display_order, is_active, created_at, updated_at
     FROM pay_types
     WHERE tenant_id = ? AND deleted_at IS NULL
     ORDER BY display_order ASC, name ASC
@@ -80,7 +79,7 @@ async function listPayTypes(env: Env): Promise<Response> {
 
 async function getPayType(env: Env, id: string): Promise<Response> {
   const result = await env.DB.prepare(`
-    SELECT id, code, name, hourly_rate, multiplier, display_order, is_active, created_at, updated_at
+    SELECT id, code, name, hourly_rate, display_order, is_active, created_at, updated_at
     FROM pay_types
     WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
   `).bind(id, TENANT_ID).first();
@@ -93,7 +92,7 @@ async function getPayType(env: Env, id: string): Promise<Response> {
 }
 
 async function createPayType(env: Env, input: PayTypeInput): Promise<Response> {
-  const { code, name, hourly_rate, multiplier = 1.0, display_order = 0 } = input;
+  const { code, name, hourly_rate, display_order = 0 } = input;
 
   if (!code || !name || hourly_rate === undefined) {
     return error('Code, name, and hourly_rate are required');
@@ -112,9 +111,9 @@ async function createPayType(env: Env, input: PayTypeInput): Promise<Response> {
   const now = new Date().toISOString();
 
   await env.DB.prepare(`
-    INSERT INTO pay_types (id, tenant_id, code, name, hourly_rate, multiplier, display_order, is_active, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-  `).bind(id, TENANT_ID, code.toUpperCase(), name, hourly_rate, multiplier, display_order, now, now).run();
+    INSERT INTO pay_types (id, tenant_id, code, name, hourly_rate, display_order, is_active, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+  `).bind(id, TENANT_ID, code.toUpperCase(), name, hourly_rate, display_order, now, now).run();
 
   return json({ success: true, data: { id } }, 201);
 }
@@ -146,7 +145,6 @@ async function updatePayType(env: Env, id: string, input: Partial<PayTypeInput>)
   if (input.code !== undefined) { updates.push('code = ?'); bindings.push(input.code.toUpperCase()); }
   if (input.name !== undefined) { updates.push('name = ?'); bindings.push(input.name); }
   if (input.hourly_rate !== undefined) { updates.push('hourly_rate = ?'); bindings.push(input.hourly_rate); }
-  if (input.multiplier !== undefined) { updates.push('multiplier = ?'); bindings.push(input.multiplier); }
   if (input.display_order !== undefined) { updates.push('display_order = ?'); bindings.push(input.display_order); }
   if (input.is_active !== undefined) { updates.push('is_active = ?'); bindings.push(input.is_active); }
 

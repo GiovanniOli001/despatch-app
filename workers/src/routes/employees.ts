@@ -20,6 +20,7 @@ interface Employee {
   status: string;
   hire_date: string | null;
   notes: string | null;
+  default_pay_type_id: string | null;
 }
 
 interface EmployeeInput {
@@ -31,9 +32,11 @@ interface EmployeeInput {
   licence_number?: string;
   licence_expiry?: string;
   role?: string;
+  status?: string;
   depot_id?: string;
   hire_date?: string;
   notes?: string;
+  default_pay_type_id?: string;
 }
 
 interface DailyStatusInput {
@@ -205,8 +208,9 @@ async function createEmployee(env: Env, input: EmployeeInput): Promise<Response>
     INSERT INTO employees (
       id, tenant_id, employee_number, first_name, last_name,
       email, phone, licence_number, licence_expiry,
-      role, status, depot_id, hire_date, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
+      role, status, depot_id, hire_date, notes, default_pay_type_id,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id,
     TENANT_ID,
@@ -218,9 +222,11 @@ async function createEmployee(env: Env, input: EmployeeInput): Promise<Response>
     input.licence_number || null,
     input.licence_expiry || null,
     input.role || 'driver',
+    input.status || 'active',
     input.depot_id || null,
     input.hire_date || null,
     input.notes || null,
+    input.default_pay_type_id || null,
     now,
     now
   ).run();
@@ -257,7 +263,8 @@ async function updateEmployee(env: Env, id: string, input: Partial<EmployeeInput
 
   const fields: (keyof EmployeeInput)[] = [
     'employee_number', 'first_name', 'last_name', 'email', 'phone',
-    'licence_number', 'licence_expiry', 'role', 'depot_id', 'hire_date', 'notes'
+    'licence_number', 'licence_expiry', 'role', 'status', 'depot_id', 
+    'hire_date', 'notes', 'default_pay_type_id'
   ];
 
   for (const field of fields) {
