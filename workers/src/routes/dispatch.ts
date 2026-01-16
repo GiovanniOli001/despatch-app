@@ -255,7 +255,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
 
   // Get vehicles
   const vehiclesResult = await env.DB.prepare(`
-    SELECT id, fleet_number, registration, capacity, status
+    SELECT id, fleet_number, rego, capacity, status
     FROM vehicles
     WHERE tenant_id = ? AND deleted_at IS NULL AND status = 'active'
     ORDER BY fleet_number
@@ -268,7 +268,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
       re.roster_id,
       re.shift_template_id,
       re.duty_block_id,
-      re.calendar_date,
+      re.date,
       re.driver_id,
       re.vehicle_id,
       re.start_time,
@@ -288,7 +288,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     WHERE r.tenant_id = ?
       AND r.status = 'published'
       AND r.deleted_at IS NULL
-      AND re.calendar_date = ?
+      AND re.date = ?
       AND re.deleted_at IS NULL
       AND (re.driver_id IS NOT NULL OR re.include_in_dispatch = 1)
     ORDER BY re.start_time, stdb.sequence
@@ -461,7 +461,7 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     const usage = vehicleUsage.get(v.id) || [];
     return {
       id: v.id,
-      rego: v.registration,
+      rego: v.rego,
       capacity: v.capacity,
       depot,
       status: usage.length > 0 ? 'in_use' : 'available',
@@ -469,24 +469,33 @@ async function getDispatchDay(env: Env, date: string): Promise<Response> {
     };
   });
 
-  // Get commit status for this date
-  const commitsResult = await env.DB.prepare(`
-    SELECT * FROM dispatch_commits WHERE tenant_id = ? AND commit_date = ?
-  `).bind(TENANT_ID, date).all();
-  
-  const allCommit = (commitsResult.results as any[]).find(c => c.scope === 'all');
-  const individualCommits = (commitsResult.results as any[]).filter(c => c.scope === 'individual');
+  // Get commit status for this date (defensive - table may not exist)
+  let allCommit = null;
+  let individualCommits: any[] = [];
+  try {
+    const commitsResult = await env.DB.prepare(`
+      SELECT * FROM dispatch_commits WHERE tenant_id = ? AND commit_date = ?
+    `).bind(TENANT_ID, date).all();
+    
+    allCommit = (commitsResult.results as any[]).find(c => c.scope === 'all');
+    individualCommits = (commitsResult.results as any[]).filter(c => c.scope === 'individual');
+  } catch (err) {
+    // Table may not exist yet - that's OK
+    console.warn('dispatch_commits table not found, skipping commit status');
+  }
 
   return json({
-    date,
-    depot,
-    drivers,
-    vehicles,
-    unassignedShifts,
-    commitStatus: {
-      is_fully_committed: !!allCommit,
-      all_commit: allCommit || null,
-      committed_employee_ids: individualCommits.map(c => c.employee_id)
+    data: {
+      date,
+      depot,
+      drivers,
+      vehicles,
+      unassigned: unassignedShifts,
+      commitStatus: {
+        is_fully_committed: !!allCommit,
+        all_commit: allCommit || null,
+        committed_employee_ids: individualCommits.map(c => c.employee_id)
+      }
     }
   });
 }
@@ -784,7 +793,7 @@ async function createAdhocShift(
   const entryId = uuid();
   await env.DB.prepare(`
     INSERT INTO roster_entries (
-      id, roster_id, shift_template_id, duty_block_id, calendar_date,
+      id, roster_id, shift_template_id, duty_block_id, date,
       driver_id, start_time, end_time, include_in_dispatch, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).bind(

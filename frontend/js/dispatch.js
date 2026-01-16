@@ -512,6 +512,12 @@ async function loadDispatchData() {
       // Sync vehicle assignments (with defensive checks already in place)
       syncAllVehicleAssignments();
       
+      // Set commit status from response
+      if (data.commitStatus) {
+        currentCommitStatus = data.commitStatus;
+        updateCommitUI();
+      }
+      
       renderAll();
       
       // Show success toast with source info
@@ -7821,9 +7827,4 @@ async function uncommitDay() {
   }
 }
 
-// Add commit status loading to dispatch data load
-const originalLoadDispatchData = loadDispatchData;
-loadDispatchData = async function() {
-  await originalLoadDispatchData();
-  await loadCommitStatus();
-};
+// Commit status is now loaded with main dispatch data
