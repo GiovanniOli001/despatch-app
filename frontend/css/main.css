@@ -4963,3 +4963,23 @@
     .btn-clear-despatch:active {
       transform: scale(0.98);
     }
+    
+    .btn-danger {
+      background: var(--accent-red);
+      border: none;
+      color: white;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    
+    .btn-danger:hover {
+      background: #dc2626;
+    }
+    
+    .btn-danger:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }

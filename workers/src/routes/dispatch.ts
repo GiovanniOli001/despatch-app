@@ -920,8 +920,8 @@ async function createAdhocShift(
   await env.DB.prepare(`
     INSERT INTO roster_entries (
       id, tenant_id, roster_id, shift_template_id, duty_block_id, date, name,
-      driver_id, start_time, end_time, include_in_dispatch, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+      shift_type, driver_id, start_time, end_time, include_in_dispatch, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'regular', ?, ?, ?, 1, ?, ?)
   `).bind(
     entryId,
     TENANT_ID,

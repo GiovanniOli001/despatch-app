@@ -120,7 +120,8 @@ export async function handleOpsCalendar(
       return getAllRosters(env);
     }
 
-    // POST /api/ops-calendar/clear-all - Clear all dispatch data (full reset)
+    // POST /api/ops-calendar/clear-all - Clear dispatch data (remove from calendar, delete duty lines)
+    // IMPORTANT: Does NOT modify roster_entries - roster state is user-controlled
     if (method === 'POST' && seg1 === 'clear-all') {
       return clearAllDispatch(env);
     }
@@ -310,52 +311,59 @@ async function getAllRosters(env: Env): Promise<Response> {
 /**
  * Clear All Dispatch Data
  * 
- * This performs a FULL RESET:
- * 1. Deletes all roster_duty_lines (instance-level duty data)
- * 2. Deletes all roster_entries (assignments)
- * 3. Clears calendar dates from all rosters (unschedule them)
- * 4. Resets all roster status to 'draft'
+ * This removes rosters from the calendar and deletes dispatch instance data,
+ * but PRESERVES all roster configuration:
+ * - roster_entries (user's assignments, include_in_dispatch settings)
+ * - rosters table records
  * 
- * CAUTION: This is a destructive operation that cannot be undone!
+ * What it does:
+ * 1. Deletes all roster_duty_lines (dispatch instance data)
+ * 2. Clears calendar dates from rosters (removes from calendar view)
+ * 3. Resets roster status to 'draft'
+ * 
+ * What it does NOT do:
+ * - Delete roster_entries (preserves user assignments)
+ * - Modify include_in_dispatch flags (preserves user settings)
  */
 async function clearAllDispatch(env: Env): Promise<Response> {
   const now = new Date().toISOString();
   
-  try {
-    // Step 1: Delete all roster_duty_lines (must delete first due to FK relationship)
-    const dutyLinesResult = await env.DB.prepare(`
-      DELETE FROM roster_duty_lines 
-      WHERE tenant_id = ?
-    `).bind(TENANT_ID).run();
-    
-    // Step 2: Delete all roster_entries (soft delete to maintain integrity)
-    // Actually hard delete since we're doing a full reset
-    const entriesResult = await env.DB.prepare(`
-      DELETE FROM roster_entries 
-      WHERE tenant_id = ?
-    `).bind(TENANT_ID).run();
-    
-    // Step 3 & 4: Clear calendar dates and reset status for all rosters
-    const rostersResult = await env.DB.prepare(`
-      UPDATE rosters 
-      SET calendar_start_date = NULL, 
-          calendar_end_date = NULL, 
-          status = 'draft',
-          updated_at = ?
-      WHERE tenant_id = ? AND deleted_at IS NULL
-    `).bind(now, TENANT_ID).run();
-    
-    return json({
-      success: true,
-      message: 'All dispatch data cleared successfully',
-      details: {
-        dutyLinesDeleted: dutyLinesResult.meta?.changes || 0,
-        entriesDeleted: entriesResult.meta?.changes || 0,
-        rostersReset: rostersResult.meta?.changes || 0
-      }
-    });
-  } catch (err) {
-    console.error('clearAllDispatch error:', err);
-    return error(err instanceof Error ? err.message : 'Failed to clear dispatch data', 500);
-  }
+  // Step 1: Delete all roster_duty_lines (dispatch instance data)
+  // These are recreated when rosters are published
+  const dutyLinesResult = await env.DB.prepare(`
+    DELETE FROM roster_duty_lines WHERE tenant_id = ?
+  `).bind(TENANT_ID).run();
+  
+  // Step 2: Clear calendar dates and reset status to draft
+  // This removes rosters from the calendar view but keeps all roster data intact
+  const rostersResult = await env.DB.prepare(`
+    UPDATE rosters 
+    SET calendar_start_date = NULL, 
+        calendar_end_date = NULL, 
+        status = 'draft',
+        updated_at = ?
+    WHERE tenant_id = ? AND deleted_at IS NULL
+  `).bind(now, TENANT_ID).run();
+  
+  // Get counts for feedback
+  const stats = await env.DB.prepare(`
+    SELECT 
+      (SELECT COUNT(*) FROM rosters WHERE tenant_id = ? AND deleted_at IS NULL) as roster_count,
+      (SELECT COUNT(*) FROM roster_entries WHERE tenant_id = ? AND deleted_at IS NULL) as entry_count
+  `).bind(TENANT_ID, TENANT_ID).first() as { roster_count: number; entry_count: number };
+  
+  return json({
+    success: true,
+    message: 'Dispatch cleared. Rosters removed from calendar. All roster configurations preserved.',
+    deleted: {
+      duty_lines: dutyLinesResult.meta?.changes || 0
+    },
+    updated: {
+      rosters: rostersResult.meta?.changes || 0
+    },
+    preserved: {
+      rosters: stats?.roster_count || 0,
+      entries: stats?.entry_count || 0
+    }
+  });
 }
