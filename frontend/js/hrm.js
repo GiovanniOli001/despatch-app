@@ -793,8 +793,8 @@ function renderCustomFieldsList() {
         <div class="custom-field-meta">Key: ${escapeHtml(field.field_key)} | Width: ${field.field_width === 'half' ? 'Half' : 'Full'}</div>
       </div>
       <div class="custom-field-actions">
-        <button onclick="editCustomField('${field.id}')" title="Edit">✏️</button>
-        <button class="delete" onclick="deleteCustomField('${field.id}', '${escapeHtml(field.field_name)}')" title="Delete">🗑️</button>
+        <button class="action-btn" onclick="editCustomField('${field.id}')">Edit</button>
+        <button class="action-btn danger" onclick="deleteCustomField('${field.id}', '${escapeHtml(field.field_name)}')">Delete</button>
       </div>
     </div>
   `).join('');

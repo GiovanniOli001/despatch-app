@@ -4139,24 +4139,6 @@
       gap: 4px;
     }
     
-    .custom-field-actions button {
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 4px;
-    }
-    
-    .custom-field-actions button:hover {
-      background: var(--bg-primary);
-      color: var(--text-primary);
-    }
-    
-    .custom-field-actions button.delete:hover {
-      color: var(--accent-red);
-    }
-    
     .custom-fields-empty {
       padding: 32px;
       text-align: center;
