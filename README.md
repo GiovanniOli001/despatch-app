@@ -116,6 +116,16 @@ git push
 
 Cloudflare auto-deploys frontend in ~30 seconds.
 
+### ⚠️ Backend Modification Warning
+
+Backend TypeScript files (especially `dispatch.ts`) require extra care:
+
+1. **Verify schema** before writing SQL: `npx wrangler d1 execute dispatch-db --remote --command="PRAGMA table_info(table_name);"`
+2. **Type check** before deploy: `cd workers && npx tsc --noEmit`
+3. **Monitor logs** during testing: `npx wrangler tail`
+
+See PROJECT-MD.txt for full backend modification protocol.
+
 ## Project Structure
 
 ```

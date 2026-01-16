@@ -708,13 +708,14 @@ async function createDutyLine(
 
   await env.DB.prepare(`
     INSERT INTO roster_duty_lines (
-      id, roster_entry_id, sequence, start_time, end_time,
+      id, tenant_id, roster_entry_id, sequence, start_time, end_time,
       duty_type, description, vehicle_id, pay_type,
       location_name, location_lat, location_lng,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id,
+    TENANT_ID,
     input.roster_entry_id,
     sequence,
     input.start_time,
@@ -866,8 +867,8 @@ async function createAdhocShift(
   if (!adhocTemplate) {
     const templateId = uuid();
     await env.DB.prepare(`
-      INSERT INTO shift_templates (id, tenant_id, code, name, shift_type, start_time, end_time, status, created_at, updated_at)
-      VALUES (?, ?, 'ADHOC', 'Adhoc Duty', 'regular', 0, 24, 'active', ?, ?)
+      INSERT INTO shift_templates (id, tenant_id, code, name, shift_type, default_start, default_end, is_active, created_at, updated_at)
+      VALUES (?, ?, 'ADHOC', 'Adhoc Duty', 'regular', 0, 24, 1, ?, ?)
     `).bind(templateId, TENANT_ID, now, now).run();
     adhocTemplate = { id: templateId };
   }
@@ -891,9 +892,9 @@ async function createAdhocShift(
   const entryId = uuid();
   await env.DB.prepare(`
     INSERT INTO roster_entries (
-      id, tenant_id, roster_id, shift_template_id, duty_block_id, date,
+      id, tenant_id, roster_id, shift_template_id, duty_block_id, date, name,
       driver_id, start_time, end_time, include_in_dispatch, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
   `).bind(
     entryId,
     TENANT_ID,
@@ -901,6 +902,7 @@ async function createAdhocShift(
     adhocTemplate.id,
     adhocBlock.id,
     date,
+    'Adhoc',
     employee_id,
     duty.start_time,
     duty.end_time,
@@ -912,12 +914,13 @@ async function createAdhocShift(
   const dutyLineId = uuid();
   await env.DB.prepare(`
     INSERT INTO roster_duty_lines (
-      id, roster_entry_id, sequence, start_time, end_time,
+      id, tenant_id, roster_entry_id, sequence, start_time, end_time,
       duty_type, description, vehicle_id, pay_type, location_name, location_lat, location_lng,
       created_at, updated_at
-    ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     dutyLineId,
+    TENANT_ID,
     entryId,
     duty.start_time,
     duty.end_time,

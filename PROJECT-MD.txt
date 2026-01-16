@@ -94,6 +94,54 @@ Functions in later files can call functions from earlier files, but not vice ver
 **NEVER chain commands with && or ;**
 **Give each command in a SEPARATE code block.**
 
+### ⚠️ BACKEND MODIFICATION PROTOCOL (CRITICAL!)
+
+**Context:** On January 16, 2026, blind backend edits caused 2+ hours of cascading failures. This protocol prevents recurrence.
+
+**The Problem:** Claude edits local copies that are out of sync with deployed versions. Each "fix" introduces new errors because:
+- Project knowledge has stale file snapshots
+- SQL is written without verifying actual table schemas
+- No TypeScript validation before deploy
+
+**MANDATORY STEPS FOR BACKEND CHANGES:**
+
+**Step 1: Get Current Source**
+Before modifying ANY backend file (especially `dispatch.ts`), ask:
+> "Please paste the current content of [filename] (or the relevant section)"
+
+**Step 2: Verify Schema Before Writing SQL**
+Before ANY INSERT/UPDATE statement, run:
+```
+npx wrangler d1 execute dispatch-db --remote --command="PRAGMA table_info(table_name);"
+```
+This shows actual column names. NEVER assume column names from memory.
+
+**Step 3: Type Check Before Deploy**
+```
+cd workers
+npx tsc --noEmit
+```
+If this fails, DO NOT DEPLOY. Fix errors first.
+
+**Step 4: Test With Tail Running**
+```
+npx wrangler tail
+```
+In another terminal, test the specific endpoint. Only confirm "fixed" after seeing success in logs.
+
+**RULES CLAUDE MUST FOLLOW:**
+1. ❌ NEVER import a file without confirming it exists
+2. ❌ NEVER write INSERT/UPDATE SQL without verifying column names against schema
+3. ❌ NEVER say "fixed" until user confirms it works
+4. ✅ ALWAYS ask for current file content if making significant backend changes
+5. ✅ ALWAYS check table schema before writing SQL that inserts/updates data
+
+**Common Schema Gotchas:**
+- `shift_templates` uses `default_start`/`default_end`, NOT `start_time`/`end_time`
+- `shift_templates` uses `is_active` (INTEGER), NOT `status` (TEXT)
+- `roster_entries` requires `name` column (NOT NULL)
+- `roster_duty_lines` requires `tenant_id` column (NOT NULL)
+
 ---
 
 ## SECTION 3: DEPLOYMENT PROCEDURES
