@@ -1081,8 +1081,8 @@ function renderPayRecordsTab(totals) {
           </select>
         </div>
         <div class="filter-group">
-          <button class="action-btn" onclick="applyPayRecordsFilters()">Apply</button>
-          <button class="action-btn" onclick="clearPayRecordsFilters()">Clear</button>
+          <button type="button" class="action-btn" onclick="applyPayRecordsFilters()">Apply</button>
+          <button type="button" class="action-btn" onclick="clearPayRecordsFilters()">Clear</button>
         </div>
       </div>
     </div>
@@ -1121,7 +1121,7 @@ function renderPayRecordsTab(totals) {
           <td class="numeric">$${parseFloat(rec.total_amount).toFixed(2)}</td>
           <td>${escapeHtml(rec.notes || '')} ${isManual}</td>
           <td>
-            <button class="action-btn small" onclick="editPayRecord('${rec.id}')">Edit</button>
+            <button type="button" class="action-btn small" onclick="editPayRecord('${rec.id}')">Edit</button>
           </td>
         </tr>
       `;
