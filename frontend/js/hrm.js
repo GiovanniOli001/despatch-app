@@ -811,3 +811,152 @@ async function deleteEmployee(id, name) {
   }
 }
 
+
+// ============================================
+// HRM TAB SWITCHING
+// ============================================
+
+let currentHrmTab = 'employees';
+
+function switchHrmTab(tab) {
+  currentHrmTab = tab;
+  
+  // Update tab buttons
+  document.querySelectorAll('.hrm-tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.toLowerCase().includes(tab.replace('-', ' ').split(' ')[0]));
+  });
+  
+  // Update tab content
+  document.querySelectorAll('.hrm-tab-content').forEach(c => {
+    c.classList.remove('active');
+  });
+  
+  if (tab === 'employees') {
+    document.getElementById('hrmTabEmployees').classList.add('active');
+    document.getElementById('hrmHeaderActions').innerHTML = `
+      <button class="btn-settings" onclick="showEmployeeFieldsSettings()" title="Custom Fields Settings">⚙️</button>
+      <button class="btn-primary" onclick="showAddEmployeeModal()">+ Add Employee</button>
+    `;
+  } else if (tab === 'pay-types') {
+    document.getElementById('hrmTabPayTypes').classList.add('active');
+    document.getElementById('hrmHeaderActions').innerHTML = `
+      <button class="btn-primary" onclick="showAddPayTypeModal()">+ Add Pay Type</button>
+    `;
+    loadPayTypes();
+  }
+}
+
+// ============================================
+// PAY TYPES CRUD
+// ============================================
+
+let payTypesData = [];
+let editingPayTypeId = null;
+
+async function loadPayTypes() {
+  const tbody = document.getElementById('payTypesTableBody');
+  tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Loading pay types...</td></tr>';
+  
+  try {
+    const result = await apiRequest('/pay-types');
+    payTypesData = result.data || [];
+    renderPayTypesTable();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-cell">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function renderPayTypesTable() {
+  const tbody = document.getElementById('payTypesTableBody');
+  
+  if (payTypesData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No pay types found. Add one to get started.</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = payTypesData.map(pt => `
+    <tr>
+      <td><strong>${escapeHtml(pt.code)}</strong></td>
+      <td>${escapeHtml(pt.name)}</td>
+      <td>$${parseFloat(pt.hourly_rate).toFixed(2)}</td>
+      <td>${parseFloat(pt.multiplier).toFixed(2)}x</td>
+      <td><span class="status-badge ${pt.is_active ? 'active' : 'inactive'}">${pt.is_active ? 'Active' : 'Inactive'}</span></td>
+      <td>
+        <button class="action-btn" onclick="editPayType('${pt.id}')">Edit</button>
+        <button class="action-btn danger" onclick="deletePayType('${pt.id}', '${escapeHtml(pt.name)}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function showAddPayTypeModal() {
+  editingPayTypeId = null;
+  document.getElementById('payTypeModalTitle').textContent = 'Add Pay Type';
+  document.getElementById('payTypeForm').reset();
+  document.getElementById('payTypeMultiplier').value = '1.0';
+  document.getElementById('payTypeOrder').value = '0';
+  document.getElementById('payTypeStatus').value = '1';
+  document.getElementById('payTypeModalOverlay').classList.add('show');
+}
+
+function editPayType(id) {
+  const pt = payTypesData.find(p => p.id === id);
+  if (!pt) return;
+  
+  editingPayTypeId = id;
+  document.getElementById('payTypeModalTitle').textContent = 'Edit Pay Type';
+  document.getElementById('payTypeCode').value = pt.code;
+  document.getElementById('payTypeName').value = pt.name;
+  document.getElementById('payTypeRate').value = pt.hourly_rate;
+  document.getElementById('payTypeMultiplier').value = pt.multiplier || 1.0;
+  document.getElementById('payTypeOrder').value = pt.display_order || 0;
+  document.getElementById('payTypeStatus').value = pt.is_active ? '1' : '0';
+  document.getElementById('payTypeModalOverlay').classList.add('show');
+}
+
+function closePayTypeModal() {
+  document.getElementById('payTypeModalOverlay').classList.remove('show');
+  editingPayTypeId = null;
+}
+
+async function savePayType() {
+  const data = {
+    code: document.getElementById('payTypeCode').value.toUpperCase(),
+    name: document.getElementById('payTypeName').value,
+    hourly_rate: parseFloat(document.getElementById('payTypeRate').value),
+    multiplier: parseFloat(document.getElementById('payTypeMultiplier').value) || 1.0,
+    display_order: parseInt(document.getElementById('payTypeOrder').value) || 0,
+    is_active: parseInt(document.getElementById('payTypeStatus').value)
+  };
+  
+  if (!data.code || !data.name || isNaN(data.hourly_rate)) {
+    showToast('Please fill in all required fields', 'error');
+    return;
+  }
+  
+  try {
+    if (editingPayTypeId) {
+      await apiRequest(`/pay-types/${editingPayTypeId}`, { method: 'PUT', body: data });
+      showToast('Pay type updated');
+    } else {
+      await apiRequest('/pay-types', { method: 'POST', body: data });
+      showToast('Pay type created');
+    }
+    closePayTypeModal();
+    loadPayTypes();
+  } catch (err) {
+    showToast(err.message || 'Failed to save pay type', 'error');
+  }
+}
+
+async function deletePayType(id, name) {
+  if (!confirm(`Delete pay type "${name}"?`)) return;
+  
+  try {
+    await apiRequest(`/pay-types/${id}`, { method: 'DELETE' });
+    showToast('Pay type deleted');
+    loadPayTypes();
+  } catch (err) {
+    showToast(err.message || 'Failed to delete pay type', 'error');
+  }
+}

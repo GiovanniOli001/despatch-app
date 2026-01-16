@@ -291,37 +291,71 @@
       <div class="screen" id="screen-hrm" style="display: none;">
         <div class="screen-header-bar">
           <h2>Human Resources</h2>
-          <div style="display: flex; gap: 8px; align-items: center;">
+          <div id="hrmHeaderActions" style="display: flex; gap: 8px; align-items: center;">
             <button class="btn-settings" onclick="showEmployeeFieldsSettings()" title="Custom Fields Settings">⚙️</button>
             <button class="btn-primary" onclick="showAddEmployeeModal()">+ Add Employee</button>
           </div>
         </div>
-        <div class="screen-filters">
-          <input type="text" class="filter-input" placeholder="Search employees..." oninput="filterEmployees(this.value)">
-          <select class="filter-select" onchange="filterEmployeeRole(this.value)">
-            <option value="">All Roles</option>
-            <option value="driver">Drivers</option>
-            <option value="dispatcher">Dispatchers</option>
-            <option value="admin">Admins</option>
-          </select>
+        
+        <!-- HRM Sub-navigation -->
+        <div class="hrm-tabs">
+          <button class="hrm-tab active" onclick="switchHrmTab('employees')">Employees</button>
+          <button class="hrm-tab" onclick="switchHrmTab('pay-types')">Pay Types</button>
         </div>
-        <div class="screen-table-container">
-          <table class="screen-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Licence</th>
-                <th>Role</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="employeesTableBody">
-              <tr><td colspan="7" class="loading-cell">Loading employees...</td></tr>
-            </tbody>
-          </table>
+        
+        <!-- Employees Tab -->
+        <div class="hrm-tab-content active" id="hrmTabEmployees">
+          <div class="screen-filters">
+            <input type="text" class="filter-input" placeholder="Search employees..." oninput="filterEmployees(this.value)">
+            <select class="filter-select" onchange="filterEmployeeRole(this.value)">
+              <option value="">All Roles</option>
+              <option value="driver">Drivers</option>
+              <option value="dispatcher">Dispatchers</option>
+              <option value="admin">Admins</option>
+            </select>
+          </div>
+          <div class="screen-table-container">
+            <table class="screen-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Phone</th>
+                  <th>Licence</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="employeesTableBody">
+                <tr><td colspan="7" class="loading-cell">Loading employees...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <!-- Pay Types Tab -->
+        <div class="hrm-tab-content" id="hrmTabPayTypes">
+          <div class="screen-filters" style="justify-content: flex-end;">
+            <button class="btn-primary" onclick="showAddPayTypeModal()">+ Add Pay Type</button>
+          </div>
+          <div class="screen-table-container">
+            <table class="screen-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Name</th>
+                  <th>Hourly Rate</th>
+                  <th>Multiplier</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="payTypesTableBody">
+                <tr><td colspan="6" class="loading-cell">Loading pay types...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
       
@@ -705,6 +739,57 @@
       <div class="crud-modal-footer">
         <button class="btn-secondary" onclick="closeCustomFieldModal()">Cancel</button>
         <button class="btn-primary" onclick="saveCustomField()">Save Field</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Pay Type Modal -->
+  <div class="crud-modal-overlay" id="payTypeModalOverlay">
+    <div class="crud-modal">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="payTypeModalTitle">Add Pay Type</span>
+        <button class="crud-modal-close" onclick="closePayTypeModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="payTypeForm" onsubmit="event.preventDefault(); savePayType();">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Code *</label>
+              <input type="text" id="payTypeCode" class="form-input" placeholder="e.g., OT" required maxlength="10" style="text-transform: uppercase;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Name *</label>
+              <input type="text" id="payTypeName" class="form-input" placeholder="e.g., Overtime" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Hourly Rate ($) *</label>
+              <input type="number" id="payTypeRate" class="form-input" placeholder="0.00" required step="0.01" min="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Multiplier</label>
+              <input type="number" id="payTypeMultiplier" class="form-input" placeholder="1.0" step="0.05" min="0" value="1.0">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Display Order</label>
+              <input type="number" id="payTypeOrder" class="form-input" placeholder="0" min="0" value="0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Status</label>
+              <select id="payTypeStatus" class="form-input">
+                <option value="1">Active</option>
+                <option value="0">Inactive</option>
+              </select>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn-secondary" onclick="closePayTypeModal()">Cancel</button>
+        <button class="btn-primary" onclick="savePayType()">Save</button>
       </div>
     </div>
   </div>

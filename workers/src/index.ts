@@ -11,6 +11,7 @@ import { handleRoster } from './routes/roster';
 import { handleDispatch } from './routes/dispatch';
 import { handleConfig } from './routes/config';
 import { handleOpsCalendar } from './routes/ops-calendar';
+import { handlePayTypes } from './routes/pay-types';
 
 export interface Env {
   DB: D1Database;
@@ -104,6 +105,9 @@ export default {
 
         case 'ops-calendar':
           return handleOpsCalendar(request, env, segments.slice(1));
+
+        case 'pay-types':
+          return handlePayTypes(request, env, segments.slice(1));
 
         default:
           return error('Not found', 404);

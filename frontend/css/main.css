@@ -4071,6 +4071,48 @@
       display: block;
     }
     
+    /* HRM Screen Tabs */
+    .hrm-tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      background: var(--bg-secondary);
+    }
+    
+    .hrm-tab {
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.15s;
+    }
+    
+    .hrm-tab:hover {
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+    }
+    
+    .hrm-tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+    }
+    
+    .hrm-tab-content {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+    }
+    
+    .hrm-tab-content.active {
+      display: flex;
+    }
+    
     /* Settings gear button */
     .btn-settings {
       background: none;
