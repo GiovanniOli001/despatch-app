@@ -739,7 +739,7 @@ function renderVehicleVertical() {
     const globalIdx = vehicles.indexOf(vehicle);
     headersHtml += `
       <div class="vertical-column-header ${isSelected ? 'selected' : ''}" onclick="selectItem('vehicle', ${globalIdx})">
-        <div class="vertical-column-name">${vehicle.id}</div>
+        <div class="vertical-column-name">${vehicle.rego}</div>
         <div class="vertical-column-subtitle">${vehicle.capacity} seats • ${vehicle.status}</div>
       </div>
     `;
@@ -2610,7 +2610,7 @@ function renderVehicleRows() {
            onclick="selectItem('vehicle', ${idx})">
         <div class="row-label">
           <div class="row-status ${statusClass}"></div>
-          <span class="row-name">${vehicle.id}</span>
+          <span class="row-name">${vehicle.rego}</span>
         </div>
         <div class="row-timeline">${blocksHTML}</div>
       </div>
@@ -2980,7 +2980,7 @@ function renderDriverDetailVehicleCentric(driver) {
               </div>
               <div class="vehicle-schedule-driver">
                 
-                <span class="driver-name">${va.vehicle.id}</span>
+                <span class="driver-name">${va.vehicle.rego}</span>
                 <span class="nav-arrow">→</span>
               </div>
               <div class="vehicle-schedule-details">
@@ -3055,7 +3055,7 @@ function renderDutyItem(duty, driverId, shiftId, dutyIdx) {
   const vehicleOptions = `
     <option value="">--</option>
     ${availableVehicles.map(v => `
-      <option value="${v.id}" ${duty.vehicle === v.id ? 'selected' : ''}>${v.id}</option>
+      <option value="${v.id}" ${duty.vehicle === v.id ? 'selected' : ''}>${v.rego}</option>
     `).join('')}
     ${duty.vehicle && !availableVehicles.find(v => v.id === duty.vehicle) ? 
       `<option value="${duty.vehicle}" selected>${duty.vehicle}</option>` : ''}
@@ -3389,22 +3389,23 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
   const duty = shift.duties[dutyIdx];
   const oldVehicle = duty.vehicle;
   const newVehicle = value || null;
+  const newVehicleObj = newVehicle ? vehicles.find(v => v.id === newVehicle) : null;
   
   // Check availability
   if (newVehicle && !isVehicleAvailableForDuty(newVehicle, duty.start, duty.end, duty.id)) {
-    showToast(`${newVehicle} not available`, 'error');
+    showToast(`${newVehicleObj?.rego || newVehicle} not available`, 'error');
     renderDetailPanel();
     return;
   }
   
-  // Call API in real mode - pass fleet number, backend will resolve to ID
+  // Call API in real mode - pass vehicle_id directly
   if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
       const result = await apiRequest('/dispatch/update-duty-line', {
         method: 'POST',
         body: {
           duty_line_id: duty.id,
-          vehicle_number: newVehicle  // Pass fleet number, backend resolves ID
+          vehicle_id: newVehicle
         }
       });
       
@@ -3424,6 +3425,7 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
   }
   
   duty.vehicle = newVehicle;
+  duty.vehicleId = newVehicle;
   
   // Sync new vehicle
   if (newVehicle) {
@@ -3432,7 +3434,7 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
   
   renderDetailPanel();
   renderAll();
-  showToast(newVehicle ? `Vehicle set to ${newVehicle}` : 'Vehicle removed');
+  showToast(newVehicle ? `Vehicle set to ${newVehicleObj?.rego || newVehicle}` : 'Vehicle removed');
 }
 
 function formatDutyHours(hours) {
@@ -3851,7 +3853,7 @@ function renderEditForm() {
           <select class="form-select ${formErrors.vehicle ? 'error' : ''}" id="editVehicle" onchange="onFormChange()">
             <option value="">-- No Vehicle --</option>
             ${vehicleOptions.map(v => `
-              <option value="${v.id}" ${duty.vehicle === v.id ? 'selected' : ''}>${v.id} (${v.capacity} seats)</option>
+              <option value="${v.id}" ${duty.vehicle === v.id ? 'selected' : ''}>${v.rego} (${v.capacity} seats)</option>
             `).join('')}
           </select>
           ${vehicleOptions.length === 0 && needsVehicle ? 
@@ -3946,8 +3948,8 @@ function renderVehicleDetailDriverCentric(vehicle) {
   return `
     <div class="panel-header">
       <div class="panel-header-info">
-        <div class="panel-title">${vehicle.id}</div>
-        <div class="panel-subtitle">${vehicle.capacity} seats • ${vehicle.rego}</div>
+        <div class="panel-title">${vehicle.rego}</div>
+        <div class="panel-subtitle">${vehicle.capacity} seats</div>
       </div>
     </div>
     <div class="panel-content">
@@ -4049,7 +4051,7 @@ function renderVehicleDetailVehicleCentric(vehicle) {
   return `
     <div class="panel-header">
       <div class="panel-header-info">
-        <div class="panel-title">${vehicle.id}</div>
+        <div class="panel-title">${vehicle.rego}</div>
         <div class="panel-subtitle">${vehicle.capacity} seats</div>
       </div>
     </div>
@@ -5056,7 +5058,7 @@ function updateVehicleAssignmentList(jobIndex) {
         return `
           <div class="assignment-item ${!available ? 'unavailable' : ''}">
             <div class="assignment-item-info">
-              <span class="assignment-item-name clickable" onclick="navigateToResource('vehicle', ${vehicleIdx})">${v.id}</span>
+              <span class="assignment-item-name clickable" onclick="navigateToResource('vehicle', ${vehicleIdx})">${v.rego}</span>
               <span class="assignment-item-detail">${detailText}</span>
             </div>
             <span class="assignment-item-status ${available ? (shiftCount > 0 ? 'inuse' : 'available') : 'unavailable'}">${available ? (shiftCount > 0 ? 'In Use' : 'Available') : 'Busy'}</span>
@@ -5148,7 +5150,7 @@ function updateTransferVehicleList() {
         return `
           <div class="assignment-item">
             <div class="assignment-item-info">
-              <span class="assignment-item-name clickable" onclick="navigateToResource('vehicle', ${vehicleIdx})">${v.id}</span>
+              <span class="assignment-item-name clickable" onclick="navigateToResource('vehicle', ${vehicleIdx})">${v.rego}</span>
               <span class="assignment-item-detail">${v.capacity} seats${shiftCount > 0 ? ` • ${shiftCount} shift(s)` : ''}</span>
             </div>
             <span class="assignment-item-status ${v.status}">${v.status === 'available' ? 'Available' : 'In Use'}</span>
@@ -6069,7 +6071,7 @@ function assignVehicleToJob(jobIndex, vehicleIndex) {
   
   unassignedJobs.splice(jobIndex, 1);
   
-  showToast(`${vehicle.id} assigned to ${job.name} — assign drivers to duties`);
+  showToast(`${vehicle.rego} assigned to ${job.name} — assign drivers to duties`);
   selectedItem = { type: 'vehicle', index: vehicleIndex };
   renderAll();
 }
@@ -6385,8 +6387,8 @@ function updateBulkVehicleList() {
         return `
         <div class="assignment-item">
           <div class="assignment-item-info">
-            <span class="assignment-item-name clickable" onclick="navigateToResource('vehicle', ${vehicleIdx})">${v.id}</span>
-            <span class="assignment-item-detail">${v.capacity} seats • ${v.rego}</span>
+            <span class="assignment-item-name clickable" onclick="navigateToResource('vehicle', ${vehicleIdx})">${v.rego}</span>
+            <span class="assignment-item-detail">${v.capacity} seats</span>
           </div>
           <button class="assign-btn" onclick="executeBulkAssignVehicle('${v.id}')">Assign All</button>
         </div>
