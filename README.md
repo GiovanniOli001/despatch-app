@@ -2,7 +2,18 @@
 
 Bus and coach dispatch operations system for managing drivers, vehicles, shifts, rosters, and daily dispatch.
 
-**Version:** 1.8.0 | **Last Updated:** January 17, 2026
+**Version:** 1.9.0 | **Last Updated:** January 18, 2026
+
+## 🚨 For AI Assistants (Claude)
+
+**ALWAYS request current files before making ANY code changes.**
+
+Never use files from memory. Never assume you have the latest version. Always ask:
+> "Please upload the current version of [filename]"
+
+See PROJECT-MD.txt Section 2 for full protocol.
+
+---
 
 ## Live App
 
@@ -29,12 +40,14 @@ Bus and coach dispatch operations system for managing drivers, vehicles, shifts,
 - **Adhoc Shifts** - Create duties without templates
 - **Location Autocomplete** - Nominatim integration
 - **Published Roster Protection** - Blocks editing when published
+- **Scheduled Roster Protection** - Blocks editing/deletion when on calendar
 - **Duty Cancellation** - Cancel/reinstate duties with reason tracking
 - **Custom Fields** - Configurable employee fields with layout designer
-- **Pay Types** - Hourly rate definitions (STD, OT, etc.)
+- **Pay Types** - Hourly rate definitions (STD, OT, etc.) - loaded from API
 - **Dispatch Commit** - Lock days and generate pay records
 
 ### In Progress
+- Commit System Rework (additive-only commits)
 - Employee Pay Records Tab (Phase 4)
 
 ### Planned
@@ -52,27 +65,28 @@ dispatch-app/
 │   └── js/
 │       ├── api.js              ← API client
 │       ├── app.js              ← Constants, navigation, utilities
-│       ├── dispatch.js         ← Dispatch screen (~7,900 lines)
+│       ├── dispatch.js         ← Dispatch screen (~8,000 lines)
 │       ├── hrm.js              ← Employees + custom fields
 │       ├── vehicles.js         ← Vehicle CRUD
 │       ├── shifts.js           ← Shift templates
 │       └── roster.js           ← Roster + calendar
-└── workers/
-    ├── wrangler.toml           ← Cloudflare config
-    └── src/
-        ├── index.ts            ← Main router
-        ├── routes/
-        │   ├── employees.ts
-        │   ├── employee-fields.ts
-        │   ├── vehicles.ts
-        │   ├── shifts.ts
-        │   ├── roster.ts
-        │   ├── dispatch.ts
-        │   ├── dispatch-commit.ts
-        │   ├── ops-calendar.ts
-        │   └── config.ts
-        └── db/
-            └── schema.sql
+├── workers/
+│   ├── wrangler.toml           ← Cloudflare config
+│   └── src/
+│       ├── index.ts            ← Main router
+│       └── routes/
+│           ├── employees.ts
+│           ├── employee-fields.ts
+│           ├── vehicles.ts
+│           ├── shifts.ts
+│           ├── roster.ts
+│           ├── dispatch.ts
+│           ├── dispatch-commit.ts
+│           ├── ops-calendar.ts
+│           └── config.ts
+├── PROJECT-MD.txt              ← Complete technical documentation
+├── README.md                   ← This file
+└── schema-reference.sql        ← Database schema reference
 ```
 
 ## Quick Start
@@ -100,6 +114,7 @@ npx wrangler deploy
 **Backend:**
 ```
 cd workers
+npx tsc --noEmit
 npx wrangler deploy
 ```
 
@@ -113,6 +128,8 @@ git push
 Cloudflare auto-deploys frontend in ~30 seconds.
 
 ## Database Schema
+
+See `schema-reference.sql` for complete schema.
 
 ### Key Tables
 | Table | Purpose |
@@ -131,26 +148,22 @@ Cloudflare auto-deploys frontend in ~30 seconds.
 | dispatch_commits | Committed date tracking |
 | employee_pay_records | Generated pay records |
 
-### Foreign Key Deletion Order
-When purging data, delete in this order:
-1. `roster_duty_lines`
-2. `roster_entries`
-3. `rosters`
-4. `shift_template_duty_lines`
-5. `shift_template_duty_blocks`
-6. `shift_templates`
-7. `dispatch_adhoc_duty_lines`
-8. `dispatch_adhoc_shifts`
+### Maintaining Schema Reference
+After any schema changes:
+```cmd
+npx wrangler d1 execute dispatch-db --remote --command=".schema" > schema-output.txt
+```
+Then update `schema-reference.sql` accordingly.
 
 ## API Endpoints
 
 | Resource | Key Endpoints |
 |----------|---------------|
 | Dispatch | GET /:date, commit, cancel-duty-line, create-adhoc-shift |
-| Roster | containers, publish, unpublish, assign |
+| Roster | containers, publish, unpublish, assign, schedule, unschedule |
 | Shifts | CRUD + lock-status |
 | Employees | Full CRUD |
-| Pay Types | CRUD |
+| Pay Types | `/api/pay-types` (NOT `/config/pay-types`) |
 
 ## Documentation
 
@@ -160,17 +173,25 @@ See **[PROJECT-MD.txt](PROJECT-MD.txt)** for complete technical documentation in
 - Lessons learned
 - API endpoint details
 - Deployment procedures
+- Business logic rules
 
 ## ⚠️ Backend Modification Warning
 
 Before making backend changes:
-1. Verify schema: `npx wrangler d1 execute dispatch-db --remote --command="PRAGMA table_info(table_name);"`
-2. Type check: `npx tsc --noEmit`
-3. Monitor logs: `npx wrangler tail`
+1. **Request current file from user**
+2. Verify schema: `npx wrangler d1 execute dispatch-db --remote --command="PRAGMA table_info(table_name);"`
+3. Type check: `npx tsc --noEmit`
+4. Monitor logs: `npx wrangler tail`
 
 See PROJECT-MD.txt Section 2 for full protocol.
 
 ## Version History
+
+### v1.9.0 (January 18, 2026)
+- P1 Bug Fixes: unpublish preserves inline duties, pay types from API, roster lockouts
+- Clear Despatch preserves roster assignments
+- HRM loading fix
+- Documentation: explicit file request requirements
 
 ### v1.8.0 (January 17, 2026)
 - Adhoc shift refactoring - standalone tables
@@ -180,7 +201,6 @@ See PROJECT-MD.txt Section 2 for full protocol.
 - Pay Types Admin (Phase 1)
 - Employee Pay Type Association (Phase 2)
 - Dispatch Commit system (Phase 3)
-- Comprehensive documentation with verified schema
 - Backend modification protocol
 
 ### v1.6.0 (January 16, 2026)

@@ -1,18 +1,37 @@
 # Dispatch App - Complete Project Reference
 
-**Version:** 1.8.0  
-**Last Updated:** January 17, 2026  
+**Version:** 1.9.0  
+**Last Updated:** January 18, 2026  
 **Database Schema Verified:** January 17, 2026
+
+---
+
+## 🚨 ABSOLUTE RULE: ALWAYS REQUEST CURRENT FILES
+
+**Claude must NEVER use files from memory or previous context.**
+
+Before ANY code work, Claude MUST ask:
+> "Please upload the current version of [filename] from your project folder."
+
+This applies to:
+- ANY file being modified
+- ANY file being referenced for context
+- Even if a file was uploaded earlier in the same conversation
+
+**Why:** Files change during deployment. Using stale files causes bugs, conflicts, and wasted time.
+
+**No exceptions. No assumptions. Always ask.**
 
 ---
 
 ## ⚠️ CRITICAL: READ THIS FIRST
 
 **This document is the single source of truth.** Before making ANY changes:
-1. Read the relevant sections of this document
-2. Follow the Backend Modification Protocol (Section 2)
-3. Verify schema before writing SQL (Section 4)
-4. Never assume - always verify
+1. **REQUEST CURRENT FILES** (see rule above)
+2. Read the relevant sections of this document
+3. Follow the Backend Modification Protocol (Section 2)
+4. Verify schema using schema-reference.sql (Section 4)
+5. Never assume - always verify
 
 ---
 
@@ -37,76 +56,83 @@ C:\Users\Giovanni\Downloads\despatch-app\
 │   └── js\
 │       ├── api.js              ← API client
 │       ├── app.js              ← Constants, nav, utilities
-│       ├── dispatch.js         ← Dispatch screen (~7,900 lines)
+│       ├── dispatch.js         ← Dispatch screen (~8,000 lines)
 │       ├── hrm.js              ← Employees + custom fields
 │       ├── vehicles.js         ← Vehicle CRUD
 │       ├── shifts.js           ← Shift templates
 │       └── roster.js           ← Roster + calendar
-└── workers\
-    ├── wrangler.toml           ← Cloudflare Workers config
-    └── src\
-        ├── index.ts            ← Main router, CORS, helpers
-        └── routes\
-            ├── employees.ts
-            ├── employee-fields.ts
-            ├── vehicles.ts
-            ├── shifts.ts
-            ├── roster.ts
-            ├── dispatch.ts
-            ├── dispatch-commit.ts  ← Pay commit functionality
-            ├── ops-calendar.ts
-            └── config.ts
+├── workers\
+│   ├── wrangler.toml           ← Cloudflare Workers config
+│   └── src\
+│       ├── index.ts            ← Main router, CORS, helpers
+│       └── routes\
+│           ├── employees.ts
+│           ├── employee-fields.ts
+│           ├── vehicles.ts
+│           ├── shifts.ts
+│           ├── roster.ts
+│           ├── dispatch.ts
+│           ├── dispatch-commit.ts  ← Pay commit functionality
+│           ├── ops-calendar.ts
+│           └── config.ts
+├── PROJECT-MD.txt              ← This file
+├── README.md                   ← Quick reference
+└── schema-reference.sql        ← Database schema (keep updated!)
 ```
 
 ---
 
 ## SECTION 2: BACKEND MODIFICATION PROTOCOL
 
-### ⚠️ LESSONS LEARNED (January 16, 2026)
+### ⚠️ LESSONS LEARNED (January 16-18, 2026)
 
-**What went wrong:** Blind backend edits caused 2+ hours of cascading failures:
-- Imported non-existent file → all endpoints failed
-- Wrong column names in SQL → constraint errors
-- Missing NOT NULL columns → insert failures
+**What went wrong:** 
+- Blind backend edits caused cascading failures
+- Using stale files from memory caused variable conflicts
+- Wrong API endpoints due to not checking existing code
 
 **Root causes:**
 1. Editing files without seeing current deployed version
 2. Writing SQL without verifying actual table schema
-3. No TypeScript validation before deploy
+3. Using files from earlier in conversation instead of requesting fresh uploads
 
-### MANDATORY STEPS FOR BACKEND CHANGES
+### MANDATORY STEPS FOR ANY CODE CHANGES
 
-**Step 1: Get Current Source**
-Before modifying ANY backend file, ask:
-> "Please paste the current content of [filename]"
+**Step 0: Request Current File**
+> "Please upload the current version of [filename]"
 
-**Step 2: Verify Schema Before Writing SQL**
+**NEVER skip this step. NEVER use files from memory.**
+
+**Step 1: Verify Schema Before Writing SQL**
+Check schema-reference.sql first, then verify:
 ```cmd
 npx wrangler d1 execute dispatch-db --remote --command="PRAGMA table_info(table_name);"
 ```
 
-**Step 3: Type Check Before Deploy**
+**Step 2: Type Check Before Deploy**
 ```cmd
 cd C:\Users\Giovanni\Downloads\despatch-app\workers
 npx tsc --noEmit
 ```
 If this fails, DO NOT DEPLOY.
 
-**Step 4: Monitor Logs During Testing**
+**Step 3: Monitor Logs During Testing**
 ```cmd
 npx wrangler tail
 ```
-In another terminal, test the endpoint. Only confirm "fixed" after seeing success in logs.
 
 ### RULES CLAUDE MUST FOLLOW
 
 | Rule | Description |
 |------|-------------|
+| ❌ NEVER | Use a file from memory or earlier in conversation |
+| ❌ NEVER | Modify code without requesting current file first |
 | ❌ NEVER | Import a file without confirming it exists |
 | ❌ NEVER | Write INSERT/UPDATE SQL without verifying column names |
 | ❌ NEVER | Say "fixed" until user confirms it works |
 | ❌ NEVER | Assume column names from memory |
-| ✅ ALWAYS | Ask for current file content for significant backend changes |
+| ✅ ALWAYS | Request current file before ANY code changes |
+| ✅ ALWAYS | Ask for ALL affected files upfront |
 | ✅ ALWAYS | Check table schema before writing SQL |
 | ✅ ALWAYS | Include tenant_id in INSERT statements |
 | ✅ ALWAYS | Check NOT NULL constraints before INSERT |
@@ -125,6 +151,9 @@ cd C:\Users\Giovanni\Downloads\despatch-app\workers
 ```
 ```
 copy C:\Users\Giovanni\Downloads\[filename].ts src\routes\[filename].ts
+```
+```
+npx tsc --noEmit
 ```
 ```
 npx wrangler deploy
@@ -149,7 +178,20 @@ git push
 
 ---
 
-## SECTION 4: DATABASE SCHEMA (VERIFIED January 17, 2026)
+## SECTION 4: DATABASE SCHEMA
+
+### Schema Maintenance
+The file `schema-reference.sql` in the project root contains the complete database schema.
+
+**When to update schema-reference.sql:**
+- After any `ALTER TABLE` command
+- After any `CREATE TABLE` command
+- After adding/removing columns
+
+**To regenerate from live database:**
+```cmd
+npx wrangler d1 execute dispatch-db --remote --command=".schema" > schema-output.txt
+```
 
 ### All Tables
 ```
@@ -182,319 +224,139 @@ vehicle_daily_status
 vehicles
 ```
 
-### COMPLETE TABLE SCHEMAS
-
-#### employees
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | 'default' |
-| depot_id | TEXT | | |
-| employee_number | TEXT | YES | |
-| first_name | TEXT | YES | |
-| last_name | TEXT | YES | |
-| email | TEXT | | |
-| phone | TEXT | | |
-| licence_number | TEXT | | |
-| licence_expiry | TEXT | | |
-| role | TEXT | | 'driver' |
-| status | TEXT | | 'active' |
-| hire_date | TEXT | | |
-| notes | TEXT | | |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| deleted_at | TEXT | | |
-| default_pay_type_id | TEXT | | |
-
-#### vehicles
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | 'default' |
-| depot_id | TEXT | | |
-| fleet_number | TEXT | YES | |
-| rego | TEXT | YES | |
-| capacity | INTEGER | YES | |
-| make | TEXT | | |
-| model | TEXT | | |
-| year | INTEGER | | |
-| vin | TEXT | | |
-| status | TEXT | | 'active' |
-| notes | TEXT | | |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| deleted_at | TEXT | | |
-
-#### shift_templates
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | 'default' |
-| code | TEXT | YES | |
-| name | TEXT | YES | |
-| shift_type | TEXT | YES | 'regular' |
-| route_id | TEXT | | |
-| default_start | REAL | YES | |
-| default_end | REAL | YES | |
-| default_vehicle_id | TEXT | | |
-| notes | TEXT | | |
-| is_active | INTEGER | | 1 |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| deleted_at | TEXT | | |
-
-**⚠️ COMMON MISTAKE:** Uses `default_start`/`default_end` and `is_active`, NOT `start_time`/`end_time` or `status`
-
-#### shift_template_duty_blocks
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| shift_template_id | TEXT | YES | |
-| sequence | INTEGER | YES | |
-| name | TEXT | YES | |
-| driver_id | TEXT | | |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-
-#### shift_template_duty_lines
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| duty_block_id | TEXT | YES | |
-| sequence | INTEGER | YES | |
-| start_time | REAL | YES | |
-| end_time | REAL | YES | |
-| duty_type | TEXT | YES | 'driving' |
-| description | TEXT | | |
-| vehicle_id | TEXT | | |
-| pay_type | TEXT | YES | 'STD' |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| location_name | TEXT | | |
-| location_lat | REAL | | |
-| location_lng | REAL | | |
-
-#### rosters
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | 'default' |
-| code | TEXT | YES | |
-| name | TEXT | YES | |
-| start_date | TEXT | YES | |
-| end_date | TEXT | YES | |
-| status | TEXT | | 'draft' |
-| notes | TEXT | | |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| deleted_at | TEXT | | |
-| calendar_start_date | TEXT | | |
-| calendar_end_date | TEXT | | |
-
-#### roster_entries
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | 'default' |
-| shift_template_id | TEXT | | |
-| date | TEXT | YES | |
-| name | TEXT | YES | |
-| shift_type | TEXT | YES | 'regular' |
-| route_id | TEXT | | |
-| customer_id | TEXT | | |
-| start_time | REAL | YES | |
-| end_time | REAL | YES | |
-| driver_id | TEXT | | |
-| vehicle_id | TEXT | | |
-| status | TEXT | | 'scheduled' |
-| notes | TEXT | | |
-| source | TEXT | | 'manual' |
-| source_roster_id | TEXT | | |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| deleted_at | TEXT | | |
-| roster_id | TEXT | | |
-| duty_block_id | TEXT | | |
-| include_in_dispatch | INTEGER | | 0 |
-
-**⚠️ COMMON MISTAKE:** Column is `date`, NOT `calendar_date`. Column `name` is NOT NULL.
+### Key Table Schemas
 
 #### roster_duty_lines
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
+| Column | Type | NotNull | Description |
+|--------|------|---------|-------------|
 | id | TEXT | PK | |
 | tenant_id | TEXT | YES | |
-| roster_entry_id | TEXT | YES | |
-| source_duty_line_id | TEXT | | |
-| sequence | INTEGER | YES | 1 |
-| start_time | REAL | YES | |
-| end_time | REAL | YES | |
+| roster_entry_id | TEXT | YES | FK to roster_entries |
+| source_duty_line_id | TEXT | | FK to shift_template_duty_lines (NULL = user-added) |
+| sequence | INTEGER | | |
+| start_time | REAL | | Hours (e.g., 6.5 = 6:30am) |
+| end_time | REAL | | |
 | duty_type | TEXT | | |
 | description | TEXT | | |
 | vehicle_id | TEXT | | |
 | vehicle_number | TEXT | | |
-| pay_type | TEXT | | 'STD' |
-| created_at | TEXT | | CURRENT_TIMESTAMP |
-| updated_at | TEXT | | CURRENT_TIMESTAMP |
-| deleted_at | TEXT | | |
+| pay_type | TEXT | | Default 'STD' |
 | location_name | TEXT | | |
 | location_lat | REAL | | |
 | location_lng | REAL | | |
+| created_at | TEXT | | |
+| updated_at | TEXT | | |
+| deleted_at | TEXT | | |
 
-**⚠️ COMMON MISTAKE:** `tenant_id` is NOT NULL - must be included in INSERT
+**⚠️ IMPORTANT:** `source_duty_line_id` distinguishes template-sourced vs user-added duties:
+- `NOT NULL` = copied from shift template
+- `NULL` = user added inline duty
+
+#### roster_entries
+| Column | Type | NotNull | Description |
+|--------|------|---------|-------------|
+| id | TEXT | PK | |
+| tenant_id | TEXT | YES | |
+| roster_id | TEXT | YES | FK to rosters |
+| shift_template_id | TEXT | | FK to shift_templates |
+| duty_block_id | TEXT | | FK to shift_template_duty_blocks |
+| date | TEXT | YES | |
+| name | TEXT | | |
+| start_time | REAL | | |
+| end_time | REAL | | |
+| driver_id | TEXT | | FK to employees |
+| vehicle_id | TEXT | | FK to vehicles |
+| status | TEXT | | |
+| source | TEXT | | |
+| include_in_dispatch | INTEGER | | 0 or 1 |
+| created_at | TEXT | | |
+| updated_at | TEXT | | |
+| deleted_at | TEXT | | |
+
+#### rosters
+| Column | Type | NotNull | Description |
+|--------|------|---------|-------------|
+| id | TEXT | PK | |
+| tenant_id | TEXT | YES | |
+| code | TEXT | YES | Unique code |
+| name | TEXT | YES | |
+| start_date | TEXT | YES | Roster valid from |
+| end_date | TEXT | YES | Roster valid to |
+| calendar_start_date | TEXT | | Scheduled on calendar from |
+| calendar_end_date | TEXT | | Scheduled on calendar to |
+| status | TEXT | | 'draft' or 'published' |
+| notes | TEXT | | |
+| created_at | TEXT | | |
+| updated_at | TEXT | | |
+| deleted_at | TEXT | | |
 
 #### pay_types
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
+| Column | Type | NotNull | Description |
+|--------|------|---------|-------------|
 | id | TEXT | PK | |
 | tenant_id | TEXT | YES | |
-| code | TEXT | YES | |
-| name | TEXT | YES | |
-| hourly_rate | REAL | YES | |
-| display_order | INTEGER | | 0 |
-| is_active | INTEGER | | 1 |
-| deleted_at | TEXT | | |
-| created_at | TEXT | YES | |
-| updated_at | TEXT | YES | |
+| code | TEXT | YES | e.g., 'STD', 'OT' |
+| name | TEXT | YES | e.g., 'Standard', 'Overtime' |
+| multiplier | REAL | | Default 1.0 |
+| is_active | INTEGER | | 0 or 1 |
+| sort_order | INTEGER | | |
+| created_at | TEXT | | |
+| updated_at | TEXT | | |
 
-#### dispatch_commits
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | |
-| commit_date | TEXT | YES | |
-| scope | TEXT | YES | |
-| employee_id | TEXT | | |
-| committed_by | TEXT | YES | |
-| committed_at | TEXT | YES | |
-| notes | TEXT | | |
-
-#### dispatch_adhoc_shifts
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | 'default' |
-| date | TEXT | YES | |
-| employee_id | TEXT | YES | |
-| name | TEXT | YES | 'ADHOC' |
-| start_time | REAL | YES | |
-| end_time | REAL | YES | |
-| vehicle_id | TEXT | | |
-| status | TEXT | | 'active' |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| deleted_at | TEXT | | |
-
-**Note:** Standalone adhoc shifts - no roster or shift template required. Used for on-the-fly duty creation in Dispatch view.
-
-#### dispatch_adhoc_duty_lines
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | 'default' |
-| adhoc_shift_id | TEXT | YES | |
-| sequence | INTEGER | YES | 1 |
-| start_time | REAL | YES | |
-| end_time | REAL | YES | |
-| duty_type | TEXT | YES | 'driving' |
-| description | TEXT | | |
-| vehicle_id | TEXT | | |
-| pay_type | TEXT | YES | 'STD' |
-| location_name | TEXT | | |
-| location_lat | REAL | | |
-| location_lng | REAL | | |
-| created_at | TEXT | | datetime('now') |
-| updated_at | TEXT | | datetime('now') |
-| deleted_at | TEXT | | |
-
-**Note:** References dispatch_adhoc_shifts via adhoc_shift_id. Included in pay commit system.
-
-#### employee_pay_records
-| Column | Type | NotNull | Default |
-|--------|------|---------|---------|
-| id | TEXT | PK | |
-| tenant_id | TEXT | YES | |
-| employee_id | TEXT | YES | |
-| work_date | TEXT | YES | |
-| shift_template_id | TEXT | | |
-| shift_name | TEXT | | |
-| duty_block_id | TEXT | | |
-| duty_name | TEXT | | |
-| pay_type_id | TEXT | | |
-| pay_type_code | TEXT | | |
-| hours | REAL | YES | |
-| rate | REAL | YES | |
-| total_amount | REAL | YES | |
-| source_duty_line_id | TEXT | | |
-| source_type | TEXT | | 'roster' |
-| is_manual | INTEGER | | 0 |
-| notes | TEXT | | |
-| created_at | TEXT | YES | |
-| updated_at | TEXT | YES | |
-
----
-
-## SECTION 5: FOREIGN KEY RELATIONSHIPS
-
-```
-shift_templates
-    ↑
-    │ shift_template_id
-    │
-shift_template_duty_blocks ←──────────────────┐
-    ↑                                         │
-    │ duty_block_id                           │ duty_block_id
-    │                                         │
-shift_template_duty_lines             roster_entries
-                                             ↑
-                                             │ roster_entry_id
-                                             │
-                                      roster_duty_lines
-
-
-dispatch_adhoc_shifts (standalone - no FK to rosters/templates)
-    ↑
-    │ adhoc_shift_id
-    │
-dispatch_adhoc_duty_lines
-```
-
-### Deletion Order (CRITICAL!)
-
-**Roster data:**
+### Foreign Key Deletion Order
+When purging data, delete in this order:
 1. `roster_duty_lines`
 2. `roster_entries`
 3. `rosters`
-
-**Shift template data:**
 4. `shift_template_duty_lines`
 5. `shift_template_duty_blocks`
 6. `shift_templates`
-
-**Adhoc data:**
 7. `dispatch_adhoc_duty_lines`
 8. `dispatch_adhoc_shifts`
 
 ---
 
+## SECTION 5: IMPORTANT BUSINESS LOGIC
+
+### Roster State Management
+- **Roster assignments** (driver_id on roster_entries) are USER-CONTROLLED
+- **Clear Despatch** removes calendar scheduling but PRESERVES roster assignments
+- **Unpublish** reverts to draft but PRESERVES roster assignments and user-added duties
+- **Remove from calendar** only clears calendar dates, preserves everything else
+
+### Inline Duties
+- User can add duties in Dispatch using + buttons
+- These create `roster_duty_lines` with `source_duty_line_id = NULL`
+- Unpublish MUST preserve these (only delete where source_duty_line_id IS NOT NULL)
+- Republish recreates template duties while keeping user-added ones
+
+### Lockout Logic
+- **Published rosters:** Cannot edit shift templates, cannot open roster for editing
+- **Scheduled rosters:** Cannot delete, cannot open for editing
+- Both frontend (roster.js) and backend (roster.ts) enforce lockouts
+
+---
+
 ## SECTION 6: API ENDPOINTS
+
+### Pay Types
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/pay-types` | GET | List all pay types |
+| `/api/pay-types` | POST | Create pay type |
+| `/api/pay-types/:id` | PUT | Update pay type |
+
+**Note:** Endpoint is `/pay-types` NOT `/config/pay-types`
 
 ### Dispatch
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/dispatch/:date` | GET | Full day data |
-| `/api/dispatch/assign` | POST | Assign driver/vehicle |
-| `/api/dispatch/transfer` | POST | Transfer to different driver |
-| `/api/dispatch/unassign` | POST | Remove assignment |
-| `/api/dispatch/update-duty-line` | POST | Update duty line |
-| `/api/dispatch/create-duty-line` | POST | Create new duty line |
-| `/api/dispatch/create-adhoc-shift` | POST | Create adhoc entry |
+| `/api/dispatch/:date` | GET | Get day's dispatch data |
+| `/api/dispatch/commit` | POST | Commit day to payroll |
+| `/api/dispatch/create-duty-line` | POST | Create inline duty |
+| `/api/dispatch/update-duty-line` | POST | Update duty |
 | `/api/dispatch/cancel-duty-line` | POST | Cancel duty |
-| `/api/dispatch/reinstate-duty-line` | POST | Reinstate duty |
-| `/api/dispatch/commit-status/:date` | GET | Get commit status |
-| `/api/dispatch/pay-records/:date` | GET | Get pay records |
-| `/api/dispatch/commit` | POST | Commit day |
-| `/api/dispatch/commit/:id` | DELETE | Uncommit |
+| `/api/dispatch/create-adhoc-shift` | POST | Create adhoc shift |
 
 ### Roster
 | Endpoint | Method | Description |
@@ -503,57 +365,32 @@ dispatch_adhoc_duty_lines
 | `/api/roster/containers/:id` | GET | Get roster |
 | `/api/roster/containers` | POST | Create roster |
 | `/api/roster/containers/:id` | PUT | Update roster |
+| `/api/roster/containers/:id` | DELETE | Delete roster (with lockout checks) |
 | `/api/roster/containers/:id/publish` | POST | Publish |
 | `/api/roster/containers/:id/unpublish` | POST | Unpublish |
-| `/api/roster/assign` | POST | Assign driver |
-| `/api/roster/unassign` | POST | Remove assignment |
-
-### Shifts
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/shifts` | GET | List templates |
-| `/api/shifts/:id` | GET | Get template |
-| `/api/shifts/:id/lock-status` | GET | Check if locked |
-| `/api/shifts` | POST | Create template |
-| `/api/shifts/:id` | PUT | Update template |
-| `/api/shifts/:id` | DELETE | Delete template |
-
-### Employees
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/employees` | GET | List |
-| `/api/employees/:id` | GET | Get one |
-| `/api/employees` | POST | Create |
-| `/api/employees/:id` | PUT | Update |
-| `/api/employees/:id` | DELETE | Delete |
-
-### Pay Types
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/pay-types` | GET | List |
-| `/api/pay-types` | POST | Create |
-| `/api/pay-types/:id` | PUT | Update |
+| `/api/roster/containers/:id/schedule` | POST | Add to calendar |
+| `/api/roster/containers/:id/unschedule` | POST | Remove from calendar |
 
 ---
 
 ## SECTION 7: CURRENT DEVELOPMENT STATUS
 
-### Pay Management Implementation
-| Phase | Feature | Status |
-|-------|---------|--------|
-| 1 | Pay Types Admin | ✅ Complete |
-| 2 | Employee Pay Type Association | ✅ Complete |
-| 3 | Dispatch Commit | ✅ Complete |
-| 4 | Employee Pay Records Tab | 🔄 Next |
-| 5 | Reports | Planned |
+### v1.9.0 Progress (January 18, 2026)
 
-### Phase 4 Requirements
-- New tab on Employee modal: "Pay Records"
-- Columns: Date, Shift, Duty, Pay Type, Hours, Rate, Amount, Note
-- Filters: Date range, Pay type
-- Editable rows (marks as manual adjustment)
-- Totals row
-- Frozen header
+| Task | Status |
+|------|--------|
+| P1.1 Unpublish preserving inline duties | ✅ Complete |
+| P1.2 Pay types from API (dispatch + shifts) | ✅ Complete |
+| P1.3 Roster delete lockout | ✅ Complete |
+| P1.4 Roster open lockout | ✅ Complete |
+| P1.5 Clear Despatch preserving assignments | ✅ Complete |
+| P1.6 HRM page loading fix | ✅ Complete |
+| P2 Commit system rework | 🔄 Next |
+| P3 HRM enhancements | Planned |
+| P4 UI/UX improvements | Planned |
+| P5 Code cleanup | Planned |
+
+See PROJECT-PLAN-2026-01-18.md for full details.
 
 ---
 
@@ -561,12 +398,12 @@ dispatch_adhoc_duty_lines
 
 When starting a new chat, tell Claude:
 
-> "Read PROJECT-MD.txt in my project. I'm working on [specific task]. Follow the Backend Modification Protocol before making any backend changes."
+> "Read PROJECT-MD.txt in my project. I'm working on [specific task]. You must request current files before making any code changes - never use files from memory."
 
 Claude should then:
 1. Acknowledge reading the document
 2. Identify which files need modification
-3. Ask for current file content if backend changes needed
+3. **REQUEST CURRENT FILES** (mandatory, no exceptions)
 4. Verify schema before writing SQL
 5. Provide files for download with deployment commands
 
@@ -574,26 +411,33 @@ Claude should then:
 
 ## SECTION 9: VERSION HISTORY
 
+### v1.9.0 (January 18, 2026)
+- **P1 Bug Fixes:**
+  - Unpublish now preserves user-added inline duties
+  - Pay types fetched from API in dispatch and shift templates
+  - Roster delete blocked when scheduled on calendar
+  - Roster open blocked when scheduled on calendar
+  - Clear Despatch preserves roster assignments
+  - HRM page loading fixed (variable conflict resolved)
+- Added explicit file request requirements to documentation
+- Added schema-reference.sql for schema maintenance
+
 ### v1.8.0 (January 17, 2026)
 - **Adhoc shift refactoring** - Standalone tables (dispatch_adhoc_shifts, dispatch_adhoc_duty_lines)
 - Adhoc shifts no longer create fake roster/template records
-- All dispatch operations (assign, transfer, unassign, cancel, reinstate) support adhoc shifts
-- Adhoc duties included in pay commit system
+- All dispatch operations support adhoc shifts
 - Fixed inline duty insertion time calculation bug
 
 ### v1.7.0 (January 16, 2026)
-- Restored dispatch commit functionality after accidental removal
+- Restored dispatch commit functionality
 - Added comprehensive backend modification protocol
-- Full database schema documentation with verified column names
-- Lessons learned from cascading failure incident
+- Full database schema documentation
 
 ### v1.6.0 (January 16, 2026)
 - Frontend restructured into modular files
-- Improved maintainability
 
 ### v1.5.0 (January 16, 2026)
 - HRM custom fields with layout designer
-- Employee modal tabs
 
 ### v1.4.0 (January 15, 2026)
 - Duty cancellation with visual indicators
@@ -606,7 +450,6 @@ Claude should then:
 
 ### v1.1.0 (January 2026)
 - Roster module with drag-drop
-- Dispatch day view
 
 ### v1.0.0 (December 2025)
 - Initial release
