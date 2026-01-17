@@ -20,6 +20,9 @@ interface CharterJourney {
   dropoff_address?: string;
   dropoff_lat?: number;
   dropoff_lng?: number;
+  dropoff_time?: string;
+  distance_km?: number;
+  journey_time_mins?: number;
   notes?: string;
 }
 
@@ -144,10 +147,11 @@ async function createJourney(request: Request, env: Env): Promise<Response> {
     INSERT INTO charter_journeys (
       id, tenant_id, trip_id, sequence,
       pickup_name, pickup_address, pickup_lat, pickup_lng, pickup_time,
-      dropoff_name, dropoff_address, dropoff_lat, dropoff_lng,
+      dropoff_name, dropoff_address, dropoff_lat, dropoff_lng, dropoff_time,
+      distance_km, journey_time_mins,
       notes,
       created_at, updated_at
-    ) VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, 'default', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id,
     body.trip_id,
@@ -161,6 +165,9 @@ async function createJourney(request: Request, env: Env): Promise<Response> {
     body.dropoff_address || null,
     body.dropoff_lat || null,
     body.dropoff_lng || null,
+    body.dropoff_time || null,
+    body.distance_km || null,
+    body.journey_time_mins || null,
     body.notes || null,
     now,
     now
@@ -233,6 +240,18 @@ async function updateJourney(request: Request, env: Env, journeyId: string): Pro
   if (body.dropoff_lng !== undefined) {
     updates.push('dropoff_lng = ?');
     params.push(body.dropoff_lng);
+  }
+  if (body.dropoff_time !== undefined) {
+    updates.push('dropoff_time = ?');
+    params.push(body.dropoff_time);
+  }
+  if (body.distance_km !== undefined) {
+    updates.push('distance_km = ?');
+    params.push(body.distance_km);
+  }
+  if (body.journey_time_mins !== undefined) {
+    updates.push('journey_time_mins = ?');
+    params.push(body.journey_time_mins);
   }
   if (body.notes !== undefined) {
     updates.push('notes = ?');

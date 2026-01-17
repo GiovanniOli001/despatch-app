@@ -9,12 +9,14 @@ let charterTripsData = [];
 let editingCustomerId = null;
 let editingCharterId = null;
 let editingTripId = null;
-let currentCharterView = 'customers'; // 'customers', 'bookings', 'detail'
+let currentCharterView = 'customers'; // 'customers', 'bookings'
 let currentCharterId = null;
+let currentCharterData = null;
 let customerContactsData = [];
 let editingContactId = null;
 let tripLineItemsData = [];
 let editingLineItemId = null;
+let charterDetailTab = 'charter'; // 'charter', 'trips', 'billing', 'history'
 
 // Journey editor state (like duty lines in shifts)
 let tripJourneys = [];
@@ -43,7 +45,7 @@ const TRIP_STATUS_COLORS = {
 };
 
 // ============================================
-// CHARTER TAB NAVIGATION
+// CHARTER TAB NAVIGATION (Main screen tabs)
 // ============================================
 function switchCharterTab(tab) {
   currentCharterView = tab;
@@ -66,13 +68,11 @@ function switchCharterTab(tab) {
   // Hide all tab content
   const customersTab = document.getElementById('charterTabCustomers');
   const bookingsTab = document.getElementById('charterTabBookings');
-  const detailView = document.getElementById('charterDetailView');
 
   if (customersTab) customersTab.style.display = 'none';
   if (bookingsTab) bookingsTab.style.display = 'none';
-  if (detailView) detailView.style.display = 'none';
 
-  // Show target tab/view
+  // Show target tab
   if (tab === 'customers') {
     if (customersTab) {
       customersTab.style.display = 'block';
@@ -85,13 +85,6 @@ function switchCharterTab(tab) {
       bookingsTab.classList.add('active');
     }
     loadCharters();
-  } else if (tab === 'detail') {
-    if (detailView) {
-      detailView.style.display = 'block';
-    }
-    if (currentCharterId) {
-      loadCharterDetail(currentCharterId);
-    }
   }
 }
 
@@ -143,7 +136,6 @@ function renderCustomersTable() {
 }
 
 function filterCharterCustomers(searchValue) {
-  // Simple client-side filter
   const search = searchValue.toLowerCase();
   const tbody = document.getElementById('charterCustomersTableBody');
   if (!tbody) return;
@@ -221,18 +213,13 @@ function showAddCustomerModal() {
   const title = document.getElementById('customerModalTitle');
   if (title) title.textContent = 'Add Customer';
 
-  // Reset form
   const form = document.getElementById('customerForm');
   if (form) form.reset();
 
-  // Reset to details tab
   switchCustomerModalTab('details');
-
-  // Clear contacts
   customerContactsData = [];
   renderContactsList();
 
-  // Show modal
   const modal = document.getElementById('charterCustomerModalOverlay');
   if (modal) modal.classList.add('show');
 }
@@ -245,7 +232,6 @@ async function editCharterCustomer(id) {
   const title = document.getElementById('customerModalTitle');
   if (title) title.textContent = 'Edit Customer';
 
-  // Fill form fields - map to actual HTML IDs
   setInputValue('custCompanyName', customer.name || customer.company_name);
   setInputValue('custTradingName', customer.trading_name);
   setInputValue('custAbn', customer.abn);
@@ -261,26 +247,20 @@ async function editCharterCustomer(id) {
   setInputValue('custAccountStatus', customer.account_status || 'active');
   setInputValue('custNotes', customer.notes);
 
-  // Reset to details tab
   switchCustomerModalTab('details');
-
-  // Load contacts
   await loadCustomerContacts(id);
 
-  // Show modal
   const modal = document.getElementById('charterCustomerModalOverlay');
   if (modal) modal.classList.add('show');
 }
 
 function switchCustomerModalTab(tabName, evt) {
-  // Update tab buttons
   document.querySelectorAll('#charterCustomerModalOverlay .modal-tab').forEach(tab => {
     tab.classList.remove('active');
   });
   if (evt && evt.target) {
     evt.target.classList.add('active');
   } else {
-    // Find the correct tab button
     document.querySelectorAll('#charterCustomerModalOverlay .modal-tab').forEach(tab => {
       if ((tabName === 'details' && tab.textContent === 'Details') ||
           (tabName === 'contacts' && tab.textContent === 'Contacts')) {
@@ -289,7 +269,6 @@ function switchCustomerModalTab(tabName, evt) {
     });
   }
 
-  // Update tab content
   const detailsTab = document.getElementById('customerTabDetails');
   const contactsTab = document.getElementById('customerTabContacts');
 
@@ -333,16 +312,10 @@ async function saveCharterCustomer() {
 
   try {
     if (editingCustomerId) {
-      await apiRequest(`/charter-customers/${editingCustomerId}`, {
-        method: 'PUT',
-        body: data
-      });
+      await apiRequest(`/charter-customers/${editingCustomerId}`, { method: 'PUT', body: data });
       showToast('Customer updated successfully');
     } else {
-      await apiRequest('/charter-customers', {
-        method: 'POST',
-        body: data
-      });
+      await apiRequest('/charter-customers', { method: 'POST', body: data });
       showToast('Customer created successfully');
     }
 
@@ -468,10 +441,7 @@ async function saveContact() {
   }
 
   try {
-    await apiRequest(`/charter-customers/${editingCustomerId}/contacts`, {
-      method: 'POST',
-      body: data
-    });
+    await apiRequest(`/charter-customers/${editingCustomerId}/contacts`, { method: 'POST', body: data });
     showToast('Contact added');
     closeContactModal();
     await loadCustomerContacts(editingCustomerId);
@@ -486,9 +456,7 @@ async function deleteContact(id) {
     'Are you sure you want to remove this contact?',
     async () => {
       try {
-        await apiRequest(`/charter-customers/${editingCustomerId}/contacts/${id}`, {
-          method: 'DELETE'
-        });
+        await apiRequest(`/charter-customers/${editingCustomerId}/contacts/${id}`, { method: 'DELETE' });
         showToast('Contact removed');
         await loadCustomerContacts(editingCustomerId);
       } catch (err) {
@@ -500,7 +468,7 @@ async function deleteContact(id) {
 }
 
 // ============================================
-// CHARTERS (BOOKINGS) CRUD
+// CHARTERS (BOOKINGS) LIST
 // ============================================
 async function loadCharters() {
   const tbody = document.getElementById('chartersTableBody');
@@ -528,7 +496,6 @@ function renderChartersTable() {
 
   tbody.innerHTML = chartersData.map(ch => {
     const statusBadge = CHARTER_STATUS_COLORS[ch.status] || 'badge-info';
-    // API uses booking_date
     const displayDate = ch.booking_date || ch.event_date || ch.start_date || '—';
 
     return `
@@ -540,7 +507,7 @@ function renderChartersTable() {
         <td>${ch.trip_count || 0}</td>
         <td><span class="badge ${statusBadge}">${escapeHtml(ch.status || 'enquiry')}</span></td>
         <td onclick="event.stopPropagation();">
-          <button class="action-btn" onclick="editCharter('${ch.id}')">Edit</button>
+          <button class="action-btn" onclick="openCharterDetail('${ch.id}')">Open</button>
           <button class="action-btn danger" onclick="deleteCharter('${ch.id}', '${escapeHtml(ch.charter_number || '')}')">Delete</button>
         </td>
       </tr>
@@ -549,11 +516,299 @@ function renderChartersTable() {
 }
 
 function filterCharters(filters) {
-  // This function handles the inline filter inputs
-  // Filters can contain: search, status
-  loadCharters(); // For now, just reload - could enhance with client-side filtering
+  loadCharters();
 }
 
+// ============================================
+// CHARTER DETAIL MODAL (Large Tabbed Modal)
+// ============================================
+async function openCharterDetail(id) {
+  currentCharterId = id;
+  charterDetailTab = 'charter';
+
+  // Create or get the modal
+  let modal = document.getElementById('charterDetailModalOverlay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'charterDetailModalOverlay';
+    modal.className = 'crud-modal-overlay';
+    document.body.appendChild(modal);
+  }
+
+  modal.innerHTML = `
+    <div class="crud-modal charter-detail-modal" style="width: 95%; max-width: 1400px; height: 90vh; display: flex; flex-direction: column;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="charterDetailTitle">Loading...</span>
+        <button type="button" class="crud-modal-close" onclick="closeCharterDetailModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body" style="flex: 1; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
+        <div style="padding: 20px; text-align: center;">Loading charter details...</div>
+      </div>
+    </div>
+  `;
+
+  modal.classList.add('show');
+
+  // Load the charter data
+  try {
+    const result = await apiRequest(`/charters/${id}`);
+    currentCharterData = result.data;
+
+    if (!currentCharterData) {
+      showToast('Charter not found', true);
+      closeCharterDetailModal();
+      return;
+    }
+
+    // Load trips
+    const tripsResult = await apiRequest(`/charter-trips?charter_id=${id}`);
+    charterTripsData = tripsResult.data || [];
+
+    renderCharterDetailModal();
+  } catch (err) {
+    showToast(`Error: ${err.message}`, true);
+    closeCharterDetailModal();
+  }
+}
+
+function closeCharterDetailModal() {
+  const modal = document.getElementById('charterDetailModalOverlay');
+  if (modal) modal.classList.remove('show');
+  currentCharterId = null;
+  currentCharterData = null;
+}
+
+function switchCharterDetailTab(tab) {
+  charterDetailTab = tab;
+  renderCharterDetailModalContent();
+}
+
+function renderCharterDetailModal() {
+  const modal = document.getElementById('charterDetailModalOverlay');
+  if (!modal || !currentCharterData) return;
+
+  const charter = currentCharterData;
+  const statusBadge = CHARTER_STATUS_COLORS[charter.status] || 'badge-info';
+
+  const modalContent = modal.querySelector('.crud-modal');
+  modalContent.innerHTML = `
+    <div class="crud-modal-header" style="border-bottom: none; padding-bottom: 0;">
+      <div style="display: flex; align-items: center; gap: 16px;">
+        <span class="crud-modal-title" style="font-family: 'JetBrains Mono', monospace; font-size: 20px;">
+          ${escapeHtml(charter.charter_number || 'NEW')}
+        </span>
+        <span class="badge ${statusBadge}">${escapeHtml(charter.status || 'enquiry')}</span>
+        <span style="color: var(--text-secondary); font-size: 14px;">
+          ${escapeHtml(charter.customer_name || '')}
+          ${charter.name ? ` - ${escapeHtml(charter.name)}` : ''}
+        </span>
+      </div>
+      <button type="button" class="crud-modal-close" onclick="closeCharterDetailModal()">&times;</button>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="modal-tabs" style="display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px;">
+      <button type="button" class="modal-tab ${charterDetailTab === 'charter' ? 'active' : ''}" onclick="switchCharterDetailTab('charter')">Charter</button>
+      <button type="button" class="modal-tab ${charterDetailTab === 'trips' ? 'active' : ''}" onclick="switchCharterDetailTab('trips')">Trips</button>
+      <button type="button" class="modal-tab ${charterDetailTab === 'billing' ? 'active' : ''}" onclick="switchCharterDetailTab('billing')">Billing</button>
+      <button type="button" class="modal-tab ${charterDetailTab === 'history' ? 'active' : ''}" onclick="switchCharterDetailTab('history')">History</button>
+    </div>
+
+    <div class="crud-modal-body" id="charterDetailContent" style="flex: 1; overflow-y: auto; padding: 20px;">
+      <!-- Tab content rendered here -->
+    </div>
+  `;
+
+  renderCharterDetailModalContent();
+}
+
+function renderCharterDetailModalContent() {
+  const container = document.getElementById('charterDetailContent');
+  if (!container || !currentCharterData) return;
+
+  const charter = currentCharterData;
+
+  switch (charterDetailTab) {
+    case 'charter':
+      container.innerHTML = renderCharterTabContent(charter);
+      break;
+    case 'trips':
+      container.innerHTML = renderTripsTabContent();
+      break;
+    case 'billing':
+      container.innerHTML = renderBillingTabContent(charter);
+      break;
+    case 'history':
+      container.innerHTML = renderHistoryTabContent(charter);
+      break;
+  }
+}
+
+function renderCharterTabContent(charter) {
+  return `
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+      <div>
+        <h4 style="margin: 0 0 16px 0; color: var(--text-secondary);">Charter Details</h4>
+        <div class="form-group">
+          <label>Charter Name</label>
+          <input type="text" id="charterDetailName" value="${escapeHtml(charter.name || '')}"
+            onchange="updateCharterField('name', this.value)"
+            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="charterDetailDesc" rows="3"
+            onchange="updateCharterField('description', this.value)"
+            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); resize: vertical;">${escapeHtml(charter.description || '')}</textarea>
+        </div>
+        <div class="form-group">
+          <label>Event Date</label>
+          <input type="date" id="charterDetailDate" value="${charter.booking_date || charter.event_date || ''}"
+            onchange="updateCharterField('booking_date', this.value)"
+            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+        </div>
+        <div class="form-group">
+          <label>Status</label>
+          <select id="charterDetailStatus" onchange="updateCharterField('status', this.value)"
+            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+            <option value="enquiry" ${charter.status === 'enquiry' ? 'selected' : ''}>Enquiry</option>
+            <option value="quoted" ${charter.status === 'quoted' ? 'selected' : ''}>Quoted</option>
+            <option value="confirmed" ${charter.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
+            <option value="completed" ${charter.status === 'completed' ? 'selected' : ''}>Completed</option>
+            <option value="invoiced" ${charter.status === 'invoiced' ? 'selected' : ''}>Invoiced</option>
+            <option value="paid" ${charter.status === 'paid' ? 'selected' : ''}>Paid</option>
+            <option value="cancelled" ${charter.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <h4 style="margin: 0 0 16px 0; color: var(--text-secondary);">Customer Information</h4>
+        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 6px; border: 1px solid var(--border);">
+          <p style="margin: 0 0 8px 0;"><strong>${escapeHtml(charter.customer_name || '')}</strong></p>
+          <p style="margin: 0; color: var(--text-muted); font-size: 13px;">
+            ${charter.customer_email ? `Email: ${escapeHtml(charter.customer_email)}<br>` : ''}
+            ${charter.customer_phone ? `Phone: ${escapeHtml(charter.customer_phone)}` : ''}
+          </p>
+        </div>
+
+        <h4 style="margin: 24px 0 16px 0; color: var(--text-secondary);">Summary</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+          <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; border: 1px solid var(--border); text-align: center;">
+            <div style="font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', monospace;">${charterTripsData.length}</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Total Trips</div>
+          </div>
+          <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; border: 1px solid var(--border); text-align: center;">
+            <div style="font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', monospace;">${charterTripsData.reduce((sum, t) => sum + (t.passenger_count || 0), 0)}</div>
+            <div style="font-size: 12px; color: var(--text-muted);">Total Passengers</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px;">
+      <button type="button" class="btn-secondary" onclick="closeCharterDetailModal()">Close</button>
+      <button type="button" class="btn-primary" onclick="saveCharterDetails()">Save Changes</button>
+    </div>
+  `;
+}
+
+function renderTripsTabContent() {
+  return `
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h4 style="margin: 0; color: var(--text-secondary);">Trips</h4>
+      <button type="button" class="btn-primary" onclick="showAddTripModal()">+ Add Trip</button>
+    </div>
+
+    <div class="screen-table-container" style="max-height: calc(100% - 60px); overflow-y: auto;">
+      <table class="screen-table">
+        <thead>
+          <tr>
+            <th>Trip</th>
+            <th>Date</th>
+            <th style="text-align: center;">Journeys</th>
+            <th style="text-align: center;">Passengers</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${charterTripsData.length === 0
+            ? '<tr><td colspan="6" class="loading-cell">No trips yet. Click "+ Add Trip" to create one.</td></tr>'
+            : charterTripsData.map(trip => {
+                const tripStatus = trip.operational_status || trip.status || 'draft';
+                const statusBadge = TRIP_STATUS_COLORS[tripStatus] || 'badge-info';
+                const journeyCount = trip.journey_count !== undefined ? trip.journey_count : '—';
+
+                return `
+                  <tr style="cursor: pointer;" onclick="editTrip('${trip.id}')">
+                    <td>${escapeHtml(trip.name || trip.trip_name || `Trip ${trip.trip_number || ''}`)}</td>
+                    <td>${trip.trip_date || '—'}</td>
+                    <td style="text-align: center; font-family: 'JetBrains Mono', monospace;">${journeyCount}</td>
+                    <td style="text-align: center;">${trip.passenger_count || '—'}</td>
+                    <td><span class="badge ${statusBadge}">${escapeHtml(tripStatus)}</span></td>
+                    <td onclick="event.stopPropagation();">
+                      <button class="action-btn" onclick="editTrip('${trip.id}')">Edit</button>
+                      <button class="action-btn danger" onclick="deleteTrip('${trip.id}')">Delete</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')
+          }
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderBillingTabContent(charter) {
+  return `
+    <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+      <h4 style="margin: 0 0 8px 0;">Billing</h4>
+      <p>Billing functionality coming soon.</p>
+      <p style="font-size: 13px;">This will include invoices, payments, and billing line items.</p>
+    </div>
+  `;
+}
+
+function renderHistoryTabContent(charter) {
+  return `
+    <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+      <h4 style="margin: 0 0 8px 0;">History</h4>
+      <p>Audit history coming soon.</p>
+      <p style="font-size: 13px;">This will show all changes made to this charter.</p>
+    </div>
+  `;
+}
+
+async function updateCharterField(field, value) {
+  if (currentCharterData) {
+    currentCharterData[field] = value;
+  }
+}
+
+async function saveCharterDetails() {
+  if (!currentCharterId || !currentCharterData) return;
+
+  const data = {
+    name: currentCharterData.name,
+    description: currentCharterData.description,
+    booking_date: currentCharterData.booking_date,
+    status: currentCharterData.status
+  };
+
+  try {
+    await apiRequest(`/charters/${currentCharterId}`, { method: 'PUT', body: data });
+    showToast('Charter saved');
+    renderCharterDetailModal();
+    loadCharters(); // Refresh the list in background
+  } catch (err) {
+    showToast(`Error: ${err.message}`, true);
+  }
+}
+
+// ============================================
+// QUICK ADD CHARTER MODAL (Small Modal)
+// ============================================
 async function showAddCharterModal() {
   editingCharterId = null;
   const title = document.getElementById('charterModalTitle');
@@ -562,7 +817,6 @@ async function showAddCharterModal() {
   const form = document.getElementById('charterForm');
   if (form) form.reset();
 
-  // Load customers for dropdown
   await populateCustomerDropdown();
 
   const modal = document.getElementById('charterModalOverlay');
@@ -584,41 +838,6 @@ async function populateCustomerDropdown() {
   }
 }
 
-async function editCharter(id) {
-  const charter = chartersData.find(c => c.id === id);
-  if (!charter) {
-    // Try to fetch it
-    try {
-      const result = await apiRequest(`/charters/${id}`);
-      if (result.data) {
-        await editCharterWithData(result.data);
-      }
-    } catch (err) {
-      showToast(`Error loading charter: ${err.message}`, true);
-    }
-    return;
-  }
-
-  await editCharterWithData(charter);
-}
-
-async function editCharterWithData(charter) {
-  editingCharterId = charter.id;
-  const title = document.getElementById('charterModalTitle');
-  if (title) title.textContent = 'Edit Charter';
-
-  await populateCustomerDropdown();
-
-  setInputValue('charterCustomerId', charter.customer_id);
-  setInputValue('charterName', charter.name || charter.description);
-  // API uses booking_date, but also check event_date for backwards compat
-  setInputValue('charterEventDate', charter.booking_date || charter.event_date || charter.start_date);
-  setInputValue('charterDescription', charter.description);
-
-  const modal = document.getElementById('charterModalOverlay');
-  if (modal) modal.classList.add('show');
-}
-
 function closeCharterModal() {
   const modal = document.getElementById('charterModalOverlay');
   if (modal) modal.classList.remove('show');
@@ -631,7 +850,6 @@ async function saveCharter() {
     name: getInputValue('charterName') || null,
     description: getInputValue('charterDescription') || null,
     booking_date: getInputValue('charterEventDate') || null,
-    event_date: getInputValue('charterEventDate') || null,
     status: 'enquiry'
   };
 
@@ -641,29 +859,15 @@ async function saveCharter() {
   }
 
   try {
-    if (editingCharterId) {
-      await apiRequest(`/charters/${editingCharterId}`, {
-        method: 'PUT',
-        body: data
-      });
-      showToast('Charter updated');
-    } else {
-      const result = await apiRequest('/charters', {
-        method: 'POST',
-        body: data
-      });
-      showToast('Charter created');
+    const result = await apiRequest('/charters', { method: 'POST', body: data });
+    showToast('Charter created');
+    closeCharterModal();
 
-      // Open the detail view for the new charter
-      if (result.data && result.data.id) {
-        currentCharterId = result.data.id;
-        closeCharterModal();
-        switchCharterTab('detail');
-        return;
-      }
+    // Open the detail modal for the new charter
+    if (result.data && result.data.id) {
+      await openCharterDetail(result.data.id);
     }
 
-    closeCharterModal();
     loadCharters();
   } catch (err) {
     showToast(`Error: ${err.message}`, true);
@@ -688,119 +892,6 @@ async function deleteCharter(id, charterNumber) {
 }
 
 // ============================================
-// CHARTER DETAIL VIEW
-// ============================================
-async function openCharterDetail(id) {
-  currentCharterId = id;
-  switchCharterTab('detail');
-}
-
-async function loadCharterDetail(id) {
-  const detailView = document.getElementById('charterDetailView');
-  if (!detailView) return;
-
-  detailView.innerHTML = '<div style="padding: 40px; text-align: center;">Loading charter details...</div>';
-
-  try {
-    const result = await apiRequest(`/charters/${id}`);
-    const charter = result.data;
-
-    if (!charter) {
-      detailView.innerHTML = '<div style="padding: 40px; text-align: center;">Charter not found</div>';
-      return;
-    }
-
-    // Load trips for this charter
-    const tripsResult = await apiRequest(`/charter-trips?charter_id=${id}`);
-    charterTripsData = tripsResult.data || [];
-
-    renderCharterDetailView(charter);
-  } catch (err) {
-    detailView.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--accent-red);">Error: ${err.message}</div>`;
-  }
-}
-
-function renderCharterDetailView(charter) {
-  const detailView = document.getElementById('charterDetailView');
-  if (!detailView) return;
-
-  const statusBadge = CHARTER_STATUS_COLORS[charter.status] || 'badge-info';
-
-  detailView.innerHTML = `
-    <div class="charter-detail">
-      <div class="charter-detail-header" style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
-        <div>
-          <h2 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 12px;">
-            <span style="font-family: 'JetBrains Mono', monospace;">${escapeHtml(charter.charter_number || 'NEW')}</span>
-            <span class="badge ${statusBadge}">${escapeHtml(charter.status || 'enquiry')}</span>
-          </h2>
-          <p style="margin: 0; color: var(--text-secondary);">
-            <strong>${escapeHtml(charter.customer_name || '')}</strong>
-            ${charter.name ? ` - ${escapeHtml(charter.name)}` : ''}
-          </p>
-          ${charter.booking_date || charter.event_date ? `<p style="margin: 4px 0 0 0; color: var(--text-muted);">Event Date: ${charter.booking_date || charter.event_date}</p>` : ''}
-        </div>
-        <div style="display: flex; gap: 8px;">
-          <button class="btn-secondary" onclick="editCharter('${charter.id}')">Edit Charter</button>
-          <button class="btn-primary" onclick="showAddTripModal('${charter.id}')">+ Add Trip</button>
-          <button class="btn-secondary" onclick="switchCharterTab('bookings')">Back to List</button>
-        </div>
-      </div>
-
-      <div class="charter-trips-section" style="margin-top: 24px;">
-        <h3 style="margin: 0 0 16px 0;">Trips</h3>
-        <div class="screen-table-container">
-          <table class="screen-table">
-            <thead>
-              <tr>
-                <th>Trip</th>
-                <th>Date</th>
-                <th style="text-align: center;">Journeys</th>
-                <th>Passengers</th>
-                <th>Status</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="charterDetailTripsBody">
-              ${renderDetailTripsRows()}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderDetailTripsRows() {
-  if (charterTripsData.length === 0) {
-    return '<tr><td colspan="6" class="loading-cell">No trips yet. Click "+ Add Trip" to create one.</td></tr>';
-  }
-
-  return charterTripsData.map(trip => {
-    // API uses operational_status, fallback to status
-    const tripStatus = trip.operational_status || trip.status || 'draft';
-    const statusBadge = TRIP_STATUS_COLORS[tripStatus] || 'badge-info';
-
-    // Journey count - will be populated when we load full trip data
-    const journeyCount = trip.journey_count !== undefined ? trip.journey_count : '—';
-
-    return `
-      <tr style="cursor: pointer;" onclick="editTrip('${trip.id}')">
-        <td>${escapeHtml(trip.name || trip.trip_name || `Trip ${trip.trip_number || ''}`)}</td>
-        <td>${trip.trip_date || '—'}</td>
-        <td style="text-align: center; font-family: 'JetBrains Mono', monospace;">${journeyCount}</td>
-        <td style="text-align: center;">${trip.passenger_count || '—'}</td>
-        <td><span class="badge ${statusBadge}">${escapeHtml(tripStatus)}</span></td>
-        <td onclick="event.stopPropagation();">
-          <button class="action-btn" onclick="editTrip('${trip.id}')">Edit</button>
-          <button class="action-btn danger" onclick="deleteTrip('${trip.id}')">Delete</button>
-        </td>
-      </tr>
-    `;
-  }).join('');
-}
-
-// ============================================
 // TRIPS CRUD
 // ============================================
 function showAddTripModal(charterId) {
@@ -813,13 +904,9 @@ function showAddTripModal(charterId) {
   const form = document.getElementById('tripForm');
   if (form) form.reset();
 
-  // Store charter ID for saving
   currentCharterId = charterId || currentCharterId;
 
-  // Add default first journey
   addJourney();
-
-  // Render the journey editor
   renderTripJourneys();
 
   const modal = document.getElementById('charterTripModalOverlay');
@@ -840,7 +927,15 @@ async function editTrip(id) {
     return;
   }
 
-  await editTripWithData(trip);
+  // Fetch full trip data with journeys
+  try {
+    const result = await apiRequest(`/charter-trips/${id}`);
+    if (result.data) {
+      await editTripWithData(result.data);
+    }
+  } catch (err) {
+    await editTripWithData(trip);
+  }
 }
 
 async function editTripWithData(trip) {
@@ -850,14 +945,12 @@ async function editTripWithData(trip) {
   const title = document.getElementById('tripModalTitle');
   if (title) title.textContent = 'Edit Trip';
 
-  // Set trip-level fields
   setInputValue('tripName', trip.name || trip.trip_name);
   setInputValue('tripDate', trip.trip_date);
   setInputValue('tripPassengerCount', trip.passenger_count);
   setInputValue('tripVehicleCapacity', trip.vehicle_capacity_required || trip.vehicle_capacity);
   setInputValue('tripPassengerNotes', trip.passenger_notes);
 
-  // Set checkboxes for vehicle requirements
   const reqs = parseVehicleRequirements(trip.vehicle_features_required || trip.vehicle_requirements);
   setCheckbox('tripReqWheelchair', reqs.wheelchair);
   setCheckbox('tripReqAc', reqs.ac);
@@ -866,38 +959,37 @@ async function editTripWithData(trip) {
   setCheckbox('tripReqWifi', reqs.wifi);
   setCheckbox('tripReqSeatbelts', reqs.seatbelts);
 
-  // Load journeys - either from trip object (full load) or fetch separately
-  try {
-    let journeysData = trip.journeys || [];
+  // Load journeys
+  let journeysData = trip.journeys || [];
 
-    // If journeys not included in trip, fetch them separately
-    if (journeysData.length === 0 && !trip.journeys) {
+  if (journeysData.length === 0) {
+    try {
       const journeysResult = await apiRequest(`/charter-journeys?trip_id=${trip.id}`);
       journeysData = journeysResult.data || [];
+    } catch (err) {
+      console.error('Error loading journeys:', err);
     }
+  }
 
-    tripJourneys = journeysData.map(j => ({
-      id: j.id,
-      sequence: j.sequence,
-      pickup_time: j.pickup_time || '',
-      pickup_name: j.pickup_name || '',
-      pickup_address: j.pickup_address || '',
-      pickup_lat: j.pickup_lat,
-      pickup_lng: j.pickup_lng,
-      dropoff_name: j.dropoff_name || '',
-      dropoff_address: j.dropoff_address || '',
-      dropoff_lat: j.dropoff_lat,
-      dropoff_lng: j.dropoff_lng,
-      notes: j.notes || ''
-    }));
+  tripJourneys = journeysData.map(j => ({
+    id: j.id,
+    sequence: j.sequence,
+    pickup_time: j.pickup_time || '',
+    pickup_name: j.pickup_name || '',
+    pickup_address: j.pickup_address || '',
+    pickup_lat: j.pickup_lat,
+    pickup_lng: j.pickup_lng,
+    dropoff_time: j.dropoff_time || '',
+    dropoff_name: j.dropoff_name || '',
+    dropoff_address: j.dropoff_address || '',
+    dropoff_lat: j.dropoff_lat,
+    dropoff_lng: j.dropoff_lng,
+    distance_km: j.distance_km,
+    journey_time_mins: j.journey_time_mins,
+    notes: j.notes || ''
+  }));
 
-    // If no journeys exist, add a default one
-    if (tripJourneys.length === 0) {
-      addJourney();
-    }
-  } catch (err) {
-    console.error('Error loading journeys:', err);
-    tripJourneys = [];
+  if (tripJourneys.length === 0) {
     addJourney();
   }
 
@@ -924,7 +1016,6 @@ function closeTripModal() {
 }
 
 async function saveTrip() {
-  // Build vehicle requirements
   const vehicleRequirements = {
     wheelchair: document.getElementById('tripReqWheelchair')?.checked || false,
     ac: document.getElementById('tripReqAc')?.checked || false,
@@ -950,7 +1041,6 @@ async function saveTrip() {
     return;
   }
 
-  // Validate journeys
   if (tripJourneys.length === 0) {
     showToast('At least one journey is required', true);
     return;
@@ -975,17 +1065,10 @@ async function saveTrip() {
   try {
     let tripId = editingTripId;
 
-    // Save or create trip
     if (editingTripId) {
-      await apiRequest(`/charter-trips/${editingTripId}`, {
-        method: 'PUT',
-        body: tripData
-      });
+      await apiRequest(`/charter-trips/${editingTripId}`, { method: 'PUT', body: tripData });
     } else {
-      const result = await apiRequest('/charter-trips', {
-        method: 'POST',
-        body: tripData
-      });
+      const result = await apiRequest('/charter-trips', { method: 'POST', body: tripData });
       tripId = result.data.id;
     }
 
@@ -1000,34 +1083,32 @@ async function saveTrip() {
         pickup_address: j.pickup_address || null,
         pickup_lat: j.pickup_lat || null,
         pickup_lng: j.pickup_lng || null,
+        dropoff_time: j.dropoff_time || null,
         dropoff_name: j.dropoff_name,
         dropoff_address: j.dropoff_address || null,
         dropoff_lat: j.dropoff_lat || null,
         dropoff_lng: j.dropoff_lng || null,
+        distance_km: j.distance_km || null,
+        journey_time_mins: j.journey_time_mins || null,
         notes: j.notes || null
       };
 
       if (j.id && !j.id.startsWith('new_')) {
-        // Update existing journey
-        await apiRequest(`/charter-journeys/${j.id}`, {
-          method: 'PUT',
-          body: journeyData
-        });
+        await apiRequest(`/charter-journeys/${j.id}`, { method: 'PUT', body: journeyData });
       } else {
-        // Create new journey
-        await apiRequest('/charter-journeys', {
-          method: 'POST',
-          body: journeyData
-        });
+        await apiRequest('/charter-journeys', { method: 'POST', body: journeyData });
       }
     }
 
     showToast(editingTripId ? 'Trip updated' : 'Trip created');
     closeTripModal();
 
-    // Reload the charter detail view
+    // Reload trips in the charter detail modal
     if (currentCharterId) {
-      await loadCharterDetail(currentCharterId);
+      const tripsResult = await apiRequest(`/charter-trips?charter_id=${currentCharterId}`);
+      charterTripsData = tripsResult.data || [];
+      renderCharterDetailModalContent();
+      loadCharters();
     }
   } catch (err) {
     showToast(`Error: ${err.message}`, true);
@@ -1042,8 +1123,13 @@ async function deleteTrip(id) {
       try {
         await apiRequest(`/charter-trips/${id}`, { method: 'DELETE' });
         showToast('Trip deleted');
+
+        // Reload trips
         if (currentCharterId) {
-          await loadCharterDetail(currentCharterId);
+          const tripsResult = await apiRequest(`/charter-trips?charter_id=${currentCharterId}`);
+          charterTripsData = tripsResult.data || [];
+          renderCharterDetailModalContent();
+          loadCharters();
         }
       } catch (err) {
         showToast(`Error: ${err.message}`, true);
@@ -1054,7 +1140,7 @@ async function deleteTrip(id) {
 }
 
 // ============================================
-// JOURNEY EDITOR (Inline table like duty lines)
+// JOURNEY EDITOR (New Structure)
 // ============================================
 function addJourney() {
   const newJourney = {
@@ -1065,10 +1151,13 @@ function addJourney() {
     pickup_address: '',
     pickup_lat: null,
     pickup_lng: null,
+    dropoff_time: '',
     dropoff_name: '',
     dropoff_address: '',
     dropoff_lat: null,
     dropoff_lng: null,
+    distance_km: null,
+    journey_time_mins: null,
     notes: ''
   };
   tripJourneys.push(newJourney);
@@ -1083,14 +1172,12 @@ function removeJourney(index) {
 
   const journey = tripJourneys[index];
 
-  // If it's an existing journey, delete from server
   if (journey.id && !journey.id.startsWith('new_')) {
     apiRequest(`/charter-journeys/${journey.id}`, { method: 'DELETE' })
       .catch(err => console.error('Error deleting journey:', err));
   }
 
   tripJourneys.splice(index, 1);
-  // Resequence
   tripJourneys.forEach((j, i) => j.sequence = i + 1);
   renderTripJourneys();
 }
@@ -1099,12 +1186,10 @@ function moveJourney(index, direction) {
   const newIndex = direction === 'up' ? index - 1 : index + 1;
   if (newIndex < 0 || newIndex >= tripJourneys.length) return;
 
-  // Swap
   const temp = tripJourneys[index];
   tripJourneys[index] = tripJourneys[newIndex];
   tripJourneys[newIndex] = temp;
 
-  // Resequence
   tripJourneys.forEach((j, i) => j.sequence = i + 1);
   renderTripJourneys();
 }
@@ -1128,13 +1213,17 @@ function renderTripJourneys() {
     return;
   }
 
+  // New column structure: # | Pickup Time | Pickup Location | Dropoff Time | Dropoff Location | Distance | Time | Notes | Actions
   container.innerHTML = `
     <div class="journey-editor">
-      <div class="journey-header" style="display: grid; grid-template-columns: 40px 80px 1fr 1fr 150px 40px; gap: 8px; padding: 8px 12px; background: var(--bg-tertiary); font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border);">
+      <div class="journey-header" style="display: grid; grid-template-columns: 36px 70px 1fr 70px 1fr 70px 60px 100px 36px; gap: 6px; padding: 8px 10px; background: var(--bg-tertiary); font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border);">
         <span>#</span>
+        <span>Pickup</span>
+        <span>Location</span>
+        <span>Dropoff</span>
+        <span>Location</span>
+        <span>Dist (km)</span>
         <span>Time</span>
-        <span>Pickup Location</span>
-        <span>Dropoff Location</span>
         <span>Notes</span>
         <span></span>
       </div>
@@ -1144,57 +1233,94 @@ function renderTripJourneys() {
 }
 
 function renderJourneyRow(journey, index) {
+  const distanceDisplay = journey.distance_km ? journey.distance_km.toFixed(1) : '';
+  const timeDisplay = journey.journey_time_mins ? journey.journey_time_mins : '';
+
   return `
-    <div class="journey-row" style="display: grid; grid-template-columns: 40px 80px 1fr 1fr 150px 40px; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); align-items: start;">
-      <div style="display: flex; flex-direction: column; gap: 2px;">
-        <button type="button" class="journey-move-btn" onclick="moveJourney(${index}, 'up')" ${index === 0 ? 'disabled' : ''} style="padding: 2px 6px; font-size: 10px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer;">▲</button>
-        <span style="text-align: center; font-weight: 600; font-size: 12px;">${index + 1}</span>
-        <button type="button" class="journey-move-btn" onclick="moveJourney(${index}, 'down')" ${index === tripJourneys.length - 1 ? 'disabled' : ''} style="padding: 2px 6px; font-size: 10px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer;">▼</button>
+    <div class="journey-row" style="display: grid; grid-template-columns: 36px 70px 1fr 70px 1fr 70px 60px 100px 36px; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
+        <button type="button" onclick="moveJourney(${index}, 'up')" ${index === 0 ? 'disabled' : ''} style="padding: 1px 4px; font-size: 9px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; color: var(--text-muted);">▲</button>
+        <span style="font-weight: 600; font-size: 11px;">${index + 1}</span>
+        <button type="button" onclick="moveJourney(${index}, 'down')" ${index === tripJourneys.length - 1 ? 'disabled' : ''} style="padding: 1px 4px; font-size: 9px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; color: var(--text-muted);">▼</button>
       </div>
+
       <div>
-        <input type="time"
-          value="${journey.pickup_time || ''}"
+        <input type="time" value="${journey.pickup_time || ''}"
           onchange="updateJourney(${index}, 'pickup_time', this.value)"
-          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
       </div>
+
       <div style="position: relative;">
-        <input type="text"
-          id="journeyPickup_${index}"
-          value="${escapeHtml(journey.pickup_name || '')}"
+        <input type="text" id="journeyPickup_${index}" value="${escapeHtml(journey.pickup_name || '')}"
           oninput="onJourneyLocationInput(${index}, 'pickup', this.value)"
-          onchange="updateJourney(${index}, 'pickup_name', this.value)"
-          placeholder="Search pickup location..."
-          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+          placeholder="Search location..."
+          style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
         <div id="journeyPickupSuggestions_${index}" class="location-suggestions" style="display: none;"></div>
-        ${journey.pickup_lat ? `<small style="color: var(--text-muted); font-size: 10px;">${journey.pickup_lat.toFixed(4)}, ${journey.pickup_lng.toFixed(4)}</small>` : ''}
       </div>
-      <div style="position: relative;">
-        <input type="text"
-          id="journeyDropoff_${index}"
-          value="${escapeHtml(journey.dropoff_name || '')}"
-          oninput="onJourneyLocationInput(${index}, 'dropoff', this.value)"
-          onchange="updateJourney(${index}, 'dropoff_name', this.value)"
-          placeholder="Search dropoff location..."
-          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
-        <div id="journeyDropoffSuggestions_${index}" class="location-suggestions" style="display: none;"></div>
-        ${journey.dropoff_lat ? `<small style="color: var(--text-muted); font-size: 10px;">${journey.dropoff_lat.toFixed(4)}, ${journey.dropoff_lng.toFixed(4)}</small>` : ''}
-      </div>
+
       <div>
-        <input type="text"
-          value="${escapeHtml(journey.notes || '')}"
+        <input type="time" value="${journey.dropoff_time || ''}"
+          onchange="updateJourney(${index}, 'dropoff_time', this.value); calculateJourneyTime(${index});"
+          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
+      </div>
+
+      <div style="position: relative;">
+        <input type="text" id="journeyDropoff_${index}" value="${escapeHtml(journey.dropoff_name || '')}"
+          oninput="onJourneyLocationInput(${index}, 'dropoff', this.value)"
+          placeholder="Search location..."
+          style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
+        <div id="journeyDropoffSuggestions_${index}" class="location-suggestions" style="display: none;"></div>
+      </div>
+
+      <div>
+        <input type="number" step="0.1" value="${distanceDisplay}"
+          onchange="updateJourney(${index}, 'distance_km', parseFloat(this.value) || null)"
+          placeholder="—"
+          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); text-align: center;">
+      </div>
+
+      <div>
+        <input type="number" value="${timeDisplay}"
+          onchange="updateJourney(${index}, 'journey_time_mins', parseInt(this.value) || null)"
+          placeholder="—"
+          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); text-align: center;">
+      </div>
+
+      <div>
+        <input type="text" value="${escapeHtml(journey.notes || '')}"
           onchange="updateJourney(${index}, 'notes', this.value)"
           placeholder="Notes..."
-          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+          style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
       </div>
+
       <div style="text-align: center;">
-        <button type="button" onclick="removeJourney(${index})" title="Remove journey" style="padding: 4px 8px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px;">&times;</button>
+        <button type="button" onclick="removeJourney(${index})" title="Remove journey" style="padding: 2px 6px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px;">&times;</button>
       </div>
     </div>
   `;
 }
 
+// Calculate journey time from pickup and dropoff times
+function calculateJourneyTime(index) {
+  const j = tripJourneys[index];
+  if (j.pickup_time && j.dropoff_time) {
+    const [pickupH, pickupM] = j.pickup_time.split(':').map(Number);
+    const [dropoffH, dropoffM] = j.dropoff_time.split(':').map(Number);
+    const pickupMins = pickupH * 60 + pickupM;
+    const dropoffMins = dropoffH * 60 + dropoffM;
+    let diff = dropoffMins - pickupMins;
+    if (diff < 0) diff += 24 * 60; // Handle overnight
+
+    // Only update if not already set
+    if (!j.journey_time_mins) {
+      updateJourney(index, 'journey_time_mins', diff);
+      renderTripJourneys();
+    }
+  }
+}
+
 // ============================================
-// JOURNEY LOCATION AUTOCOMPLETE
+// JOURNEY LOCATION AUTOCOMPLETE + ROUTE CALC
 // ============================================
 function onJourneyLocationInput(index, type, value) {
   clearTimeout(journeyAutocompleteTimeout);
@@ -1202,7 +1328,6 @@ function onJourneyLocationInput(index, type, value) {
   const suggestionsId = `journey${type.charAt(0).toUpperCase() + type.slice(1)}Suggestions_${index}`;
   const suggestions = document.getElementById(suggestionsId);
 
-  // Update the value immediately
   updateJourney(index, `${type}_name`, value);
 
   if (!value || value.length < 3) {
@@ -1254,23 +1379,67 @@ function showJourneySuggestions(index, type, results) {
   suggestions.style.display = 'block';
 }
 
-function selectJourneyLocation(index, type, name, lat, lng) {
+async function selectJourneyLocation(index, type, name, lat, lng) {
   tripJourneys[index][`${type}_name`] = name;
   tripJourneys[index][`${type}_lat`] = lat;
   tripJourneys[index][`${type}_lng`] = lng;
 
-  // Update the input
   const inputId = `journey${type.charAt(0).toUpperCase() + type.slice(1)}_${index}`;
   const input = document.getElementById(inputId);
   if (input) input.value = name;
 
-  // Hide suggestions
   const suggestionsId = `journey${type.charAt(0).toUpperCase() + type.slice(1)}Suggestions_${index}`;
   const suggestions = document.getElementById(suggestionsId);
   if (suggestions) suggestions.style.display = 'none';
 
-  // Re-render to show coords
+  // If both pickup and dropoff have coords, calculate route
+  const j = tripJourneys[index];
+  if (j.pickup_lat && j.pickup_lng && j.dropoff_lat && j.dropoff_lng) {
+    await calculateJourneyRoute(index);
+  }
+
   renderTripJourneys();
+}
+
+async function calculateJourneyRoute(index) {
+  const j = tripJourneys[index];
+  if (!j.pickup_lat || !j.dropoff_lat) return;
+
+  try {
+    // Use OSRM for route calculation (same as app.js fetchOSRMRoute)
+    const url = `https://router.project-osrm.org/route/v1/driving/${j.pickup_lng},${j.pickup_lat};${j.dropoff_lng},${j.dropoff_lat}?overview=false`;
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Route calculation failed');
+
+    const data = await response.json();
+    if (data.code !== 'Ok' || !data.routes || !data.routes[0]) {
+      throw new Error('No route found');
+    }
+
+    const route = data.routes[0];
+    const distanceKm = route.distance / 1000; // meters to km
+    const durationMins = Math.round(route.duration / 60); // seconds to mins
+
+    // Update journey with calculated values
+    tripJourneys[index].distance_km = Math.round(distanceKm * 10) / 10; // 1 decimal
+    tripJourneys[index].journey_time_mins = durationMins;
+
+    // Calculate dropoff time if pickup time is set
+    if (j.pickup_time && !j.dropoff_time) {
+      const [h, m] = j.pickup_time.split(':').map(Number);
+      const pickupMins = h * 60 + m;
+      const dropoffMins = pickupMins + durationMins;
+      const dropoffH = Math.floor(dropoffMins / 60) % 24;
+      const dropoffM = dropoffMins % 60;
+      tripJourneys[index].dropoff_time = `${String(dropoffH).padStart(2, '0')}:${String(dropoffM).padStart(2, '0')}`;
+    }
+
+    console.log(`Route calculated: ${distanceKm.toFixed(1)} km, ${durationMins} mins`);
+  } catch (err) {
+    console.error('Route calculation error:', err);
+    // Don't show error to user - they can enter manually
+  }
 }
 
 // ============================================
@@ -1312,13 +1481,9 @@ async function saveLineItem() {
   }
 
   try {
-    await apiRequest(`/charter-trips/${editingTripId}/line-items`, {
-      method: 'POST',
-      body: data
-    });
+    await apiRequest(`/charter-trips/${editingTripId}/line-items`, { method: 'POST', body: data });
     showToast('Line item added');
     closeLineItemModal();
-    // Could reload line items here if we had a display for them
   } catch (err) {
     showToast(`Error: ${err.message}`, true);
   }
@@ -1342,18 +1507,7 @@ function setCheckbox(id, checked) {
   if (el) el.checked = !!checked;
 }
 
-function parseCoords(coordString) {
-  if (!coordString) return { lat: null, lng: null };
-  const parts = coordString.split(',').map(s => s.trim());
-  if (parts.length !== 2) return { lat: null, lng: null };
-  return {
-    lat: parseFloat(parts[0]) || null,
-    lng: parseFloat(parts[1]) || null
-  };
-}
-
 // Initialize when charters screen is shown
 function initChartersModule() {
-  // This will be called when navigating to the charters screen
   switchCharterTab('customers');
 }

@@ -649,6 +649,9 @@ CREATE TABLE charter_journeys (
   dropoff_address TEXT,
   dropoff_lat REAL,
   dropoff_lng REAL,
+  dropoff_time TEXT,  -- HH:MM format (auto-calculated or manual)
+  distance_km REAL,   -- Auto-calculated from OSRM or manual override
+  journey_time_mins INTEGER,  -- Auto-calculated or manual override
   notes TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
