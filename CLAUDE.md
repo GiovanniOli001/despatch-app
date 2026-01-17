@@ -65,8 +65,47 @@ npx wrangler tail         # Monitor logs
 ### Frontend (Cloudflare Pages)
 ```bash
 git add .
-git commit -m "your message"
+git commit -m "feat: your message"
 git push                  # Auto-deploys in ~30 seconds
+```
+
+## Git Commit Convention
+
+Use semantic commit messages following the Conventional Commits specification.
+
+### Format
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+### Types
+| Type | Description |
+|------|-------------|
+| `feat` | New feature or functionality |
+| `fix` | Bug fix |
+| `docs` | Documentation changes |
+| `style` | Formatting, whitespace (no code change) |
+| `refactor` | Code restructuring (no feature/fix) |
+| `perf` | Performance improvement |
+| `test` | Adding or updating tests |
+| `chore` | Maintenance, dependencies, config |
+
+### Scopes (optional)
+- `frontend` - Frontend changes
+- `backend` - Backend/API changes
+- `db` - Database/schema changes
+- `ui` - UI/styling changes
+- `api` - API endpoint changes
+
+### Examples
+```
+feat(frontend): add dark mode toggle
+fix(backend): correct pay type hourly rate calculation
+docs: update API endpoint reference
+refactor(dispatch): extract duty line validation
+chore: update wrangler dependencies
 ```
 
 ### Database Operations
