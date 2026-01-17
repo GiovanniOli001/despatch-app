@@ -63,33 +63,45 @@ export async function commitDay(env: Env, input: CommitInput): Promise<Response>
     return error('Employee ID is required for individual commit');
   }
 
-  // Check if already committed
+  const now = new Date().toISOString();
+  let commitId: string;
+
+  // Check if already committed - if so, update timestamp instead of error
   const existingCommit = await env.DB.prepare(`
     SELECT id FROM dispatch_commits 
-    WHERE tenant_id = ? AND commit_date = ? AND (scope = 'all' OR employee_id = ?)
-  `).bind(TENANT_ID, date, employee_id || '').first();
+    WHERE tenant_id = ? AND commit_date = ? AND scope = ? AND (employee_id = ? OR (employee_id IS NULL AND ? IS NULL))
+  `).bind(TENANT_ID, date, scope, employee_id || null, employee_id || null).first();
 
   if (existingCommit) {
-    return error('This date/employee is already committed', 409);
+    // Update existing commit timestamp
+    commitId = (existingCommit as any).id;
+    await env.DB.prepare(`
+      UPDATE dispatch_commits SET committed_at = ?, notes = ? WHERE id = ?
+    `).bind(now, notes || null, commitId).run();
+  } else {
+    // Create new commit record
+    commitId = uuid();
+    await env.DB.prepare(`
+      INSERT INTO dispatch_commits (id, tenant_id, commit_date, scope, employee_id, committed_by, committed_at, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(commitId, TENANT_ID, date, scope, employee_id || null, 'system', now, notes || null).run();
   }
 
-  const commitId = uuid();
-  const now = new Date().toISOString();
-
-  // Create commit record
-  await env.DB.prepare(`
-    INSERT INTO dispatch_commits (id, tenant_id, commit_date, scope, employee_id, committed_by, committed_at, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(commitId, TENANT_ID, date, scope, employee_id || null, 'system', now, notes || null).run();
-
-  // Generate pay records from duty lines
+  // Generate pay records from duty lines (skips already-committed and cancelled)
   const payRecordsCreated = await generatePayRecords(env, date, scope, employee_id);
 
   // Audit log
   await env.DB.prepare(`
     INSERT INTO audit_log (id, tenant_id, entity_type, entity_id, action, changed_by, changed_at, notes)
-    VALUES (?, ?, 'dispatch_commit', ?, 'create', 'system', ?, ?)
-  `).bind(uuid(), TENANT_ID, commitId, now, `Committed ${scope === 'all' ? 'all drivers' : 'individual driver'} for ${date}`).run();
+    VALUES (?, ?, 'dispatch_commit', ?, ?, 'system', ?, ?)
+  `).bind(
+    uuid(), 
+    TENANT_ID, 
+    commitId, 
+    existingCommit ? 'update' : 'create', 
+    now, 
+    `${existingCommit ? 'Re-committed' : 'Committed'} ${scope === 'all' ? 'all drivers' : 'individual driver'} for ${date}. ${payRecordsCreated} new records.`
+  ).run();
 
   return json({
     success: true,
@@ -98,9 +110,10 @@ export async function commitDay(env: Env, input: CommitInput): Promise<Response>
       date,
       scope,
       employee_id,
-      pay_records_created: payRecordsCreated
+      pay_records_created: payRecordsCreated,
+      was_update: !!existingCommit
     }
-  }, 201);
+  }, existingCommit ? 200 : 201);
 }
 
 // ============================================
@@ -114,6 +127,7 @@ async function generatePayRecords(
   employeeId?: string
 ): Promise<number> {
   // Get all duty lines for this date from published rosters
+  // Exclude cancelled duties (those with entries in dispatch_duty_cancellations)
   let rosterQuery = `
     SELECT 
       rdl.id as duty_line_id,
@@ -134,11 +148,13 @@ async function generatePayRecords(
     JOIN shift_template_duty_blocks stdb ON re.duty_block_id = stdb.id
     JOIN shift_templates st ON stdb.shift_template_id = st.id
     LEFT JOIN employees e ON re.driver_id = e.id
+    LEFT JOIN dispatch_duty_cancellations ddc ON rdl.id = ddc.roster_duty_line_id
     WHERE r.tenant_id = ?
       AND r.status = 'published'
       AND re.date = ?
       AND re.driver_id IS NOT NULL
       AND rdl.deleted_at IS NULL
+      AND ddc.id IS NULL
   `;
   
   const rosterBindings: any[] = [TENANT_ID, date];
@@ -273,10 +289,13 @@ async function generatePayRecords(
 }
 
 // ============================================
-// UNCOMMIT
+// UNCOMMIT - DISABLED (P2.1)
+// Commits are now permanent and additive-only.
+// Pay record corrections should be made in HRM.
 // ============================================
 
-export async function uncommitDay(env: Env, commitId: string): Promise<Response> {
+// Function retained but not exported for potential admin use
+async function uncommitDay_DISABLED(env: Env, commitId: string): Promise<Response> {
   // Get commit info
   const commit = await env.DB.prepare(`
     SELECT * FROM dispatch_commits WHERE id = ? AND tenant_id = ?

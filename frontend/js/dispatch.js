@@ -7788,30 +7788,31 @@ function updateCommitUI() {
   
   if (!indicator || !statusText) return;
   
+  // Always hide uncommit button (P2.1 - uncommit removed)
+  if (btnUncommit) btnUncommit.style.display = 'none';
+  
+  // Always show commit button (can re-commit to capture new duties)
+  if (btnCommit) btnCommit.style.display = '';
+  
   if (!currentCommitStatus) {
     indicator.className = 'commit-indicator';
     statusText.textContent = 'Not committed';
-    if (btnCommit) btnCommit.style.display = '';
-    if (btnUncommit) btnUncommit.style.display = 'none';
     return;
   }
   
   if (currentCommitStatus.is_fully_committed) {
     indicator.className = 'commit-indicator committed';
-    const commitTime = new Date(currentCommitStatus.all_commit.committed_at).toLocaleTimeString();
-    statusText.textContent = `Committed at ${commitTime}`;
-    if (btnCommit) btnCommit.style.display = 'none';
-    if (btnUncommit) btnUncommit.style.display = '';
+    // P2.3 - Show "Last committed: DD/MM/YYYY HH:MM"
+    const commitDate = new Date(currentCommitStatus.all_commit.committed_at);
+    const dateStr = commitDate.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const timeStr = commitDate.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+    statusText.textContent = `Last committed: ${dateStr} ${timeStr}`;
   } else if (currentCommitStatus.committed_employee_ids?.length > 0) {
     indicator.className = 'commit-indicator partial';
     statusText.textContent = `${currentCommitStatus.committed_employee_ids.length} driver(s) committed`;
-    if (btnCommit) btnCommit.style.display = '';
-    if (btnUncommit) btnUncommit.style.display = '';
   } else {
     indicator.className = 'commit-indicator';
     statusText.textContent = 'Not committed';
-    if (btnCommit) btnCommit.style.display = '';
-    if (btnUncommit) btnUncommit.style.display = 'none';
   }
 }
 
@@ -7944,37 +7945,6 @@ async function executeCommit() {
   }
 }
 
-async function uncommitDay() {
-  if (!currentCommitStatus) return;
-  
-  let commitToRemove = null;
-  
-  if (currentCommitStatus.is_fully_committed) {
-    commitToRemove = currentCommitStatus.all_commit;
-  } else if (currentCommitStatus.individual_commits?.length === 1) {
-    commitToRemove = currentCommitStatus.individual_commits[0];
-  } else if (currentCommitStatus.individual_commits?.length > 1) {
-    // Multiple individual commits - need to pick which one
-    showToast('Multiple individual commits exist. Please use the employee pay records to manage.', 'info');
-    return;
-  }
-  
-  if (!commitToRemove) {
-    showToast('No commit found to remove', 'error');
-    return;
-  }
-  
-  if (!confirm('Are you sure you want to uncommit? This will remove generated pay records.')) {
-    return;
-  }
-  
-  try {
-    await apiRequest(`/dispatch/commit/${commitToRemove.id}`, { method: 'DELETE' });
-    showToast('Day uncommitted', 'success');
-    await loadCommitStatus();
-  } catch (err) {
-    showToast(err.message || 'Failed to uncommit', 'error');
-  }
-}
+// uncommitDay removed in P2.1 - commits are now permanent and additive-only
 
 // Commit status is now loaded with main dispatch data

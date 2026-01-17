@@ -12,7 +12,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
-import { getCommitStatus, commitDay, uncommitDay, getPayRecordsForDate } from './dispatch-commit';
+import { getCommitStatus, commitDay, getPayRecordsForDate } from './dispatch-commit';
 
 const TENANT_ID = 'default';
 
@@ -109,9 +109,10 @@ export async function handleDispatch(
       return commitDay(env, body);
     }
     
-    // DELETE /api/dispatch/commit/:id - Uncommit
+    // DELETE /api/dispatch/commit/:id - Uncommit (DISABLED - P2.1)
+    // Commits are now permanent. Pay corrections should be made in HRM.
     if (method === 'DELETE' && seg1 === 'commit' && seg2) {
-      return uncommitDay(env, seg2);
+      return error('Uncommit has been disabled. Please make corrections in employee pay records.', 403);
     }
 
     // ========================================
