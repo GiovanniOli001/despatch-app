@@ -16,8 +16,12 @@ let editingContactId = null;
 let tripLineItemsData = [];
 let editingLineItemId = null;
 
+// Journey editor state (like duty lines in shifts)
+let tripJourneys = [];
+
 // Location autocomplete state
-let locationAutocompleteTimeout = null;
+let journeyAutocompleteTimeout = null;
+let activeLocationInput = null;
 
 // Status badge colors
 const CHARTER_STATUS_COLORS = {
@@ -751,8 +755,7 @@ function renderCharterDetailView(charter) {
               <tr>
                 <th>Trip</th>
                 <th>Date</th>
-                <th>Pickup</th>
-                <th>Dropoff</th>
+                <th style="text-align: center;">Journeys</th>
                 <th>Passengers</th>
                 <th>Status</th>
                 <th>Actions</th>
@@ -770,7 +773,7 @@ function renderCharterDetailView(charter) {
 
 function renderDetailTripsRows() {
   if (charterTripsData.length === 0) {
-    return '<tr><td colspan="7" class="loading-cell">No trips yet. Click "+ Add Trip" to create one.</td></tr>';
+    return '<tr><td colspan="6" class="loading-cell">No trips yet. Click "+ Add Trip" to create one.</td></tr>';
   }
 
   return charterTripsData.map(trip => {
@@ -778,18 +781,17 @@ function renderDetailTripsRows() {
     const tripStatus = trip.operational_status || trip.status || 'draft';
     const statusBadge = TRIP_STATUS_COLORS[tripStatus] || 'badge-info';
 
+    // Journey count - will be populated when we load full trip data
+    const journeyCount = trip.journey_count !== undefined ? trip.journey_count : '—';
+
     return `
-      <tr>
+      <tr style="cursor: pointer;" onclick="editTrip('${trip.id}')">
         <td>${escapeHtml(trip.name || trip.trip_name || `Trip ${trip.trip_number || ''}`)}</td>
         <td>${trip.trip_date || '—'}</td>
-        <td>
-          <div>${escapeHtml(trip.pickup_name || trip.pickup_location || '—')}</div>
-          ${trip.pickup_time ? `<small style="color: var(--text-muted);">${trip.pickup_time}</small>` : ''}
-        </td>
-        <td>${escapeHtml(trip.dropoff_name || trip.dropoff_location || '—')}</td>
-        <td>${trip.passenger_count || '—'}</td>
+        <td style="text-align: center; font-family: 'JetBrains Mono', monospace;">${journeyCount}</td>
+        <td style="text-align: center;">${trip.passenger_count || '—'}</td>
         <td><span class="badge ${statusBadge}">${escapeHtml(tripStatus)}</span></td>
-        <td>
+        <td onclick="event.stopPropagation();">
           <button class="action-btn" onclick="editTrip('${trip.id}')">Edit</button>
           <button class="action-btn danger" onclick="deleteTrip('${trip.id}')">Delete</button>
         </td>
@@ -803,6 +805,8 @@ function renderDetailTripsRows() {
 // ============================================
 function showAddTripModal(charterId) {
   editingTripId = null;
+  tripJourneys = [];
+
   const title = document.getElementById('tripModalTitle');
   if (title) title.textContent = 'Add Trip';
 
@@ -812,8 +816,11 @@ function showAddTripModal(charterId) {
   // Store charter ID for saving
   currentCharterId = charterId || currentCharterId;
 
-  // Setup location autocomplete
-  setupLocationAutocomplete();
+  // Add default first journey
+  addJourney();
+
+  // Render the journey editor
+  renderTripJourneys();
 
   const modal = document.getElementById('charterTripModalOverlay');
   if (modal) modal.classList.add('show');
@@ -843,59 +850,80 @@ async function editTripWithData(trip) {
   const title = document.getElementById('tripModalTitle');
   if (title) title.textContent = 'Edit Trip';
 
+  // Set trip-level fields
   setInputValue('tripName', trip.name || trip.trip_name);
   setInputValue('tripDate', trip.trip_date);
-  setInputValue('tripPickupTime', trip.pickup_time);
-  setInputValue('tripPickupName', trip.pickup_name || trip.pickup_location);
-  setInputValue('tripPickupAddress', trip.pickup_address);
-  setInputValue('tripDropoffName', trip.dropoff_name || trip.dropoff_location);
-  setInputValue('tripDropoffAddress', trip.dropoff_address);
   setInputValue('tripPassengerCount', trip.passenger_count);
-  setInputValue('tripVehicleCapacity', trip.vehicle_capacity);
+  setInputValue('tripVehicleCapacity', trip.vehicle_capacity_required || trip.vehicle_capacity);
   setInputValue('tripPassengerNotes', trip.passenger_notes);
-  setInputValue('tripInstructions', trip.instructions || trip.notes);
-
-  // Set coordinates
-  if (trip.pickup_lat && trip.pickup_lng) {
-    setInputValue('tripPickupCoords', `${trip.pickup_lat}, ${trip.pickup_lng}`);
-  }
-  if (trip.dropoff_lat && trip.dropoff_lng) {
-    setInputValue('tripDropoffCoords', `${trip.dropoff_lat}, ${trip.dropoff_lng}`);
-  }
 
   // Set checkboxes for vehicle requirements
-  if (trip.vehicle_requirements) {
-    try {
-      const reqs = typeof trip.vehicle_requirements === 'string' ?
-        JSON.parse(trip.vehicle_requirements) : trip.vehicle_requirements;
-      setCheckbox('tripReqWheelchair', reqs.wheelchair);
-      setCheckbox('tripReqAc', reqs.ac);
-      setCheckbox('tripReqToilet', reqs.toilet);
-      setCheckbox('tripReqLuggage', reqs.luggage);
-      setCheckbox('tripReqWifi', reqs.wifi);
-      setCheckbox('tripReqSeatbelts', reqs.seatbelts);
-    } catch (e) {
-      console.error('Error parsing vehicle requirements:', e);
+  const reqs = parseVehicleRequirements(trip.vehicle_features_required || trip.vehicle_requirements);
+  setCheckbox('tripReqWheelchair', reqs.wheelchair);
+  setCheckbox('tripReqAc', reqs.ac);
+  setCheckbox('tripReqToilet', reqs.toilet);
+  setCheckbox('tripReqLuggage', reqs.luggage);
+  setCheckbox('tripReqWifi', reqs.wifi);
+  setCheckbox('tripReqSeatbelts', reqs.seatbelts);
+
+  // Load journeys - either from trip object (full load) or fetch separately
+  try {
+    let journeysData = trip.journeys || [];
+
+    // If journeys not included in trip, fetch them separately
+    if (journeysData.length === 0 && !trip.journeys) {
+      const journeysResult = await apiRequest(`/charter-journeys?trip_id=${trip.id}`);
+      journeysData = journeysResult.data || [];
     }
+
+    tripJourneys = journeysData.map(j => ({
+      id: j.id,
+      sequence: j.sequence,
+      pickup_time: j.pickup_time || '',
+      pickup_name: j.pickup_name || '',
+      pickup_address: j.pickup_address || '',
+      pickup_lat: j.pickup_lat,
+      pickup_lng: j.pickup_lng,
+      dropoff_name: j.dropoff_name || '',
+      dropoff_address: j.dropoff_address || '',
+      dropoff_lat: j.dropoff_lat,
+      dropoff_lng: j.dropoff_lng,
+      notes: j.notes || ''
+    }));
+
+    // If no journeys exist, add a default one
+    if (tripJourneys.length === 0) {
+      addJourney();
+    }
+  } catch (err) {
+    console.error('Error loading journeys:', err);
+    tripJourneys = [];
+    addJourney();
   }
 
-  setupLocationAutocomplete();
+  renderTripJourneys();
 
   const modal = document.getElementById('charterTripModalOverlay');
   if (modal) modal.classList.add('show');
+}
+
+function parseVehicleRequirements(reqs) {
+  if (!reqs) return {};
+  try {
+    return typeof reqs === 'string' ? JSON.parse(reqs) : reqs;
+  } catch (e) {
+    return {};
+  }
 }
 
 function closeTripModal() {
   const modal = document.getElementById('charterTripModalOverlay');
   if (modal) modal.classList.remove('show');
   editingTripId = null;
+  tripJourneys = [];
 }
 
 async function saveTrip() {
-  // Parse coordinates
-  const pickupCoords = parseCoords(getInputValue('tripPickupCoords'));
-  const dropoffCoords = parseCoords(getInputValue('tripDropoffCoords'));
-
   // Build vehicle requirements
   const vehicleRequirements = {
     wheelchair: document.getElementById('tripReqWheelchair')?.checked || false,
@@ -906,64 +934,95 @@ async function saveTrip() {
     seatbelts: document.getElementById('tripReqSeatbelts')?.checked || false
   };
 
-  const data = {
+  const tripData = {
     charter_id: currentCharterId,
     name: getInputValue('tripName') || null,
-    trip_name: getInputValue('tripName') || null,
     trip_date: getInputValue('tripDate') || null,
-    pickup_time: getInputValue('tripPickupTime') || null,
-    pickup_name: getInputValue('tripPickupName') || null,
-    pickup_location: getInputValue('tripPickupName') || null,
-    pickup_address: getInputValue('tripPickupAddress') || null,
-    pickup_lat: pickupCoords.lat,
-    pickup_lng: pickupCoords.lng,
-    dropoff_name: getInputValue('tripDropoffName') || null,
-    dropoff_location: getInputValue('tripDropoffName') || null,
-    dropoff_address: getInputValue('tripDropoffAddress') || null,
-    dropoff_lat: dropoffCoords.lat,
-    dropoff_lng: dropoffCoords.lng,
     passenger_count: parseInt(getInputValue('tripPassengerCount')) || 1,
-    vehicle_capacity: parseInt(getInputValue('tripVehicleCapacity')) || null,
-    vehicle_requirements: JSON.stringify(vehicleRequirements),
+    vehicle_capacity_required: parseInt(getInputValue('tripVehicleCapacity')) || null,
+    vehicle_features_required: JSON.stringify(vehicleRequirements),
     passenger_notes: getInputValue('tripPassengerNotes') || null,
-    special_instructions: getInputValue('tripInstructions') || null,
-    notes: getInputValue('tripInstructions') || null,
-    operational_status: editingTripId ? undefined : 'draft', // Only set on create
-    status: 'draft'
+    operational_status: editingTripId ? undefined : 'draft'
   };
 
-  if (!data.trip_date) {
+  if (!tripData.trip_date) {
     showToast('Trip date is required', true);
     return;
   }
-  if (!data.pickup_time) {
-    showToast('Pickup time is required', true);
+
+  // Validate journeys
+  if (tripJourneys.length === 0) {
+    showToast('At least one journey is required', true);
     return;
   }
-  if (!data.pickup_name) {
-    showToast('Pickup location is required', true);
-    return;
-  }
-  if (!data.dropoff_name) {
-    showToast('Dropoff location is required', true);
-    return;
+
+  for (let i = 0; i < tripJourneys.length; i++) {
+    const j = tripJourneys[i];
+    if (!j.pickup_name) {
+      showToast(`Journey ${i + 1}: Pickup location is required`, true);
+      return;
+    }
+    if (!j.dropoff_name) {
+      showToast(`Journey ${i + 1}: Dropoff location is required`, true);
+      return;
+    }
+    if (!j.pickup_time) {
+      showToast(`Journey ${i + 1}: Pickup time is required`, true);
+      return;
+    }
   }
 
   try {
+    let tripId = editingTripId;
+
+    // Save or create trip
     if (editingTripId) {
       await apiRequest(`/charter-trips/${editingTripId}`, {
         method: 'PUT',
-        body: data
+        body: tripData
       });
-      showToast('Trip updated');
     } else {
-      await apiRequest('/charter-trips', {
+      const result = await apiRequest('/charter-trips', {
         method: 'POST',
-        body: data
+        body: tripData
       });
-      showToast('Trip created');
+      tripId = result.data.id;
     }
 
+    // Save journeys
+    for (let i = 0; i < tripJourneys.length; i++) {
+      const j = tripJourneys[i];
+      const journeyData = {
+        trip_id: tripId,
+        sequence: i + 1,
+        pickup_time: j.pickup_time,
+        pickup_name: j.pickup_name,
+        pickup_address: j.pickup_address || null,
+        pickup_lat: j.pickup_lat || null,
+        pickup_lng: j.pickup_lng || null,
+        dropoff_name: j.dropoff_name,
+        dropoff_address: j.dropoff_address || null,
+        dropoff_lat: j.dropoff_lat || null,
+        dropoff_lng: j.dropoff_lng || null,
+        notes: j.notes || null
+      };
+
+      if (j.id && !j.id.startsWith('new_')) {
+        // Update existing journey
+        await apiRequest(`/charter-journeys/${j.id}`, {
+          method: 'PUT',
+          body: journeyData
+        });
+      } else {
+        // Create new journey
+        await apiRequest('/charter-journeys', {
+          method: 'POST',
+          body: journeyData
+        });
+      }
+    }
+
+    showToast(editingTripId ? 'Trip updated' : 'Trip created');
     closeTripModal();
 
     // Reload the charter detail view
@@ -978,7 +1037,7 @@ async function saveTrip() {
 async function deleteTrip(id) {
   showConfirmModal(
     'Delete Trip',
-    'Are you sure you want to delete this trip?',
+    'Are you sure you want to delete this trip and all its journeys?',
     async () => {
       try {
         await apiRequest(`/charter-trips/${id}`, { method: 'DELETE' });
@@ -995,47 +1054,167 @@ async function deleteTrip(id) {
 }
 
 // ============================================
-// LOCATION AUTOCOMPLETE
+// JOURNEY EDITOR (Inline table like duty lines)
 // ============================================
-function setupLocationAutocomplete() {
-  const pickupInput = document.getElementById('tripPickupName');
-  const dropoffInput = document.getElementById('tripDropoffName');
+function addJourney() {
+  const newJourney = {
+    id: 'new_' + Date.now(),
+    sequence: tripJourneys.length + 1,
+    pickup_time: '',
+    pickup_name: '',
+    pickup_address: '',
+    pickup_lat: null,
+    pickup_lng: null,
+    dropoff_name: '',
+    dropoff_address: '',
+    dropoff_lat: null,
+    dropoff_lng: null,
+    notes: ''
+  };
+  tripJourneys.push(newJourney);
+  renderTripJourneys();
+}
 
-  if (pickupInput) {
-    // Remove any existing listeners
-    pickupInput.removeEventListener('input', handlePickupInput);
-    pickupInput.addEventListener('input', handlePickupInput);
+function removeJourney(index) {
+  if (tripJourneys.length === 1) {
+    showToast('At least one journey is required', true);
+    return;
   }
 
-  if (dropoffInput) {
-    // Remove any existing listeners
-    dropoffInput.removeEventListener('input', handleDropoffInput);
-    dropoffInput.addEventListener('input', handleDropoffInput);
+  const journey = tripJourneys[index];
+
+  // If it's an existing journey, delete from server
+  if (journey.id && !journey.id.startsWith('new_')) {
+    apiRequest(`/charter-journeys/${journey.id}`, { method: 'DELETE' })
+      .catch(err => console.error('Error deleting journey:', err));
+  }
+
+  tripJourneys.splice(index, 1);
+  // Resequence
+  tripJourneys.forEach((j, i) => j.sequence = i + 1);
+  renderTripJourneys();
+}
+
+function moveJourney(index, direction) {
+  const newIndex = direction === 'up' ? index - 1 : index + 1;
+  if (newIndex < 0 || newIndex >= tripJourneys.length) return;
+
+  // Swap
+  const temp = tripJourneys[index];
+  tripJourneys[index] = tripJourneys[newIndex];
+  tripJourneys[newIndex] = temp;
+
+  // Resequence
+  tripJourneys.forEach((j, i) => j.sequence = i + 1);
+  renderTripJourneys();
+}
+
+function updateJourney(index, field, value) {
+  if (tripJourneys[index]) {
+    tripJourneys[index][field] = value;
   }
 }
 
-function handlePickupInput(e) {
-  searchLocation(e.target.value, 'pickup');
+function renderTripJourneys() {
+  const container = document.getElementById('tripJourneysContainer');
+  if (!container) return;
+
+  if (tripJourneys.length === 0) {
+    container.innerHTML = `
+      <div class="journey-editor-empty" style="padding: 20px; text-align: center; color: var(--text-muted);">
+        No journeys added. Click "+ Add Journey" to start.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="journey-editor">
+      <div class="journey-header" style="display: grid; grid-template-columns: 40px 80px 1fr 1fr 150px 40px; gap: 8px; padding: 8px 12px; background: var(--bg-tertiary); font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border);">
+        <span>#</span>
+        <span>Time</span>
+        <span>Pickup Location</span>
+        <span>Dropoff Location</span>
+        <span>Notes</span>
+        <span></span>
+      </div>
+      ${tripJourneys.map((j, idx) => renderJourneyRow(j, idx)).join('')}
+    </div>
+  `;
 }
 
-function handleDropoffInput(e) {
-  searchLocation(e.target.value, 'dropoff');
+function renderJourneyRow(journey, index) {
+  return `
+    <div class="journey-row" style="display: grid; grid-template-columns: 40px 80px 1fr 1fr 150px 40px; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); align-items: start;">
+      <div style="display: flex; flex-direction: column; gap: 2px;">
+        <button type="button" class="journey-move-btn" onclick="moveJourney(${index}, 'up')" ${index === 0 ? 'disabled' : ''} style="padding: 2px 6px; font-size: 10px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer;">▲</button>
+        <span style="text-align: center; font-weight: 600; font-size: 12px;">${index + 1}</span>
+        <button type="button" class="journey-move-btn" onclick="moveJourney(${index}, 'down')" ${index === tripJourneys.length - 1 ? 'disabled' : ''} style="padding: 2px 6px; font-size: 10px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; cursor: pointer;">▼</button>
+      </div>
+      <div>
+        <input type="time"
+          value="${journey.pickup_time || ''}"
+          onchange="updateJourney(${index}, 'pickup_time', this.value)"
+          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+      </div>
+      <div style="position: relative;">
+        <input type="text"
+          id="journeyPickup_${index}"
+          value="${escapeHtml(journey.pickup_name || '')}"
+          oninput="onJourneyLocationInput(${index}, 'pickup', this.value)"
+          onchange="updateJourney(${index}, 'pickup_name', this.value)"
+          placeholder="Search pickup location..."
+          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+        <div id="journeyPickupSuggestions_${index}" class="location-suggestions" style="display: none;"></div>
+        ${journey.pickup_lat ? `<small style="color: var(--text-muted); font-size: 10px;">${journey.pickup_lat.toFixed(4)}, ${journey.pickup_lng.toFixed(4)}</small>` : ''}
+      </div>
+      <div style="position: relative;">
+        <input type="text"
+          id="journeyDropoff_${index}"
+          value="${escapeHtml(journey.dropoff_name || '')}"
+          oninput="onJourneyLocationInput(${index}, 'dropoff', this.value)"
+          onchange="updateJourney(${index}, 'dropoff_name', this.value)"
+          placeholder="Search dropoff location..."
+          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+        <div id="journeyDropoffSuggestions_${index}" class="location-suggestions" style="display: none;"></div>
+        ${journey.dropoff_lat ? `<small style="color: var(--text-muted); font-size: 10px;">${journey.dropoff_lat.toFixed(4)}, ${journey.dropoff_lng.toFixed(4)}</small>` : ''}
+      </div>
+      <div>
+        <input type="text"
+          value="${escapeHtml(journey.notes || '')}"
+          onchange="updateJourney(${index}, 'notes', this.value)"
+          placeholder="Notes..."
+          style="width: 100%; padding: 6px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+      </div>
+      <div style="text-align: center;">
+        <button type="button" onclick="removeJourney(${index})" title="Remove journey" style="padding: 4px 8px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px;">&times;</button>
+      </div>
+    </div>
+  `;
 }
 
-function searchLocation(query, type) {
-  clearTimeout(locationAutocompleteTimeout);
+// ============================================
+// JOURNEY LOCATION AUTOCOMPLETE
+// ============================================
+function onJourneyLocationInput(index, type, value) {
+  clearTimeout(journeyAutocompleteTimeout);
 
-  const suggestionsId = type === 'pickup' ? 'tripPickupSuggestions' : 'tripDropoffSuggestions';
+  const suggestionsId = `journey${type.charAt(0).toUpperCase() + type.slice(1)}Suggestions_${index}`;
   const suggestions = document.getElementById(suggestionsId);
 
-  if (!query || query.length < 3) {
+  // Update the value immediately
+  updateJourney(index, `${type}_name`, value);
+
+  if (!value || value.length < 3) {
     if (suggestions) suggestions.style.display = 'none';
     return;
   }
 
-  locationAutocompleteTimeout = setTimeout(async () => {
+  activeLocationInput = { index, type };
+
+  journeyAutocompleteTimeout = setTimeout(async () => {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&countrycodes=au`;
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(value)}&format=json&addressdetails=1&limit=5&countrycodes=au`;
 
       const response = await fetch(url, {
         headers: { 'User-Agent': 'DispatchApp/1.0' }
@@ -1044,7 +1223,7 @@ function searchLocation(query, type) {
       if (!response.ok) throw new Error('Search failed');
 
       const results = await response.json();
-      showLocationSuggestions(results, type);
+      showJourneySuggestions(index, type, results);
     } catch (err) {
       console.error('Location search error:', err);
       if (suggestions) suggestions.style.display = 'none';
@@ -1052,23 +1231,22 @@ function searchLocation(query, type) {
   }, 300);
 }
 
-function showLocationSuggestions(results, type) {
-  const suggestionsId = type === 'pickup' ? 'tripPickupSuggestions' : 'tripDropoffSuggestions';
+function showJourneySuggestions(index, type, results) {
+  const suggestionsId = `journey${type.charAt(0).toUpperCase() + type.slice(1)}Suggestions_${index}`;
   const suggestions = document.getElementById(suggestionsId);
 
   if (!suggestions) return;
 
   if (results.length === 0) {
-    suggestions.innerHTML = '<div class="location-suggestion-item" style="color: var(--text-muted);">No results found</div>';
+    suggestions.innerHTML = '<div class="location-suggestion-item" style="padding: 8px; color: var(--text-muted);">No results found</div>';
     suggestions.style.display = 'block';
     return;
   }
 
   suggestions.innerHTML = results.map(r => `
-    <div class="location-suggestion-item" style="padding: 8px; cursor: pointer; border-bottom: 1px solid var(--border);"
-         onclick="selectLocationResult('${type}', '${escapeHtml(r.display_name)}', ${r.lat}, ${r.lon})"
-         onmouseover="this.style.background='var(--bg-secondary)'"
-         onmouseout="this.style.background='transparent'">
+    <div class="location-suggestion-item"
+         onclick="selectJourneyLocation(${index}, '${type}', '${escapeHtml(r.display_name).replace(/'/g, "\\'")}', ${r.lat}, ${r.lon})"
+         style="padding: 8px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px;">
       ${escapeHtml(r.display_name)}
     </div>
   `).join('');
@@ -1076,18 +1254,23 @@ function showLocationSuggestions(results, type) {
   suggestions.style.display = 'block';
 }
 
-function selectLocationResult(type, name, lat, lng) {
-  if (type === 'pickup') {
-    setInputValue('tripPickupName', name);
-    setInputValue('tripPickupCoords', `${lat}, ${lng}`);
-    const suggestions = document.getElementById('tripPickupSuggestions');
-    if (suggestions) suggestions.style.display = 'none';
-  } else {
-    setInputValue('tripDropoffName', name);
-    setInputValue('tripDropoffCoords', `${lat}, ${lng}`);
-    const suggestions = document.getElementById('tripDropoffSuggestions');
-    if (suggestions) suggestions.style.display = 'none';
-  }
+function selectJourneyLocation(index, type, name, lat, lng) {
+  tripJourneys[index][`${type}_name`] = name;
+  tripJourneys[index][`${type}_lat`] = lat;
+  tripJourneys[index][`${type}_lng`] = lng;
+
+  // Update the input
+  const inputId = `journey${type.charAt(0).toUpperCase() + type.slice(1)}_${index}`;
+  const input = document.getElementById(inputId);
+  if (input) input.value = name;
+
+  // Hide suggestions
+  const suggestionsId = `journey${type.charAt(0).toUpperCase() + type.slice(1)}Suggestions_${index}`;
+  const suggestions = document.getElementById(suggestionsId);
+  if (suggestions) suggestions.style.display = 'none';
+
+  // Re-render to show coords
+  renderTripJourneys();
 }
 
 // ============================================

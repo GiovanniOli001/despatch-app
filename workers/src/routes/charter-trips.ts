@@ -156,7 +156,8 @@ async function listTrips(env: Env, url: URL): Promise<Response> {
     SELECT
       ct.*,
       c.charter_number,
-      cc.company_name as customer_name
+      cc.company_name as customer_name,
+      (SELECT COUNT(*) FROM charter_journeys cj WHERE cj.trip_id = ct.id AND cj.deleted_at IS NULL) as journey_count
     FROM charter_trips ct
     INNER JOIN charters c ON ct.charter_id = c.id
     INNER JOIN charter_customers cc ON c.customer_id = cc.id
@@ -203,13 +204,14 @@ async function listTrips(env: Env, url: URL): Promise<Response> {
 }
 
 async function getTrip(env: Env, tripId: string): Promise<Response> {
-  // Get trip with charter info
+  // Get trip with charter info and journey count
   const tripResult = await env.DB.prepare(`
     SELECT
       ct.*,
       c.charter_number,
       c.name as charter_name,
-      cc.company_name as customer_name
+      cc.company_name as customer_name,
+      (SELECT COUNT(*) FROM charter_journeys cj WHERE cj.trip_id = ct.id AND cj.deleted_at IS NULL) as journey_count
     FROM charter_trips ct
     INNER JOIN charters c ON ct.charter_id = c.id
     INNER JOIN charter_customers cc ON c.customer_id = cc.id
@@ -222,11 +224,12 @@ async function getTrip(env: Env, tripId: string): Promise<Response> {
     return error('Trip not found', 404);
   }
 
-  // Get stops
-  const stopsResult = await env.DB.prepare(`
+  // Get journeys
+  const journeysResult = await env.DB.prepare(`
     SELECT *
-    FROM charter_trip_stops
+    FROM charter_journeys
     WHERE trip_id = ?
+      AND deleted_at IS NULL
       AND tenant_id = 'default'
     ORDER BY sequence
   `).bind(tripId).all();
@@ -242,7 +245,7 @@ async function getTrip(env: Env, tripId: string): Promise<Response> {
 
   const trip = {
     ...tripResult,
-    stops: stopsResult.results || [],
+    journeys: journeysResult.results || [],
     line_items: lineItemsResult.results || []
   };
 
@@ -255,9 +258,9 @@ async function createTrip(request: Request, env: Env): Promise<Response> {
     return error('Invalid request body');
   }
 
-  // Validate required fields
-  if (!body.charter_id || !body.trip_date || !body.pickup_time || !body.pickup_name || !body.dropoff_name || !body.passenger_count) {
-    return error('Missing required fields: charter_id, trip_date, pickup_time, pickup_name, dropoff_name, passenger_count');
+  // Validate required fields (pickup_name, dropoff_name now optional - handled by journeys)
+  if (!body.charter_id || !body.trip_date) {
+    return error('Missing required fields: charter_id, trip_date');
   }
 
   // Get next trip number for this charter
@@ -292,17 +295,17 @@ async function createTrip(request: Request, env: Env): Promise<Response> {
     tripNumber,
     body.name || null,
     body.trip_date,
-    body.pickup_time,
+    body.pickup_time || null,
     body.estimated_end_time || null,
     body.estimated_duration_mins || null,
-    body.passenger_count,
+    body.passenger_count || 1,
     body.passenger_notes || null,
-    body.pickup_name,
+    body.pickup_name || null,
     body.pickup_address || null,
     body.pickup_lat || null,
     body.pickup_lng || null,
     body.pickup_notes || null,
-    body.dropoff_name,
+    body.dropoff_name || null,
     body.dropoff_address || null,
     body.dropoff_lat || null,
     body.dropoff_lng || null,

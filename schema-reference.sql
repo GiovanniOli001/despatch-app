@@ -635,6 +635,26 @@ CREATE TABLE charter_trips (
   deleted_at TEXT
 );
 
+CREATE TABLE charter_journeys (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  trip_id TEXT NOT NULL REFERENCES charter_trips(id) ON DELETE CASCADE,
+  sequence INTEGER NOT NULL DEFAULT 1,
+  pickup_name TEXT,
+  pickup_address TEXT,
+  pickup_lat REAL,
+  pickup_lng REAL,
+  pickup_time TEXT,  -- HH:MM format
+  dropoff_name TEXT,
+  dropoff_address TEXT,
+  dropoff_lat REAL,
+  dropoff_lng REAL,
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
 CREATE TABLE charter_trip_stops (
   id TEXT PRIMARY KEY,
   tenant_id TEXT NOT NULL DEFAULT 'default',
@@ -701,6 +721,8 @@ CREATE INDEX idx_charters_event_date ON charters(tenant_id, event_date);
 CREATE INDEX idx_charter_trips_charter ON charter_trips(charter_id);
 CREATE INDEX idx_charter_trips_date ON charter_trips(tenant_id, trip_date);
 CREATE INDEX idx_charter_trips_dispatch ON charter_trips(tenant_id, trip_date, operational_status);
+CREATE INDEX idx_charter_journeys_trip ON charter_journeys(trip_id);
+CREATE INDEX idx_charter_journeys_sequence ON charter_journeys(trip_id, sequence);
 CREATE INDEX idx_trip_stops_trip ON charter_trip_stops(trip_id);
 CREATE INDEX idx_trip_line_items_trip ON charter_trip_line_items(trip_id);
 CREATE INDEX idx_charter_documents_charter ON charter_documents(charter_id);
