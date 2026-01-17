@@ -9,6 +9,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
+import { TENANT_ID } from '../constants';
 
 interface DutyLineInput {
   sequence: number;
@@ -39,8 +40,6 @@ interface ShiftTemplateInput {
   notes?: string;
   duty_blocks?: DutyBlockInput[];
 }
-
-const TENANT_ID = 'default';
 
 export async function handleShifts(
   request: Request,
@@ -128,6 +127,7 @@ async function listShiftTemplates(env: Env, params: URLSearchParams): Promise<Re
   const result = await env.DB.prepare(query).bind(...bindings).all();
 
   return json({
+    success: true,
     data: result.results,
     meta: { total: result.results.length, limit, offset },
   });
@@ -162,6 +162,7 @@ async function getShiftTemplate(env: Env, id: string): Promise<Response> {
   }
 
   return json({
+    success: true,
     data: {
       ...template,
       duty_blocks: dutyBlocks,
@@ -505,10 +506,13 @@ async function getShiftLockStatus(env: Env, id: string): Promise<Response> {
   `).bind(id).all();
   
   const isLocked = publishedRosters.results.length > 0;
-  
+
   return json({
-    locked: isLocked,
-    reason: isLocked ? 'This shift is used in published roster(s) and cannot be edited.' : null,
-    published_rosters: publishedRosters.results
+    success: true,
+    data: {
+      locked: isLocked,
+      reason: isLocked ? 'This shift is used in published roster(s) and cannot be edited.' : null,
+      published_rosters: publishedRosters.results
+    }
   });
 }

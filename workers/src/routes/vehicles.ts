@@ -4,6 +4,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
+import { TENANT_ID } from '../constants';
 
 interface VehicleInput {
   fleet_number: string;
@@ -21,8 +22,6 @@ interface DailyStatusInput {
   status: string;
   reason?: string;
 }
-
-const TENANT_ID = 'default';
 
 export async function handleVehicles(
   request: Request,
@@ -117,6 +116,7 @@ async function listVehicles(env: Env, params: URLSearchParams): Promise<Response
   const countResult = await env.DB.prepare(countQuery).bind(...countBindings).first<{ total: number }>();
 
   return json({
+    success: true,
     data: result.results,
     meta: { total: countResult?.total || 0, limit, offset },
   });
@@ -128,7 +128,7 @@ async function getVehicle(env: Env, id: string): Promise<Response> {
   `).bind(id, TENANT_ID).first();
 
   if (!result) return error('Vehicle not found', 404);
-  return json({ data: result });
+  return json({ success: true, data: result });
 }
 
 async function createVehicle(env: Env, input: VehicleInput): Promise<Response> {
@@ -209,9 +209,9 @@ async function getVehicleStatus(env: Env, vehicleId: string, date: string): Prom
   `).bind(vehicleId, date).first();
 
   if (!status) {
-    return json({ data: { vehicle_id: vehicleId, date, status: 'available' } });
+    return json({ success: true, data: { vehicle_id: vehicleId, date, status: 'available' } });
   }
-  return json({ data: status });
+  return json({ success: true, data: status });
 }
 
 async function setVehicleStatus(

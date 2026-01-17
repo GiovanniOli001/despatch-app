@@ -4,6 +4,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
+import { TENANT_ID } from '../constants';
 
 interface Employee {
   id: string;
@@ -51,8 +52,6 @@ interface PayRecordUpdateInput {
   pay_type_code?: string;
   notes?: string;
 }
-
-const TENANT_ID = 'default'; // MVP: single tenant
 
 export async function handleEmployees(
   request: Request,
@@ -182,6 +181,7 @@ async function listEmployees(env: Env, params: URLSearchParams): Promise<Respons
   const countResult = await env.DB.prepare(countQuery).bind(...countBindings).first<{ total: number }>();
 
   return json({
+    success: true,
     data: result.results,
     meta: {
       total: countResult?.total || 0,
@@ -201,7 +201,7 @@ async function getEmployee(env: Env, id: string): Promise<Response> {
     return error('Employee not found', 404);
   }
 
-  return json({ data: result });
+  return json({ success: true, data: result });
 }
 
 async function createEmployee(env: Env, input: EmployeeInput): Promise<Response> {
@@ -335,10 +335,10 @@ async function getEmployeeStatus(env: Env, employeeId: string, date: string): Pr
   `).bind(employeeId, date).first();
 
   if (!status) {
-    return json({ data: { employee_id: employeeId, date, status: 'available' } });
+    return json({ success: true, data: { employee_id: employeeId, date, status: 'available' } });
   }
 
-  return json({ data: status });
+  return json({ success: true, data: status });
 }
 
 async function setEmployeeStatus(

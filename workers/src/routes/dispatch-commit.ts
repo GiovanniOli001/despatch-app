@@ -7,8 +7,7 @@
  */
 
 import { Env, json, error, uuid } from '../index';
-
-const TENANT_ID = 'default';
+import { TENANT_ID } from '../constants';
 
 interface CommitInput {
   date: string;
@@ -220,7 +219,24 @@ async function generatePayRecords(
   const now = new Date().toISOString();
   let recordsCreated = 0;
 
+  // Batch fetch all existing pay records for these duty lines (fixes N+1 query pattern)
+  const dutyLineIds = allDutyLines.map(l => l.duty_line_id).filter(Boolean);
+  let existingIds = new Set<string>();
+
+  if (dutyLineIds.length > 0) {
+    const placeholders = dutyLineIds.map(() => '?').join(',');
+    const existingRecords = await env.DB.prepare(`
+      SELECT source_duty_line_id FROM employee_pay_records
+      WHERE source_duty_line_id IN (${placeholders})
+    `).bind(...dutyLineIds).all();
+
+    existingIds = new Set((existingRecords.results as any[]).map(r => r.source_duty_line_id));
+  }
+
   for (const line of allDutyLines) {
+    // Skip if pay record already exists for this duty line
+    if (existingIds.has(line.duty_line_id)) continue;
+
     // Calculate hours
     const hours = (line.end_time - line.start_time);
     if (hours <= 0) continue;
@@ -228,7 +244,7 @@ async function generatePayRecords(
     // Determine pay type: line pay_type -> employee default -> STD
     let payTypeCode = line.pay_type || 'STD';
     let payType = payTypeMap.get(payTypeCode);
-    
+
     // If line has no pay type, check employee default
     if (!line.pay_type && line.default_pay_type_id) {
       const empDefault = payTypeIdMap.get(line.default_pay_type_id);
@@ -237,7 +253,7 @@ async function generatePayRecords(
         payTypeCode = empDefault.code;
       }
     }
-    
+
     // Fallback to STD if still not found
     if (!payType) {
       payType = payTypeMap.get('STD') || { id: null, code: 'STD', hourly_rate: 0 };
@@ -245,13 +261,6 @@ async function generatePayRecords(
 
     const rate = payType.hourly_rate || 0;
     const totalAmount = hours * rate;
-
-    // Check if pay record already exists for this duty line
-    const existing = await env.DB.prepare(`
-      SELECT id FROM employee_pay_records WHERE source_duty_line_id = ?
-    `).bind(line.duty_line_id).first();
-
-    if (existing) continue;
 
     // Create pay record
     await env.DB.prepare(`

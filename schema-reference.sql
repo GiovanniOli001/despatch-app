@@ -469,3 +469,25 @@ CREATE TABLE vehicle_daily_status (
   UNIQUE(vehicle_id, date)
 );
 -- NOTE: No tenant_id column!
+
+-- ============================================
+-- INDEXES (Added January 17, 2026)
+-- ============================================
+-- Performance optimization for frequently queried columns
+
+-- Roster indexes
+CREATE INDEX idx_roster_entries_date ON roster_entries(date);
+CREATE INDEX idx_roster_entries_roster_id ON roster_entries(roster_id);
+CREATE INDEX idx_roster_entries_driver_id ON roster_entries(driver_id);
+CREATE INDEX idx_roster_duty_lines_entry_id ON roster_duty_lines(roster_entry_id);
+
+-- Dispatch indexes
+CREATE INDEX idx_dispatch_commits_date ON dispatch_commits(commit_date);
+CREATE INDEX idx_adhoc_shifts_date ON dispatch_adhoc_shifts(date);
+
+-- Pay records indexes
+CREATE INDEX idx_pay_records_work_date ON employee_pay_records(work_date);
+CREATE INDEX idx_pay_records_source_duty ON employee_pay_records(source_duty_line_id);
+
+-- Cancellation index
+CREATE INDEX idx_cancellations_duty_line ON dispatch_duty_cancellations(roster_duty_line_id);

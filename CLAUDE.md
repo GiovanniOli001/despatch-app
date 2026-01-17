@@ -199,31 +199,99 @@ When purging data, delete in this order:
 
 ## API Endpoints Reference
 
+### Employees
+- `GET /api/employees` - List all employees (supports filters: status, role, search, limit, offset)
+- `GET /api/employees/:id` - Get single employee
+- `POST /api/employees` - Create employee
+- `PUT /api/employees/:id` - Update employee
+- `DELETE /api/employees/:id` - Soft delete employee
+- `GET /api/employees/:id/status/:date` - Get employee daily status
+- `PUT /api/employees/:id/status/:date` - Set employee daily status (available, leave, sick)
+- `GET /api/employees/:id/pay-records` - Get pay records for employee (supports filters: date_from, date_to, pay_type)
+- `PUT /api/employees/pay-records/:id` - Update pay record (hours, rate, pay_type_code, notes)
+
+### Vehicles
+- `GET /api/vehicles` - List all vehicles (supports filters: status, min_capacity, search, limit, offset)
+- `GET /api/vehicles/:id` - Get single vehicle
+- `POST /api/vehicles` - Create vehicle
+- `PUT /api/vehicles/:id` - Update vehicle
+- `DELETE /api/vehicles/:id` - Soft delete vehicle
+- `GET /api/vehicles/:id/status/:date` - Get vehicle daily status
+- `PUT /api/vehicles/:id/status/:date` - Set vehicle daily status (available, maintenance, reserved, breakdown)
+
+### Shift Templates
+- `GET /api/shifts` - List shift templates (supports filters: active, type, search, limit, offset)
+- `GET /api/shifts/:id` - Get shift template with duty blocks and lines
+- `POST /api/shifts` - Create shift template
+- `PUT /api/shifts/:id` - Update shift template
+- `DELETE /api/shifts/:id` - Soft delete shift template
+- `POST /api/shifts/:id/duplicate` - Duplicate shift template
+- `GET /api/shifts/:id/lock-status` - Check if shift is locked by published rosters
+
+### Rosters
+- `GET /api/roster/containers` - List all rosters
+- `GET /api/roster/containers/:id` - Get roster with drivers and stats
+- `POST /api/roster/containers` - Create roster
+- `PUT /api/roster/containers/:id` - Update roster (blocked if published)
+- `DELETE /api/roster/containers/:id` - Delete roster (blocked if published or scheduled)
+- `POST /api/roster/containers/:id/publish` - Publish roster to dispatch
+- `POST /api/roster/containers/:id/unpublish` - Unpublish roster (preserves user-added duties)
+- `POST /api/roster/containers/:id/schedule` - Add roster to calendar
+- `POST /api/roster/containers/:id/unschedule` - Remove roster from calendar
+- `GET /api/roster/day/:rosterId/:date` - Get day view with unassigned and assigned blocks
+- `POST /api/roster/assign` - Assign duty block to driver
+- `POST /api/roster/unassign` - Unassign duty block from driver
+- `POST /api/roster/toggle-dispatch` - Toggle single block dispatch inclusion
+- `POST /api/roster/toggle-dispatch-day` - Toggle all blocks for a day
+- `POST /api/roster/toggle-dispatch-all` - Toggle all blocks for entire roster
+
+### Dispatch
+- `GET /api/dispatch/:date` - Get full day dispatch data (drivers, vehicles, shifts)
+- `POST /api/dispatch/assign` - Assign driver/vehicle to roster entry
+- `POST /api/dispatch/transfer` - Transfer shift between drivers
+- `POST /api/dispatch/unassign` - Remove driver/vehicle assignment
+- `POST /api/dispatch/update-duty-line` - Update duty line details
+- `POST /api/dispatch/create-duty-line` - Create new duty line (inline)
+- `POST /api/dispatch/create-adhoc-shift` - Create standalone adhoc shift
+- `POST /api/dispatch/cancel-duty-line` - Cancel duty line
+- `POST /api/dispatch/reinstate-duty-line` - Reinstate cancelled duty line
+- `GET /api/dispatch/commit-status/:date` - Get commit status for date
+- `POST /api/dispatch/commit` - Commit day to payroll (creates pay records)
+
 ### Pay Types
-- `GET /api/pay-types` - List all pay types
+- `GET /api/pay-types` - List all pay types (ordered by display_order)
+- `GET /api/pay-types/:id` - Get single pay type
 - `POST /api/pay-types` - Create pay type
 - `PUT /api/pay-types/:id` - Update pay type
+- `DELETE /api/pay-types/:id` - Soft delete pay type
 
 **Note:** Endpoint is `/pay-types` NOT `/config/pay-types`
 
-### Dispatch
-- `GET /api/dispatch/:date` - Get day's dispatch data
-- `POST /api/dispatch/commit` - Commit day to payroll
-- `POST /api/dispatch/create-duty-line` - Create inline duty
-- `POST /api/dispatch/update-duty-line` - Update duty
-- `POST /api/dispatch/cancel-duty-line` - Cancel duty
-- `POST /api/dispatch/create-adhoc-shift` - Create adhoc shift
+### Employee Custom Fields
+- `GET /api/employee-fields/definitions` - List all field definitions
+- `GET /api/employee-fields/definitions/:id` - Get single field definition
+- `POST /api/employee-fields/definitions` - Create field definition
+- `PUT /api/employee-fields/definitions/:id` - Update field definition
+- `DELETE /api/employee-fields/definitions/:id` - Soft delete field definition
+- `POST /api/employee-fields/definitions/reorder` - Reorder field definitions
+- `POST /api/employee-fields/definitions/update-layouts` - Update multiple field layouts
+- `GET /api/employee-fields/values/:employeeId` - Get all field values for employee
+- `POST /api/employee-fields/values/bulk` - Save multiple field values for employee
+- `PUT /api/employee-fields/values/:id` - Update single field value
 
-### Roster
-- `GET /api/roster/containers` - List rosters
-- `GET /api/roster/containers/:id` - Get roster
-- `POST /api/roster/containers` - Create roster
-- `PUT /api/roster/containers/:id` - Update roster
-- `DELETE /api/roster/containers/:id` - Delete roster (with lockout checks)
-- `POST /api/roster/containers/:id/publish` - Publish
-- `POST /api/roster/containers/:id/unpublish` - Unpublish
-- `POST /api/roster/containers/:id/schedule` - Add to calendar
-- `POST /api/roster/containers/:id/unschedule` - Remove from calendar
+### Configuration
+- `GET /api/config/duty-types` - List all duty types
+- `POST /api/config/duty-types` - Create duty type
+- `PUT /api/config/duty-types/:id` - Update duty type
+- `GET /api/config/locations` - List all locations
+- `POST /api/config/locations` - Create location
+- `PUT /api/config/locations/:id` - Update location
+- `DELETE /api/config/locations/:id` - Soft delete location
+- `GET /api/config/routes` - List all routes
+- `POST /api/config/routes` - Create route
+- `PUT /api/config/routes/:id` - Update route
+- `DELETE /api/config/routes/:id` - Soft delete route
+- `GET /api/config/depots` - List all depots
 
 ## Reference Files
 

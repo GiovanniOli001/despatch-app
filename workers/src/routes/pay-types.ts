@@ -7,8 +7,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
-
-const TENANT_ID = 'default';
+import { TENANT_ID } from '../constants';
 
 interface PayTypeInput {
   code: string;

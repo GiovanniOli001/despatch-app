@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit",
+    "predeploy": "npm run typecheck",
     "deploy": "wrangler deploy",
     "db:init": "wrangler d1 execute dispatch-db --local --file=src/db/schema.sql",
     "db:init:remote": "wrangler d1 execute dispatch-db --remote --file=src/db/schema.sql",
@@ -11,7 +13,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240117.0",
-    "typescript": "^5.3.3",
+    "typescript": "^5.9.3",
     "wrangler": "^3.24.0"
   }
 }

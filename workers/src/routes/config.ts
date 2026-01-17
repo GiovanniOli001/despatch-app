@@ -1,17 +1,15 @@
 /**
  * Config API Routes
  * /api/config/*
- * 
+ *
  * Configuration endpoints for:
  * - Duty types
- * - Pay types
  * - Locations
  * - Routes
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
-
-const TENANT_ID = 'default';
+import { TENANT_ID } from '../constants';
 
 export async function handleConfig(
   request: Request,
@@ -61,42 +59,6 @@ export async function handleConfig(
       }>>(request);
       if (!body) return error('Invalid request body');
       return updateDutyType(env, id, body);
-    }
-  }
-
-  // ============================================
-  // PAY TYPES
-  // ============================================
-  
-  if (resource === 'pay-types') {
-    // GET /api/config/pay-types
-    if (method === 'GET' && !id) {
-      return getPayTypes(env);
-    }
-
-    // POST /api/config/pay-types
-    if (method === 'POST' && !id) {
-      const body = await parseBody<{
-        code: string;
-        name: string;
-        multiplier?: number;
-        sort_order?: number;
-      }>(request);
-      if (!body) return error('Invalid request body');
-      return createPayType(env, body);
-    }
-
-    // PUT /api/config/pay-types/:id
-    if (method === 'PUT' && id) {
-      const body = await parseBody<Partial<{
-        code: string;
-        name: string;
-        multiplier: number;
-        is_active: boolean;
-        sort_order: number;
-      }>>(request);
-      if (!body) return error('Invalid request body');
-      return updatePayType(env, id, body);
     }
   }
 
@@ -205,7 +167,7 @@ async function getDutyTypes(env: Env): Promise<Response> {
     SELECT * FROM duty_types WHERE tenant_id = ? ORDER BY sort_order, name
   `).bind(TENANT_ID).all();
 
-  return json({ data: result.results });
+  return json({ success: true, data: result.results });
 }
 
 async function createDutyType(env: Env, input: {
@@ -268,67 +230,6 @@ async function updateDutyType(env: Env, id: string, input: Record<string, unknow
 }
 
 // ============================================
-// PAY TYPE HANDLERS
-// ============================================
-
-async function getPayTypes(env: Env): Promise<Response> {
-  const result = await env.DB.prepare(`
-    SELECT * FROM pay_types WHERE tenant_id = ? ORDER BY sort_order, name
-  `).bind(TENANT_ID).all();
-
-  return json({ data: result.results });
-}
-
-async function createPayType(env: Env, input: {
-  code: string;
-  name: string;
-  multiplier?: number;
-  sort_order?: number;
-}): Promise<Response> {
-  if (!input.code || !input.name) {
-    return error('code and name are required');
-  }
-
-  const id = uuid();
-  const now = new Date().toISOString();
-
-  await env.DB.prepare(`
-    INSERT INTO pay_types (
-      id, tenant_id, code, name, multiplier, is_active, sort_order, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
-  `).bind(
-    id, TENANT_ID, input.code, input.name,
-    input.multiplier ?? 1.0,
-    input.sort_order || 99,
-    now, now
-  ).run();
-
-  return getPayTypes(env);
-}
-
-async function updatePayType(env: Env, id: string, input: Record<string, unknown>): Promise<Response> {
-  const updates: string[] = [];
-  const bindings: (string | number | null)[] = [];
-
-  if ('code' in input) { updates.push('code = ?'); bindings.push(input.code as string); }
-  if ('name' in input) { updates.push('name = ?'); bindings.push(input.name as string); }
-  if ('multiplier' in input) { updates.push('multiplier = ?'); bindings.push(input.multiplier as number); }
-  if ('is_active' in input) { updates.push('is_active = ?'); bindings.push(input.is_active ? 1 : 0); }
-  if ('sort_order' in input) { updates.push('sort_order = ?'); bindings.push(input.sort_order as number); }
-
-  if (updates.length === 0) return error('No fields to update');
-
-  updates.push('updated_at = ?');
-  bindings.push(new Date().toISOString(), id, TENANT_ID);
-
-  await env.DB.prepare(`
-    UPDATE pay_types SET ${updates.join(', ')} WHERE id = ? AND tenant_id = ?
-  `).bind(...bindings).run();
-
-  return getPayTypes(env);
-}
-
-// ============================================
 // LOCATION HANDLERS
 // ============================================
 
@@ -337,7 +238,7 @@ async function getLocations(env: Env): Promise<Response> {
     SELECT * FROM locations WHERE tenant_id = ? AND deleted_at IS NULL AND is_active = 1 ORDER BY name
   `).bind(TENANT_ID).all();
 
-  return json({ data: result.results });
+  return json({ success: true, data: result.results });
 }
 
 async function createLocation(env: Env, input: {
@@ -402,7 +303,7 @@ async function getRoutes(env: Env): Promise<Response> {
     SELECT * FROM routes WHERE tenant_id = ? AND deleted_at IS NULL AND is_active = 1 ORDER BY code
   `).bind(TENANT_ID).all();
 
-  return json({ data: result.results });
+  return json({ success: true, data: result.results });
 }
 
 async function createRoute(env: Env, input: {
@@ -463,5 +364,5 @@ async function getDepots(env: Env): Promise<Response> {
     SELECT * FROM depots WHERE tenant_id = ? AND deleted_at IS NULL ORDER BY is_primary DESC, name
   `).bind(TENANT_ID).all();
 
-  return json({ data: result.results });
+  return json({ success: true, data: result.results });
 }

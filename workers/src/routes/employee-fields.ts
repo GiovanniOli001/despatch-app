@@ -4,6 +4,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
+import { TENANT_ID } from '../constants';
 
 interface FieldDefinitionInput {
   field_name: string;
@@ -27,8 +28,6 @@ interface BulkFieldValuesInput {
   employee_id: string;
   values: { field_definition_id: string; value: string | null }[];
 }
-
-const TENANT_ID = 'default';
 
 export async function handleEmployeeFields(
   request: Request,
@@ -137,7 +136,7 @@ async function listFieldDefinitions(env: Env): Promise<Response> {
     display_row: def.display_row ?? 0
   }));
 
-  return json({ data: definitions });
+  return json({ success: true, data: definitions });
 }
 
 async function getFieldDefinition(env: Env, id: string): Promise<Response> {
@@ -152,6 +151,7 @@ async function getFieldDefinition(env: Env, id: string): Promise<Response> {
 
   const def = result as any;
   return json({
+    success: true,
     data: {
       ...def,
       field_options: def.field_options ? JSON.parse(def.field_options) : null,
@@ -377,7 +377,7 @@ async function getEmployeeFieldValues(env: Env, employeeId: string): Promise<Res
     value: valueMap.get(def.id) ?? null
   }));
 
-  return json({ data: result });
+  return json({ success: true, data: result });
 }
 
 async function saveEmployeeFieldValues(env: Env, input: BulkFieldValuesInput): Promise<Response> {

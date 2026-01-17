@@ -7,8 +7,7 @@
  */
 
 import { Env, json, error } from '../index';
-
-const TENANT_ID = 'default';
+import { TENANT_ID } from '../constants';
 
 // QLD Public Holidays 2025-2027
 const QLD_HOLIDAYS: Record<string, string> = {

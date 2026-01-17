@@ -12,9 +12,8 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
+import { TENANT_ID } from '../constants';
 import { getCommitStatus, commitDay, getPayRecordsForDate } from './dispatch-commit';
-
-const TENANT_ID = 'default';
 
 // ============================================
 // INTERFACES

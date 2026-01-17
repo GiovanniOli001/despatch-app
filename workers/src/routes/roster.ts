@@ -25,8 +25,7 @@
  */
 
 import { Env, json, error, uuid, parseBody } from '../index';
-
-const TENANT_ID = 'default';
+import { TENANT_ID } from '../constants';
 
 // ============================================
 // INTERFACES
@@ -195,7 +194,7 @@ async function listRosters(env: Env): Promise<Response> {
       ORDER BY r.start_date DESC
     `).bind(TENANT_ID).all();
     
-    return json({ data: result.results });
+    return json({ success: true, data: result.results });
   } catch (err) {
     console.error('listRosters error:', err);
     return error(err instanceof Error ? err.message : 'Failed to list rosters', 500);
@@ -226,6 +225,7 @@ async function getRoster(env: Env, id: string): Promise<Response> {
   `).bind(id).first();
   
   return json({
+    success: true,
     data: {
       ...roster,
       drivers: drivers.results,
@@ -263,7 +263,7 @@ async function createRoster(env: Env, input: RosterInput): Promise<Response> {
     `).bind(id, TENANT_ID, input.code, input.name, input.start_date, input.end_date,
       input.status || 'draft', input.notes || null, now, now).run();
     
-    return json({ data: { id, ...input } }, 201);
+    return json({ success: true, data: { id, ...input } }, 201);
   } catch (err) {
     console.error('createRoster error:', err);
     const errMsg = err instanceof Error ? err.message : '';
@@ -607,6 +607,7 @@ async function getDayView(env: Env, rosterId: string, date: string): Promise<Res
     const omittedCount = unassigned.filter(b => b.include_in_dispatch === 0).length;
     
     return json({
+      success: true,
       data: {
         roster_id: rosterId,
         roster_status: (roster as any).status,
@@ -743,7 +744,7 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
     }
   }
   
-  return json({ data: { assigned: createdIds.length, entry_ids: createdIds } });
+  return json({ success: true, data: { assigned: createdIds.length, entry_ids: createdIds } });
 }
 
 // Helper: Copy duty lines from template to roster instance
@@ -817,7 +818,7 @@ async function unassignBlock(env: Env, entryId: string): Promise<Response> {
     UPDATE roster_entries SET deleted_at = ? WHERE id = ?
   `).bind(now, entryId).run();
   
-  return json({ data: { unassigned: true } });
+  return json({ success: true, data: { unassigned: true } });
 }
 
 // ============================================

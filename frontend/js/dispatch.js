@@ -1,4 +1,26 @@
 // ============================================
+// DISPATCH CONFIGURATION
+// ============================================
+
+const DISPATCH_CONFIG = {
+  // Timeline bounds (hours)
+  DAY_START_HOUR: 5,        // Start timeline at 05:00
+  DAY_END_HOUR: 24,         // End timeline at 24:00 (midnight)
+
+  // Vertical view settings
+  VERTICAL_START_HOUR: 5,   // Vertical view starts at 05:00
+  VERTICAL_END_HOUR: 24,    // Vertical view ends at 24:00
+  VERTICAL_SLOT_HEIGHT: 30, // Pixels per 30-min slot
+
+  // Time calculations
+  MIN_SLOT_DURATION: 0.25,  // Minimum duty duration (15 minutes)
+  PIXELS_PER_HOUR: 60,      // Horizontal timeline pixels per hour
+
+  // API settings
+  NOMINATIM_SEARCH_LIMIT: 5 // Max location search results
+};
+
+// ============================================
 // NOMINATIM LOCATION AUTOCOMPLETE
 // ============================================
 
@@ -17,7 +39,7 @@ async function searchLocations(query, inputId) {
   
   try {
     // Bias search towards Australia
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5&countrycodes=au`;
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=${DISPATCH_CONFIG.NOMINATIM_SEARCH_LIMIT}&countrycodes=au`;
     
     const response = await fetch(url, {
       headers: {
@@ -275,7 +297,7 @@ async function findBestNextJobsAsync(currentLocation, finishTime, availableJobs,
     const arrivalTime = finishTime + route.duration;
     const jobStartTime = job.start;
     
-    const canMakeIt = arrivalTime <= jobStartTime - 0.25;
+    const canMakeIt = arrivalTime <= jobStartTime - DISPATCH_CONFIG.MIN_SLOT_DURATION;
     const waitTime = Math.max(0, jobStartTime - arrivalTime);
     
     // Jobs without coordinates get a penalty in scoring
@@ -336,7 +358,7 @@ function findBestNextJobs(currentLocation, finishTime, availableJobs, limit = 5)
     const arrivalTime = finishTime + travelTime;
     const jobStartTime = job.start;
     
-    const canMakeIt = arrivalTime <= jobStartTime - 0.25;
+    const canMakeIt = arrivalTime <= jobStartTime - DISPATCH_CONFIG.MIN_SLOT_DURATION;
     const waitTime = Math.max(0, jobStartTime - arrivalTime);
     
     // Jobs without coordinates get a penalty in scoring
@@ -374,6 +396,10 @@ let drivers = [];
 let vehicles = [];
 let unassignedJobs = [];
 let selectedItem = null;
+
+// Lookup Maps for performance optimization (O(1) instead of O(n))
+let driverMap = new Map();
+let vehicleMap = new Map();
 let currentDate = new Date();  // Start with today for real data
 let expandedSection = null;
 let editingDuty = null;
@@ -388,6 +414,12 @@ var dispatchPayTypes = []; // Pay types from API
 let driverFilters = { search: '', status: 'all', sort: 'status' };
 let vehicleFilters = { search: '', status: 'all', sort: 'status' };
 let assignmentSearch = '';
+
+// Rebuild lookup Maps for performance (call after drivers/vehicles arrays change)
+function rebuildLookupMaps() {
+  driverMap = new Map(drivers.map(d => [d.id, d]));
+  vehicleMap = new Map(vehicles.map(v => [v.id, v]));
+}
 
 // Helper to generate pay type options from API data
 // Falls back to hardcoded PAY_TYPES if API data not loaded
@@ -498,7 +530,10 @@ async function loadDispatchData() {
         ...j,
         duties: j.duties || []
       }));
-      
+
+      // Rebuild lookup Maps for performance
+      rebuildLookupMaps();
+
       dispatchMeta = data._meta || null;
       
       // Update stats
@@ -565,6 +600,9 @@ function loadFakeData() {
   vehicles = generateVehicles(80);
   drivers = generateDrivers(104);
   unassignedJobs = generateUnassignedJobs(12);
+
+  // Rebuild lookup Maps for performance
+  rebuildLookupMaps();
   
   // Add test charters
   const testCharters = [
@@ -603,19 +641,16 @@ function loadFakeData() {
 }
 
 // Vertical view rendering
-const VERTICAL_START_HOUR = 5;  // 05:00
-const VERTICAL_END_HOUR = 24;   // 24:00 (midnight)
-const VERTICAL_SLOT_HEIGHT = 30; // pixels per 30-min slot
-const VERTICAL_SLOTS = (VERTICAL_END_HOUR - VERTICAL_START_HOUR) * 2; // 38 slots
+const VERTICAL_SLOTS = (DISPATCH_CONFIG.VERTICAL_END_HOUR - DISPATCH_CONFIG.VERTICAL_START_HOUR) * 2; // 38 slots
 
 function timeToVerticalPosition(hour) {
-  const slotsFromStart = (hour - VERTICAL_START_HOUR) * 2;
-  return slotsFromStart * VERTICAL_SLOT_HEIGHT;
+  const slotsFromStart = (hour - DISPATCH_CONFIG.VERTICAL_START_HOUR) * 2;
+  return slotsFromStart * DISPATCH_CONFIG.VERTICAL_SLOT_HEIGHT;
 }
 
 function renderVerticalTimeColumn() {
   let html = '';
-  for (let h = VERTICAL_START_HOUR; h < VERTICAL_END_HOUR; h++) {
+  for (let h = DISPATCH_CONFIG.VERTICAL_START_HOUR; h < DISPATCH_CONFIG.VERTICAL_END_HOUR; h++) {
     html += `<div class="vertical-time-slot hour-mark">${String(h).padStart(2, '0')}:00</div>`;
     html += `<div class="vertical-time-slot">${String(h).padStart(2, '0')}:30</div>`;
   }
@@ -626,7 +661,7 @@ function renderVerticalGridLines() {
   let html = '';
   for (let i = 0; i < VERTICAL_SLOTS; i++) {
     const isHour = i % 2 === 0;
-    html += `<div class="vertical-grid-line ${isHour ? 'hour-mark' : ''}" style="top: ${i * VERTICAL_SLOT_HEIGHT}px;"></div>`;
+    html += `<div class="vertical-grid-line ${isHour ? 'hour-mark' : ''}" style="top: ${i * DISPATCH_CONFIG.VERTICAL_SLOT_HEIGHT}px;"></div>`;
   }
   return html;
 }
@@ -659,21 +694,21 @@ function renderDriverVertical() {
     let blocksHtml = '';
     if (driver.status === 'leave') {
       blocksHtml = `
-        <div class="vertical-block leave" style="top: 0; height: ${VERTICAL_SLOTS * VERTICAL_SLOT_HEIGHT}px;">
+        <div class="vertical-block leave" style="top: 0; height: ${VERTICAL_SLOTS * DISPATCH_CONFIG.VERTICAL_SLOT_HEIGHT}px;">
           <div class="vertical-block-title">ON LEAVE</div>
         </div>
       `;
     } else {
       (driver.shifts || []).forEach((shift) => {
         const top = timeToVerticalPosition(shift.start);
-        const height = (shift.end - shift.start) * 2 * VERTICAL_SLOT_HEIGHT;
+        const height = (shift.end - shift.start) * 2 * DISPATCH_CONFIG.VERTICAL_SLOT_HEIGHT;
         const isCharter = shift.type === 'charter';
         
         let vehicleInfo = '';
         if (shift.duties && shift.duties.length > 0) {
           const vehicleIds = [...new Set(shift.duties.filter(d => d.vehicle).map(d => d.vehicle))];
           const vehicleRegos = vehicleIds.map(vid => {
-            const v = vehicles.find(veh => veh.id === vid);
+            const v = vehicleMap.get(vid);
             return v ? v.rego : vid;
           });
           vehicleInfo = vehicleRegos.join(', ');
@@ -762,7 +797,7 @@ function renderVehicleVertical() {
       const maintShift = (vehicle.shifts || []).find(s => s.type === 'maintenance');
       if (maintShift) {
         const top = timeToVerticalPosition(maintShift.start);
-        const height = (maintShift.end - maintShift.start) * 2 * VERTICAL_SLOT_HEIGHT;
+        const height = (maintShift.end - maintShift.start) * 2 * DISPATCH_CONFIG.VERTICAL_SLOT_HEIGHT;
         blocksHtml = `
           <div class="vertical-block maintenance" style="top: ${top}px; height: ${Math.max(height, 30)}px;">
             <div class="vertical-block-title">MAINTENANCE</div>
@@ -773,7 +808,7 @@ function renderVehicleVertical() {
     } else {
       (vehicle.shifts || []).filter(s => s.type !== 'maintenance').forEach((shift) => {
         const top = timeToVerticalPosition(shift.start);
-        const height = (shift.end - shift.start) * 2 * VERTICAL_SLOT_HEIGHT;
+        const height = (shift.end - shift.start) * 2 * DISPATCH_CONFIG.VERTICAL_SLOT_HEIGHT;
         const isCharter = shift.type === 'charter';
         
         let driverInfo = '';
@@ -861,7 +896,7 @@ function renderUnassignedVertical() {
     const globalIdx = unassignedJobs.indexOf(job);
     
     const top = timeToVerticalPosition(job.start);
-    const height = (job.end - job.start) * 2 * VERTICAL_SLOT_HEIGHT;
+    const height = (job.end - job.start) * 2 * DISPATCH_CONFIG.VERTICAL_SLOT_HEIGHT;
     const isCharter = job.type === 'charter';
     
     const blockHtml = `
@@ -2112,7 +2147,7 @@ function renderDriverRowStyleBCD(driver, idx, style) {
           } else {
             segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
             if (duty.vehicle) {
-              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleObj = vehicleMap.get(duty.vehicle);
               const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
               vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
@@ -2172,7 +2207,7 @@ function renderDriverRowStyleBCD(driver, idx, style) {
             
             segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
             if (duty.vehicle) {
-              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleObj = vehicleMap.get(duty.vehicle);
               const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
               vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
@@ -2248,7 +2283,7 @@ function renderDriverRowStyleE(driver, idx) {
           
           if (!isCancelled) {
             if (duty.vehicle) {
-              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleObj = vehicleMap.get(duty.vehicle);
               const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
               vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
@@ -2308,7 +2343,7 @@ function renderDriverRowStyleE(driver, idx) {
             
             segmentsHTML += `<div class="segment ${duty.type}" style="left: ${dutyLeft}%; width: ${dutyWidth}%;"></div>`;
             if (duty.vehicle) {
-              const vehicleObj = vehicles.find(v => v.id === duty.vehicle);
+              const vehicleObj = vehicleMap.get(duty.vehicle);
               const vehicleLabel = vehicleObj ? vehicleObj.rego : duty.vehicle;
               vehicleStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${vehicleLabel}">${vehicleLabel}</div>`;
             } else if (VEHICLE_REQUIRED_TYPES.includes(duty.type)) {
@@ -2508,7 +2543,7 @@ function renderVehicleRows() {
               if (hasDriver) {
                 let driverName = duty.driver;
                 if (!driverName && duty.driverId) {
-                  const driverObj = drivers.find(d => d.id === duty.driverId);
+                  const driverObj = driverMap.get(duty.driverId);
                   driverName = driverObj ? driverObj.name : duty.driverId;
                 }
                 driverStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${driverName}">${driverName}</div>`;
@@ -2571,7 +2606,7 @@ function renderVehicleRows() {
               if (hasDriver) {
                 let driverName = duty.driver;
                 if (!driverName && duty.driverId) {
-                  const driverObj = drivers.find(d => d.id === duty.driverId);
+                  const driverObj = driverMap.get(duty.driverId);
                   driverName = driverObj ? driverObj.name : duty.driverId;
                 }
                 driverStripHTML += `<div class="vehicle-segment assigned" style="left: ${dutyLeft}%; width: ${dutyWidth}%;" title="${driverName}">${driverName}</div>`;
@@ -3129,7 +3164,7 @@ function formatTimeCompact(time) {
 }
 
 async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3223,7 +3258,7 @@ async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
 }
 
 async function updateDutyDesc(driverId, shiftId, dutyIdx, value) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3261,7 +3296,7 @@ async function updateDutyDesc(driverId, shiftId, dutyIdx, value) {
 }
 
 async function updateDutyLocation(driverId, shiftId, dutyIdx, locationName, locationLat, locationLng) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3317,7 +3352,7 @@ function saveDutyLocation(driverId, shiftId, dutyIdx) {
 }
 
 async function updateDutyType(driverId, shiftId, dutyIdx, value) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3370,7 +3405,7 @@ async function updateDutyType(driverId, shiftId, dutyIdx, value) {
 }
 
 async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3379,7 +3414,7 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
   const duty = shift.duties[dutyIdx];
   const oldVehicle = duty.vehicle;
   const newVehicle = value || null;
-  const newVehicleObj = newVehicle ? vehicles.find(v => v.id === newVehicle) : null;
+  const newVehicleObj = newVehicle ? vehicleMap.get(newVehicle) : null;
   
   // Check availability
   if (newVehicle && !isVehicleAvailableForDuty(newVehicle, duty.start, duty.end, duty.id)) {
@@ -3459,7 +3494,7 @@ function formatDutyHours(hours) {
 }
 
 async function updateDutyPayType(driverId, shiftId, dutyIdx, payType) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3493,7 +3528,7 @@ async function updateDutyPayType(driverId, shiftId, dutyIdx, payType) {
 }
 
 async function bulkUpdatePayType(driverId, shiftId, payType) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3528,7 +3563,7 @@ async function bulkUpdatePayType(driverId, shiftId, payType) {
 }
 
 async function insertDuty(driverId, shiftId, dutyIdx, position) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -3792,7 +3827,7 @@ function renderEditForm() {
   const currentVehicle = duty.vehicle;
   const vehicleOptions = [...availableVehicles];
   if (currentVehicle && !vehicleOptions.find(v => v.id === currentVehicle)) {
-    const existingVehicle = vehicles.find(v => v.id === currentVehicle);
+    const existingVehicle = vehicleMap.get(currentVehicle);
     if (existingVehicle) vehicleOptions.unshift(existingVehicle);
   }
   
@@ -4202,7 +4237,7 @@ function renderVehicleDutyItem(duty, vehicleId, shiftId, dutyIdx) {
 function isDriverAvailableForDuty(driverId, start, end, excludeDutyId = null) {
   if (!driverId) return true;
   
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver || driver.status === 'leave') return false;
   
   // Check all driver shifts for conflicts
@@ -4220,7 +4255,7 @@ function isDriverAvailableForDuty(driverId, start, end, excludeDutyId = null) {
 }
 
 function updateVehicleDutyTime(vehicleId, shiftId, dutyIdx, field, value) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -4266,7 +4301,7 @@ function updateVehicleDutyTime(vehicleId, shiftId, dutyIdx, field, value) {
 }
 
 function updateVehicleDutyDesc(vehicleId, shiftId, dutyIdx, value) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -4276,7 +4311,7 @@ function updateVehicleDutyDesc(vehicleId, shiftId, dutyIdx, value) {
 }
 
 function updateVehicleDutyType(vehicleId, shiftId, dutyIdx, value) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -4290,7 +4325,7 @@ function updateVehicleDutyType(vehicleId, shiftId, dutyIdx, value) {
 }
 
 function updateVehicleDutyDriver(vehicleId, shiftId, dutyIdx, driverId) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -4306,7 +4341,7 @@ function updateVehicleDutyDriver(vehicleId, shiftId, dutyIdx, driverId) {
   }
   
   if (driverId) {
-    const driver = drivers.find(d => d.id === driverId);
+    const driver = driverMap.get(driverId);
     duty.driverId = driverId;
     duty.driver = driver?.name || driverId;
   } else {
@@ -4320,7 +4355,7 @@ function updateVehicleDutyDriver(vehicleId, shiftId, dutyIdx, driverId) {
 }
 
 function updateVehicleDutyPayType(vehicleId, shiftId, dutyIdx, payType) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -4331,7 +4366,7 @@ function updateVehicleDutyPayType(vehicleId, shiftId, dutyIdx, payType) {
 }
 
 function bulkUpdateVehiclePayType(vehicleId, shiftId, payType) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -4346,7 +4381,7 @@ function bulkUpdateVehiclePayType(vehicleId, shiftId, payType) {
 }
 
 function insertVehicleDuty(vehicleId, shiftId, dutyIdx, position) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -5191,7 +5226,7 @@ function updateTransferVehicleList() {
 }
 
 function editDuty(driverId, shiftId, dutyIdx) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   const shift = driver.shifts.find(s => s.id === shiftId);
   const duty = shift.duties[dutyIdx];
   
@@ -5208,7 +5243,7 @@ function editDuty(driverId, shiftId, dutyIdx) {
 }
 
 function showAddDutyForm(driverId) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   // Find all available slots across the ENTIRE day, including gaps between shifts
@@ -5309,7 +5344,7 @@ function fillSlot(start, end) {
   editingDuty.duty.end = start + duration;
   
   // Check if this slot falls within an existing shift
-  const driver = drivers.find(d => d.id === editingDuty.driverId);
+  const driver = driverMap.get(editingDuty.driverId);
   const containingShift = driver.shifts.find(s => s.start <= start && s.end >= start + duration);
   
   editingDuty.shift = containingShift || null;
@@ -5354,8 +5389,8 @@ function onFormChange() {
     renderDetailPanel();
     return;
   }
-  
-  const driver = drivers.find(d => d.id === editingDuty.driverId);
+
+  const driver = driverMap.get(editingDuty.driverId);
   if (!driver) return;
   
   // Only re-check shift assignment for truly adhoc duties (ones created via "Add Duty" button)
@@ -5462,9 +5497,9 @@ async function saveEdit() {
   
   const start = parseTime(startStr);
   const end = parseTime(endStr);
-  
-  const driver = drivers.find(d => d.id === editingDuty.driverId);
-  
+
+  const driver = driverMap.get(editingDuty.driverId);
+
   // Final validation
   if (editingDuty.isAdhoc || !editingDuty.shift) {
     const allDuties = driver.shifts.flatMap(s => s.duties);
@@ -5645,7 +5680,7 @@ async function saveEdit() {
 
 // Sync a duty's vehicle assignment to the vehicle's own schedule
 function syncVehicleSchedule(vehicleId, duty, driver, shiftInfo = null) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   // Find the shift this duty belongs to
@@ -5720,7 +5755,7 @@ function syncVehicleSchedule(vehicleId, duty, driver, shiftInfo = null) {
 
 // Remove a duty from vehicle's synced schedule
 function unsyncVehicleSchedule(vehicleId, dutyId) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   for (const shift of vehicle.shifts) {
@@ -5765,7 +5800,7 @@ function updateShiftBounds(shift) {
 }
 
 function deleteDuty(driverId, shiftId, dutyIdx) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   const shift = driver.shifts.find(s => s.id === shiftId);
   const duty = shift.duties[dutyIdx];
   
@@ -5786,7 +5821,7 @@ function deleteDuty(driverId, shiftId, dutyIdx) {
 let pendingCancelDuty = null;
 
 function openCancelDutyModal(dutyId, driverId, shiftId, dutyIdx) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -5819,7 +5854,7 @@ function closeCancelDutyModal() {
 }
 
 async function cancelAllDuties(driverId, shiftId) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -5922,7 +5957,7 @@ async function confirmCancelDuty() {
       }
       
       // Recalculate shift bounds based on remaining active duties
-      const driver = drivers.find(d => d.id === driverId);
+      const driver = driverMap.get(driverId);
       const shift = driver?.shifts.find(s => s.id === shiftId);
       if (shift) {
         updateShiftBounds(shift);
@@ -5945,7 +5980,7 @@ async function confirmCancelDuty() {
       unsyncVehicleSchedule(duty.vehicle, duty.id);
     }
     
-    const driver = drivers.find(d => d.id === driverId);
+    const driver = driverMap.get(driverId);
     const shift = driver?.shifts.find(s => s.id === shiftId);
     if (shift) {
       updateShiftBounds(shift);
@@ -5958,7 +5993,7 @@ async function confirmCancelDuty() {
 }
 
 async function reinstateDutyLine(dutyId, driverId, shiftId) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -6113,7 +6148,7 @@ let bulkAssigning = null; // { type: 'vehicle'|'driver', driverId?, vehicleId?, 
 
 // Driver shift transfer
 function showTransferDriverShift(driverId, shiftIdx) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   const shift = driver.shifts[shiftIdx];
   
   transferringShift = {
@@ -6129,8 +6164,8 @@ function showTransferDriverShift(driverId, shiftIdx) {
 async function executeTransferDriverShift(targetDriverId) {
   if (!transferringShift || transferringShift.type !== 'driver') return;
   
-  const sourceDriver = drivers.find(d => d.id === transferringShift.sourceId);
-  const targetDriver = drivers.find(d => d.id === targetDriverId);
+  const sourceDriver = driverMap.get(transferringShift.sourceId);
+  const targetDriver = driverMap.get(targetDriverId);
   const shift = transferringShift.shift;
   
   // If real data mode, call API to persist
@@ -6192,7 +6227,7 @@ async function executeTransferDriverShift(targetDriverId) {
 }
 
 async function unassignDriverShift(driverId, shiftIdx) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   const shift = driver.shifts[shiftIdx];
   
   // If real data mode, call API to persist
@@ -6255,7 +6290,7 @@ async function unassignDriverShift(driverId, shiftIdx) {
 
 // Vehicle shift transfer
 function showTransferVehicleShift(vehicleId, shiftIdx) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   const shift = vehicle.shifts[shiftIdx];
   
   transferringShift = {
@@ -6271,8 +6306,8 @@ function showTransferVehicleShift(vehicleId, shiftIdx) {
 function executeTransferVehicleShift(targetVehicleId) {
   if (!transferringShift || transferringShift.type !== 'vehicle') return;
   
-  const sourceVehicle = vehicles.find(v => v.id === transferringShift.sourceId);
-  const targetVehicle = vehicles.find(v => v.id === targetVehicleId);
+  const sourceVehicle = vehicleMap.get(transferringShift.sourceId);
+  const targetVehicle = vehicleMap.get(targetVehicleId);
   const shift = transferringShift.shift;
   
   // Remove from source
@@ -6299,7 +6334,7 @@ function executeTransferVehicleShift(targetVehicleId) {
 }
 
 function unassignVehicleShift(vehicleId, shiftIdx) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   const shift = vehicle.shifts[shiftIdx];
   
   // Create unassigned job from shift
@@ -6333,7 +6368,7 @@ function cancelTransfer() {
 
 // Bulk assign vehicle to all unassigned duties in a driver's shift
 function showBulkAssignVehicle(driverId, shiftId) {
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === shiftId);
@@ -6429,14 +6464,14 @@ function updateBulkVehicleList() {
 
 async function executeBulkAssignVehicle(vehicleId) {
   if (!bulkAssigning || bulkAssigning.type !== 'vehicle') return;
-  
-  const driver = drivers.find(d => d.id === bulkAssigning.driverId);
+
+  const driver = driverMap.get(bulkAssigning.driverId);
   if (!driver) return;
   
   const shift = driver.shifts.find(s => s.id === bulkAssigning.shiftId);
   if (!shift) return;
   
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   
   // Find duties that need vehicles (exclude cancelled)
   const dutiesToAssign = shift.duties.filter(duty => 
@@ -6544,7 +6579,7 @@ async function executeBulkAssignVehicle(vehicleId) {
 
 // Bulk assign driver to all unassigned duties in a vehicle's shift
 function showBulkAssignDriver(vehicleId, shiftId) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === shiftId);
@@ -6641,14 +6676,14 @@ function updateBulkDriverList() {
 
 function executeBulkAssignDriver(driverId) {
   if (!bulkAssigning || bulkAssigning.type !== 'driver') return;
-  
-  const vehicle = vehicles.find(v => v.id === bulkAssigning.vehicleId);
+
+  const vehicle = vehicleMap.get(bulkAssigning.vehicleId);
   if (!vehicle) return;
   
   const shift = vehicle.shifts.find(s => s.id === bulkAssigning.shiftId);
   if (!shift) return;
   
-  const driver = drivers.find(d => d.id === driverId);
+  const driver = driverMap.get(driverId);
   if (!driver) return;
   
   let assignedCount = 0;
@@ -6835,7 +6870,7 @@ function generateVehicleDutiesWithoutDrivers(shiftStart, shiftEnd, isCharter = f
 
 // Vehicle-centric edit functions
 function editVehicleDuty(vehicleId, shiftId, dutyIdx) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   const shift = vehicle.shifts.find(s => s.id === shiftId);
   const duty = shift.duties[dutyIdx];
   
@@ -6853,7 +6888,7 @@ function editVehicleDuty(vehicleId, shiftId, dutyIdx) {
 }
 
 function deleteVehicleDuty(vehicleId, shiftId, dutyIdx) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   const shift = vehicle.shifts.find(s => s.id === shiftId);
   shift.duties.splice(dutyIdx, 1);
   showToast('Duty deleted');
@@ -6861,7 +6896,7 @@ function deleteVehicleDuty(vehicleId, shiftId, dutyIdx) {
 }
 
 function showAddVehicleDutyForm(vehicleId) {
-  const vehicle = vehicles.find(v => v.id === vehicleId);
+  const vehicle = vehicleMap.get(vehicleId);
   if (!vehicle) return;
   
   const dayStart = 5;
@@ -6971,7 +7006,7 @@ function renderVehicleEditForm() {
   // Include currently assigned driver if editing
   const driverOptions = [...availableDrivers];
   if (duty.driverId && !driverOptions.find(d => d.id === duty.driverId)) {
-    const existingDriver = drivers.find(d => d.id === duty.driverId);
+    const existingDriver = driverMap.get(duty.driverId);
     if (existingDriver) driverOptions.unshift(existingDriver);
   }
   
@@ -7102,8 +7137,8 @@ function fillVehicleSlot(start, end) {
   const duration = Math.min(0.5, end - start);
   editingDuty.duty.start = start;
   editingDuty.duty.end = start + duration;
-  
-  const vehicle = vehicles.find(v => v.id === editingDuty.vehicleId);
+
+  const vehicle = vehicleMap.get(editingDuty.vehicleId);
   const containingShift = vehicle.shifts.find(s => s.start <= start && s.end >= start + duration);
   
   editingDuty.shift = containingShift || null;
@@ -7125,7 +7160,7 @@ function onVehicleFormChange() {
   const start = parseTime(startStr);
   const end = parseTime(endStr);
   
-  const selectedDriver = driverId ? drivers.find(d => d.id === driverId) : null;
+  const selectedDriver = driverId ? driverMap.get(driverId) : null;
   
   editingDuty.duty.start = start;
   editingDuty.duty.end = end;
@@ -7134,15 +7169,15 @@ function onVehicleFormChange() {
   editingDuty.duty.driver = selectedDriver ? selectedDriver.name : null;
   
   if (editingDuty.isNew) {
-    const vehicle = vehicles.find(v => v.id === editingDuty.vehicleId);
+    const vehicle = vehicleMap.get(editingDuty.vehicleId);
     const containingShift = vehicle.shifts.find(s => s.start <= start && s.end >= end);
     editingDuty.shift = containingShift || null;
     editingDuty.shiftId = containingShift ? containingShift.id : null;
     editingDuty.isAdhoc = !containingShift;
   }
-  
+
   // Validate
-  const vehicle = vehicles.find(v => v.id === editingDuty.vehicleId);
+  const vehicle = vehicleMap.get(editingDuty.vehicleId);
   
   if (editingDuty.isAdhoc || !editingDuty.shift) {
     const allDuties = vehicle.shifts.flatMap(s => s.duties);
@@ -7254,10 +7289,10 @@ function saveVehicleEdit() {
   const start = parseTime(startStr);
   const end = parseTime(endStr);
   
-  const selectedDriver = driverId ? drivers.find(d => d.id === driverId) : null;
-  
-  const vehicle = vehicles.find(v => v.id === editingDuty.vehicleId);
-  
+  const selectedDriver = driverId ? driverMap.get(driverId) : null;
+
+  const vehicle = vehicleMap.get(editingDuty.vehicleId);
+
   // Final validation
   if (editingDuty.isAdhoc || !editingDuty.shift) {
     const allDuties = vehicle.shifts.flatMap(s => s.duties);
@@ -7823,7 +7858,7 @@ function updateCommitPreview() {
     
     const driverId = document.getElementById('commitDriver').value;
     if (driverId) {
-      const driver = drivers.find(d => d.id === driverId);
+      const driver = driverMap.get(driverId);
       if (driver) {
         let totalHours = 0;
         let totalDuties = 0;
