@@ -385,10 +385,17 @@ When purging data, delete in this order:
 | P1.4 Roster open lockout | ✅ Complete |
 | P1.5 Clear Despatch preserving assignments | ✅ Complete |
 | P1.6 HRM page loading fix | ✅ Complete |
-| P2 Commit system rework | 🔄 Next |
-| P3 HRM enhancements | Planned |
-| P4 UI/UX improvements | Planned |
-| P5 Code cleanup | Planned |
+| P2.1 Remove uncommit feature | ✅ Complete |
+| P2.2 Additive-only commits | ✅ Complete |
+| P2.3 Show last committed timestamp | ✅ Complete |
+| P3.1 Larger employee edit modal | ✅ Complete |
+| P3.2 Pay record notes rework | ✅ Complete |
+| P4.1 Custom Fields button | ✅ Complete |
+| P4.2 Operations Calendar filters | ✅ Complete |
+| P4.3 Rosters screen force refresh | ✅ Complete |
+| P4.4 Processing loading indicator | ✅ Complete |
+| P4.5 Consistent confirmation modals | ✅ Complete |
+| P5 Code cleanup | 🔄 Next |
 
 See PROJECT-PLAN-2026-01-18.md for full details.
 
@@ -419,6 +426,20 @@ Claude should then:
   - Roster open blocked when scheduled on calendar
   - Clear Despatch preserves roster assignments
   - HRM page loading fixed (variable conflict resolved)
+- **P2 Commit System Rework:**
+  - Removed uncommit feature (prevents data integrity issues)
+  - Additive-only commits (re-commit updates timestamp, only adds new records)
+  - Cancelled duties excluded from commits
+  - Shows "Last committed: DD/MM/YYYY HH:MM" format
+- **P3 HRM Enhancements:**
+  - Larger employee edit modal (900px width)
+  - Pay record notes rework - multi-note with timestamps, icon display
+- **P4 UI/UX Improvements:**
+  - Custom Fields button replaces cog icon
+  - Operations Calendar filters (All/This Month/Published/Draft)
+  - Rosters screen always resets to list view
+  - Full-screen processing overlay for publish/unpublish
+  - Consistent confirmation modals (replaced 11 browser confirm() calls)
 - Added explicit file request requirements to documentation
 - Added schema-reference.sql for schema maintenance
 

@@ -47,8 +47,7 @@ See PROJECT-MD.txt Section 2 for full protocol.
 - **Dispatch Commit** - Lock days and generate pay records
 
 ### In Progress
-- Commit System Rework (additive-only commits)
-- Employee Pay Records Tab (Phase 4)
+- Code Cleanup (P5) - Remove fake data, legacy view options
 
 ### Planned
 - Reports & exports
@@ -188,9 +187,11 @@ See PROJECT-MD.txt Section 2 for full protocol.
 ## Version History
 
 ### v1.9.0 (January 18, 2026)
-- P1 Bug Fixes: unpublish preserves inline duties, pay types from API, roster lockouts
+- **P1 Bug Fixes:** unpublish preserves inline duties, pay types from API, roster lockouts
+- **P2 Commit Rework:** removed uncommit, additive-only commits, timestamp display
+- **P3 HRM:** larger modal, multi-note pay records with timestamps
+- **P4 UI/UX:** Custom Fields button, calendar filters, processing overlay, confirmation modals
 - Clear Despatch preserves roster assignments
-- HRM loading fix
 - Documentation: explicit file request requirements
 
 ### v1.8.0 (January 17, 2026)
