@@ -497,15 +497,17 @@ async function loadDispatchData() {
   try {
     const dateStr = formatDateISO(currentDate);
     
-    // Fetch dispatch data and pay types in parallel
-    const [dispatchResult, payTypesResult] = await Promise.all([
-      apiRequest(`/dispatch/${dateStr}`),
-      apiRequest('/config/pay-types')
-    ]);
+    // Fetch dispatch data
+    const dispatchResult = await apiRequest(`/dispatch/${dateStr}`);
     
-    // Store pay types
-    if (payTypesResult.data) {
-      payTypesData = payTypesResult.data;
+    // Fetch pay types separately (non-blocking - don't fail dispatch if this fails)
+    try {
+      const payTypesResult = await apiRequest('/config/pay-types');
+      if (payTypesResult.data) {
+        payTypesData = payTypesResult.data;
+      }
+    } catch (ptErr) {
+      console.warn('Failed to load pay types, using defaults:', ptErr);
     }
     
     if (dispatchResult.data) {
