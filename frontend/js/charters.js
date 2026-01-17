@@ -737,30 +737,32 @@ function renderCharterDetailView(charter) {
           ${charter.booking_date || charter.event_date ? `<p style="margin: 4px 0 0 0; color: var(--text-muted);">Event Date: ${charter.booking_date || charter.event_date}</p>` : ''}
         </div>
         <div style="display: flex; gap: 8px;">
-          <button class="btn btn-secondary" onclick="editCharter('${charter.id}')">Edit Charter</button>
-          <button class="btn btn-primary" onclick="showAddTripModal('${charter.id}')">+ Add Trip</button>
-          <button class="btn btn-secondary" onclick="switchCharterTab('bookings')">Back to List</button>
+          <button class="btn-secondary" onclick="editCharter('${charter.id}')">Edit Charter</button>
+          <button class="btn-primary" onclick="showAddTripModal('${charter.id}')">+ Add Trip</button>
+          <button class="btn-secondary" onclick="switchCharterTab('bookings')">Back to List</button>
         </div>
       </div>
 
-      <div class="charter-trips-section">
+      <div class="charter-trips-section" style="margin-top: 24px;">
         <h3 style="margin: 0 0 16px 0;">Trips</h3>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Trip</th>
-              <th>Date</th>
-              <th>Pickup</th>
-              <th>Dropoff</th>
-              <th>Passengers</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="charterDetailTripsBody">
-            ${renderDetailTripsRows()}
-          </tbody>
-        </table>
+        <div class="screen-table-container">
+          <table class="screen-table">
+            <thead>
+              <tr>
+                <th>Trip</th>
+                <th>Date</th>
+                <th>Pickup</th>
+                <th>Dropoff</th>
+                <th>Passengers</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="charterDetailTripsBody">
+              ${renderDetailTripsRows()}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   `;

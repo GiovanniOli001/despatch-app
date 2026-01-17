@@ -519,31 +519,32 @@
       
       <!-- Charters Screen -->
       <div class="screen" id="screen-charters" style="display: none;">
-        <!-- Sub-navigation tabs -->
-        <div class="hrm-tabs" style="margin-bottom: 20px;">
+        <div class="screen-header-bar">
+          <h2>Charters</h2>
+        </div>
+
+        <!-- HRM-style Sub-navigation -->
+        <div class="hrm-tabs">
           <button class="hrm-tab active" onclick="switchCharterTab('customers')">Customers</button>
           <button class="hrm-tab" onclick="switchCharterTab('bookings')">Bookings</button>
         </div>
 
         <!-- Customers Tab -->
         <div id="charterTabCustomers" class="hrm-tab-content active">
-          <div class="screen-header">
-            <div class="header-title">
-              <h1>Charter Customers</h1>
-            </div>
-            <div class="header-actions">
-              <input type="text" class="search-input" placeholder="Search customers..." oninput="filterCharterCustomers(this.value)">
-              <select class="filter-select" onchange="filterCustomerStatus(this.value)">
-                <option value="">All Status</option>
-                <option value="active">Active</option>
-                <option value="on_hold">On Hold</option>
-                <option value="closed">Closed</option>
-              </select>
-              <button class="btn btn-primary" onclick="showAddCustomerModal()">+ Add Customer</button>
+          <div class="screen-filters">
+            <input type="text" class="filter-input" placeholder="Search customers..." oninput="filterCharterCustomers(this.value)">
+            <select class="filter-select" onchange="filterCustomerStatus(this.value)">
+              <option value="">All Status</option>
+              <option value="active">Active</option>
+              <option value="on_hold">On Hold</option>
+              <option value="closed">Closed</option>
+            </select>
+            <div style="margin-left: auto;">
+              <button class="btn-primary" onclick="showAddCustomerModal()">+ Add Customer</button>
             </div>
           </div>
-          <div class="table-container">
-            <table class="data-table">
+          <div class="screen-table-container">
+            <table class="screen-table">
               <thead>
                 <tr>
                   <th>Company</th>
@@ -563,27 +564,24 @@
 
         <!-- Bookings Tab -->
         <div id="charterTabBookings" class="hrm-tab-content" style="display: none;">
-          <div class="screen-header">
-            <div class="header-title">
-              <h1>Charter Bookings</h1>
-            </div>
-            <div class="header-actions">
-              <input type="text" class="search-input" placeholder="Search charters..." oninput="filterCharters({search: this.value})">
-              <select class="filter-select" onchange="filterCharters({status: this.value})">
-                <option value="">All Status</option>
-                <option value="enquiry">Enquiry</option>
-                <option value="quoted">Quoted</option>
-                <option value="confirmed">Confirmed</option>
-                <option value="completed">Completed</option>
-                <option value="invoiced">Invoiced</option>
-                <option value="paid">Paid</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
-              <button class="btn btn-primary" onclick="showAddCharterModal()">+ New Charter</button>
+          <div class="screen-filters">
+            <input type="text" class="filter-input" placeholder="Search charters..." oninput="filterCharters({search: this.value})">
+            <select class="filter-select" onchange="filterCharters({status: this.value})">
+              <option value="">All Status</option>
+              <option value="enquiry">Enquiry</option>
+              <option value="quoted">Quoted</option>
+              <option value="confirmed">Confirmed</option>
+              <option value="completed">Completed</option>
+              <option value="invoiced">Invoiced</option>
+              <option value="paid">Paid</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <div style="margin-left: auto;">
+              <button class="btn-primary" onclick="showAddCharterModal()">+ New Charter</button>
             </div>
           </div>
-          <div class="table-container">
-            <table class="data-table">
+          <div class="screen-table-container">
+            <table class="screen-table">
               <thead>
                 <tr>
                   <th>Charter #</th>
@@ -1331,7 +1329,7 @@
         <!-- Contacts Tab -->
         <div id="customerTabContacts" class="modal-tab-content" style="display: none;">
           <div style="margin-bottom: 12px;">
-            <button class="btn btn-secondary" onclick="showAddContactModal()">+ Add Contact</button>
+            <button class="btn-secondary" onclick="showAddContactModal()">+ Add Contact</button>
           </div>
           <div id="customerContactsList">
             <!-- Populated dynamically -->
@@ -1339,8 +1337,8 @@
         </div>
       </div>
       <div class="crud-modal-footer">
-        <button class="btn btn-secondary" onclick="closeCustomerModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveCharterCustomer()">Save Customer</button>
+        <button class="btn-secondary" onclick="closeCustomerModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveCharterCustomer()">Save Customer</button>
       </div>
     </div>
   </div>
@@ -1377,8 +1375,8 @@
         </form>
       </div>
       <div class="crud-modal-footer">
-        <button class="btn btn-secondary" onclick="closeCharterModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveCharter()">Save Charter</button>
+        <button class="btn-secondary" onclick="closeCharterModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveCharter()">Save Charter</button>
       </div>
     </div>
   </div>
@@ -1474,8 +1472,8 @@
         </form>
       </div>
       <div class="crud-modal-footer">
-        <button class="btn btn-secondary" onclick="closeTripModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveTrip()">Save Trip</button>
+        <button class="btn-secondary" onclick="closeTripModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveTrip()">Save Trip</button>
       </div>
     </div>
   </div>
@@ -1525,8 +1523,8 @@
         </form>
       </div>
       <div class="crud-modal-footer">
-        <button class="btn btn-secondary" onclick="closeContactModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveContact()">Save Contact</button>
+        <button class="btn-secondary" onclick="closeContactModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveContact()">Save Contact</button>
       </div>
     </div>
   </div>
@@ -1573,8 +1571,8 @@
         </form>
       </div>
       <div class="crud-modal-footer">
-        <button class="btn btn-secondary" onclick="closeLineItemModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="saveLineItem()">Save</button>
+        <button class="btn-secondary" onclick="closeLineItemModal()">Cancel</button>
+        <button class="btn-primary" onclick="saveLineItem()">Save</button>
       </div>
     </div>
   </div>
