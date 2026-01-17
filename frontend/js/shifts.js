@@ -17,7 +17,8 @@ const SHIFT_DUTY_TYPES = [
   { code: 'dead', name: 'Dead Running' }
 ];
 
-const SHIFT_PAY_TYPES = [
+// Pay types - loaded from API, with fallback defaults
+let shiftPayTypes = [
   { code: 'STD', name: 'Standard' },
   { code: 'OT', name: 'Overtime' },
   { code: 'DT', name: 'Double Time' },
@@ -26,14 +27,19 @@ const SHIFT_PAY_TYPES = [
 ];
 
 async function loadShiftFormData() {
-  // Load employees and vehicles for dropdowns
+  // Load employees, vehicles, and pay types for dropdowns
   try {
-    const [empResult, vehResult] = await Promise.all([
+    const [empResult, vehResult, payTypesResult] = await Promise.all([
       apiRequest('/employees?status=active&limit=500'),
-      apiRequest('/vehicles?status=active&limit=500')
+      apiRequest('/vehicles?status=active&limit=500'),
+      apiRequest('/pay-types')
     ]);
     shiftEmployees = empResult.data || [];
     shiftVehicles = vehResult.data || [];
+    // Use API pay types if available, filtering to active only
+    if (payTypesResult.data && payTypesResult.data.length > 0) {
+      shiftPayTypes = payTypesResult.data.filter(pt => pt.is_active !== 0);
+    }
   } catch (err) {
     console.error('Failed to load form data:', err);
   }
@@ -380,7 +386,7 @@ function renderShiftDutyBlocks() {
           </div>
           <div class="duty-col-pay">
             <select onchange="updateDutyLine(${blockIdx}, ${lineIdx}, 'pay_type', this.value)">
-              ${SHIFT_PAY_TYPES.map(t => `<option value="${t.code}" ${line.pay_type === t.code ? 'selected' : ''}>${t.code}</option>`).join('')}
+              ${shiftPayTypes.map(t => `<option value="${t.code}" ${line.pay_type === t.code ? 'selected' : ''}>${t.code}</option>`).join('')}
             </select>
           </div>
           <div class="duty-col-hours">${formatHours(hours)}</div>

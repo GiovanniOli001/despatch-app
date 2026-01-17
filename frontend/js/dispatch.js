@@ -502,7 +502,7 @@ async function loadDispatchData() {
     
     // Fetch pay types separately (non-blocking - don't fail dispatch if this fails)
     try {
-      const payTypesResult = await apiRequest('/config/pay-types');
+      const payTypesResult = await apiRequest('/pay-types');
       if (payTypesResult.data) {
         dispatchPayTypes = payTypesResult.data;
       }
