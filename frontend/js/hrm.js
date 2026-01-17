@@ -701,15 +701,20 @@ async function saveFieldDefinition() {
 }
 
 async function deleteFieldDefinition(id, name) {
-  if (!confirm(`Delete field "${name}"? This will also delete all values for this field.`)) return;
-  
-  try {
-    await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
-    showToast('Field deleted');
-    await loadCustomFieldDefinitions();
-  } catch (err) {
-    showToast(err.message || 'Failed to delete', 'error');
-  }
+  showConfirmModal(
+    'Delete Field',
+    `Delete field "${name}"?\n\nThis will also delete all values for this field.`,
+    async () => {
+      try {
+        await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
+        showToast('Field deleted');
+        await loadCustomFieldDefinitions();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 
 // ============================================
@@ -794,15 +799,20 @@ async function saveCustomField() {
 }
 
 async function deleteCustomField(id, name) {
-  if (!confirm(`Delete custom field "${name}"?\n\nThis will also delete all stored values for this field across all employees.`)) return;
-  
-  try {
-    await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
-    showToast('Custom field deleted');
-    loadCustomFieldDefinitions();
-  } catch (err) {
-    showToast(err.message || 'Failed to delete', 'error');
-  }
+  showConfirmModal(
+    'Delete Custom Field',
+    `Delete custom field "${name}"?\n\nThis will also delete all stored values for this field across all employees.`,
+    async () => {
+      try {
+        await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
+        showToast('Custom field deleted');
+        loadCustomFieldDefinitions();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 
 async function saveFieldLayouts() {
@@ -856,14 +866,20 @@ function renderCustomFieldsList() {
 }
 
 async function deleteEmployee(id, name) {
-  if (!confirm(`Delete ${name}?`)) return;
-  try {
-    await apiRequest(`/employees/${id}`, { method: 'DELETE' });
-    showToast('Employee deleted');
-    loadEmployees();
-  } catch (err) {
-    showToast(err.message || 'Failed to delete', 'error');
-  }
+  showConfirmModal(
+    'Delete Employee',
+    `Delete ${name}?\n\nThis action cannot be undone.`,
+    async () => {
+      try {
+        await apiRequest(`/employees/${id}`, { method: 'DELETE' });
+        showToast('Employee deleted');
+        loadEmployees();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 
 
@@ -994,15 +1010,20 @@ async function savePayType() {
 }
 
 async function deletePayType(id, name) {
-  if (!confirm(`Delete pay type "${name}"?`)) return;
-  
-  try {
-    await apiRequest(`/pay-types/${id}`, { method: 'DELETE' });
-    showToast('Pay type deleted');
-    loadPayTypes();
-  } catch (err) {
-    showToast(err.message || 'Failed to delete pay type', 'error');
-  }
+  showConfirmModal(
+    'Delete Pay Type',
+    `Delete pay type "${name}"?`,
+    async () => {
+      try {
+        await apiRequest(`/pay-types/${id}`, { method: 'DELETE' });
+        showToast('Pay type deleted');
+        loadPayTypes();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete pay type', 'error');
+      }
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 
 // ============================================

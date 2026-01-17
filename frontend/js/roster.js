@@ -375,57 +375,70 @@ async function confirmScheduleRoster() {
 }
 
 async function unscheduleRoster(rosterId) {
-  if (!confirm('Remove this roster from the calendar?')) return;
-  
-  try {
-    await apiRequest(`/roster/containers/${rosterId}/unschedule`, { method: 'POST' });
-    showToast('Roster removed from calendar', 'success');
-    loadOpsCalendar();
-  } catch (err) {
-    showToast(err.message || 'Failed to remove roster', 'error');
-  }
+  showConfirmModal(
+    'Remove from Calendar',
+    'Remove this roster from the calendar?',
+    async () => {
+      try {
+        await apiRequest(`/roster/containers/${rosterId}/unschedule`, { method: 'POST' });
+        showToast('Roster removed from calendar', 'success');
+        loadOpsCalendar();
+      } catch (err) {
+        showToast(err.message || 'Failed to remove roster', 'error');
+      }
+    }
+  );
 }
 
 async function publishRosterFromCalendar(rosterId) {
-  if (!confirm('Publish this roster? It will become visible in Dispatch.')) return;
-  
-  showProcessingOverlay('Publishing roster...', 'This may take a moment');
-  
-  try {
-    const result = await apiRequest(`/roster/containers/${rosterId}/publish`, { method: 'POST' });
-    hideProcessingOverlay();
-    
-    if (result.error) {
-      if (result.conflict) {
-        showToast(`Conflict: ${result.conflict.driverName} on ${result.conflict.date} (${result.conflict.conflictingRoster})`, 'error');
-      } else {
-        showToast(result.error, 'error');
+  showConfirmModal(
+    'Publish Roster',
+    'Publish this roster? It will become visible in Dispatch.',
+    async () => {
+      showProcessingOverlay('Publishing roster...', 'This may take a moment');
+      
+      try {
+        const result = await apiRequest(`/roster/containers/${rosterId}/publish`, { method: 'POST' });
+        hideProcessingOverlay();
+        
+        if (result.error) {
+          if (result.conflict) {
+            showToast(`Conflict: ${result.conflict.driverName} on ${result.conflict.date} (${result.conflict.conflictingRoster})`, 'error');
+          } else {
+            showToast(result.error, 'error');
+          }
+          return;
+        }
+        showToast('Roster published!', 'success');
+        loadOpsCalendar();
+      } catch (err) {
+        hideProcessingOverlay();
+        showToast(err.message || 'Failed to publish', 'error');
       }
-      return;
-    }
-    showToast('Roster published!', 'success');
-    loadOpsCalendar();
-  } catch (err) {
-    hideProcessingOverlay();
-    showToast(err.message || 'Failed to publish', 'error');
-  }
+    },
+    { confirmText: 'Publish' }
+  );
 }
 
 async function unpublishRosterFromCalendar(rosterId) {
-  const confirmMsg = 'WARNING: Unpublishing this roster will remove ALL duties from this roster from Dispatch.\n\nDrivers will no longer see these assignments until the roster is published again.\n\nContinue?';
-  if (!confirm(confirmMsg)) return;
-  
-  showProcessingOverlay('Unpublishing roster...', 'Removing duties from dispatch');
-  
-  try {
-    await apiRequest(`/roster/containers/${rosterId}/unpublish`, { method: 'POST' });
-    hideProcessingOverlay();
-    showToast('Roster unpublished - duties removed from dispatch', 'success');
-    loadOpsCalendar();
-  } catch (err) {
-    hideProcessingOverlay();
-    showToast(err.message || 'Failed to unpublish', 'error');
-  }
+  showConfirmModal(
+    '⚠️ Unpublish Roster',
+    'WARNING: Unpublishing this roster will remove ALL duties from this roster from Dispatch.\n\nDrivers will no longer see these assignments until the roster is published again.',
+    async () => {
+      showProcessingOverlay('Unpublishing roster...', 'Removing duties from dispatch');
+      
+      try {
+        await apiRequest(`/roster/containers/${rosterId}/unpublish`, { method: 'POST' });
+        hideProcessingOverlay();
+        showToast('Roster unpublished - duties removed from dispatch', 'success');
+        loadOpsCalendar();
+      } catch (err) {
+        hideProcessingOverlay();
+        showToast(err.message || 'Failed to unpublish', 'error');
+      }
+    },
+    { confirmText: 'Unpublish', isDangerous: true }
+  );
 }
 
 // ============================================
@@ -1151,34 +1164,37 @@ async function toggleDayDispatch(include) {
 }
 
 async function toggleRosterDispatch(include) {
-  if (!confirm(`This will ${include ? 'include' : 'omit'} ALL unassigned blocks for the ENTIRE roster period. Continue?`)) {
-    return;
-  }
-  
-  showProcessingOverlay(include ? 'Including all blocks...' : 'Omitting all blocks...', 'Processing roster entries');
-  
-  try {
-    const result = await apiRequest('/roster/toggle-dispatch-all', {
-      method: 'POST',
-      body: {
-        roster_id: currentRosterId,
-        include: include
+  showConfirmModal(
+    include ? 'Include All Blocks' : 'Omit All Blocks',
+    `This will ${include ? 'include' : 'omit'} ALL unassigned blocks for the ENTIRE roster period.`,
+    async () => {
+      showProcessingOverlay(include ? 'Including all blocks...' : 'Omitting all blocks...', 'Processing roster entries');
+      
+      try {
+        const result = await apiRequest('/roster/toggle-dispatch-all', {
+          method: 'POST',
+          body: {
+            roster_id: currentRosterId,
+            include: include
+          }
+        });
+        
+        hideProcessingOverlay();
+        
+        if (result.error) {
+          showToast(result.error, 'error');
+          return;
+        }
+        
+        showToast(result.message || (include ? 'All included' : 'All omitted'), 'success');
+        await loadDayView();
+      } catch (err) {
+        hideProcessingOverlay();
+        showToast(err.message || 'Toggle failed', 'error');
       }
-    });
-    
-    hideProcessingOverlay();
-    
-    if (result.error) {
-      showToast(result.error, 'error');
-      return;
-    }
-    
-    showToast(result.message || (include ? 'All included' : 'All omitted'), 'success');
-    await loadDayView();
-  } catch (err) {
-    hideProcessingOverlay();
-    showToast(err.message || 'Toggle failed', 'error');
-  }
+    },
+    { confirmText: include ? 'Include All' : 'Omit All' }
+  );
 }
 
 function showBlockInfo(blockId) {
@@ -1292,14 +1308,20 @@ async function saveRoster() {
 }
 
 async function deleteRoster(id) {
-  if (!confirm('Delete this roster and all assignments?')) return;
-  try {
-    await apiRequest(`/roster/containers/${id}`, { method: 'DELETE' });
-    showToast('Roster deleted');
-    loadRosters();
-  } catch (err) {
-    showToast(err.message || 'Failed to delete', 'error');
-  }
+  showConfirmModal(
+    'Delete Roster',
+    'Delete this roster and all assignments?\n\nThis action cannot be undone.',
+    async () => {
+      try {
+        await apiRequest(`/roster/containers/${id}`, { method: 'DELETE' });
+        showToast('Roster deleted');
+        loadRosters();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 
 // Legacy aliases
