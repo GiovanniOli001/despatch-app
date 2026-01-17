@@ -142,7 +142,7 @@ async function editShift(id) {
     const lockStatus = await apiRequest(`/shifts/${id}/lock-status`);
     if (lockStatus.locked) {
       const rosterNames = lockStatus.published_rosters.map(r => r.code).join(', ');
-      showToast(`This shift cannot be edited - it is used in published roster(s): ${rosterNames}. Unpublish the roster(s) first.`, 'error');
+      showToast(`This shift cannot be edited - it is used in published roster(s): ${rosterNames}. Unpublish the roster(s) first.`, true);
       return;
     }
   } catch (err) {
@@ -155,7 +155,7 @@ async function editShift(id) {
     const result = await apiRequest(`/shifts/${id}`);
     const shift = result.data;
     if (!shift) {
-      showToast('Shift not found', 'error');
+      showToast('Shift not found', true);
       return;
     }
     
@@ -174,7 +174,7 @@ async function editShift(id) {
     renderShiftDutyBlocks();
     document.getElementById('shiftModalOverlay').classList.add('show');
   } catch (err) {
-    showToast(err.message || 'Failed to load shift', 'error');
+    showToast(err.message || 'Failed to load shift', true);
   }
 }
 
@@ -528,7 +528,7 @@ async function saveShift() {
     closeShiftModal();
     loadShifts();
   } catch (err) {
-    showToast(err.message || 'Failed to save', 'error');
+    showToast(err.message || 'Failed to save', true);
   }
 }
 
@@ -538,7 +538,7 @@ async function duplicateShift(id) {
     showToast('Shift template duplicated');
     loadShifts();
   } catch (err) {
-    showToast(err.message || 'Failed to duplicate', 'error');
+    showToast(err.message || 'Failed to duplicate', true);
   }
 }
 
@@ -552,7 +552,7 @@ async function deleteShift(id, name) {
         showToast('Shift template deleted');
         loadShifts();
       } catch (err) {
-        showToast(err.message || 'Failed to delete', 'error');
+        showToast(err.message || 'Failed to delete', true);
       }
     },
     { confirmText: 'Delete', isDangerous: true }

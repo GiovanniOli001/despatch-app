@@ -22,33 +22,33 @@ const PAY_TYPES = {
 
 const ROUTES = ['Route 101', 'Route 102', 'Route 203', 'Route 305', 'Express A', 'Metro Loop'];
 
-// Real Adelaide locations with coordinates for distance/time calculations
+// Real Brisbane locations with coordinates for distance/time calculations
 const LOCATIONS = [
-  { id: 'cbd', name: 'Adelaide CBD', lat: -34.9285, lng: 138.6007, type: 'urban' },
-  { id: 'airport', name: 'Adelaide Airport', lat: -34.9449, lng: 138.5311, type: 'transport' },
-  { id: 'glenelg', name: 'Glenelg', lat: -34.9824, lng: 138.5156, type: 'beach' },
-  { id: 'oval', name: 'Adelaide Oval', lat: -34.9156, lng: 138.5962, type: 'venue' },
-  { id: 'convention', name: 'Convention Centre', lat: -34.9220, lng: 138.5970, type: 'venue' },
-  { id: 'port', name: 'Port Adelaide', lat: -34.8469, lng: 138.5030, type: 'urban' },
-  { id: 'marion', name: 'Westfield Marion', lat: -35.0136, lng: 138.5561, type: 'shopping' },
-  { id: 'modbury', name: 'Tea Tree Plaza', lat: -34.8329, lng: 138.6836, type: 'shopping' },
-  { id: 'elizabeth', name: 'Elizabeth', lat: -34.7117, lng: 138.6696, type: 'urban' },
-  { id: 'noarlunga', name: 'Noarlunga Centre', lat: -35.1381, lng: 138.5176, type: 'urban' },
-  { id: 'mtbarker', name: 'Mount Barker', lat: -35.0667, lng: 138.8667, type: 'hills' },
-  { id: 'victor', name: 'Victor Harbor', lat: -35.5522, lng: 138.6178, type: 'coastal' },
-  { id: 'barossa', name: 'Barossa Valley', lat: -34.5282, lng: 138.9519, type: 'wine' },
-  { id: 'mclaren', name: 'McLaren Vale', lat: -35.2167, lng: 138.5500, type: 'wine' },
-  { id: 'stirling', name: 'Stirling (Adelaide Hills)', lat: -34.9983, lng: 138.7217, type: 'hills' },
-  { id: 'semaphore', name: 'Semaphore', lat: -34.8389, lng: 138.4822, type: 'beach' },
-  { id: 'henley', name: 'Henley Beach', lat: -34.9178, lng: 138.4961, type: 'beach' },
-  { id: 'norwood', name: 'Norwood', lat: -34.9211, lng: 138.6314, type: 'urban' },
-  { id: 'burnside', name: 'Burnside Village', lat: -34.9375, lng: 138.6547, type: 'shopping' },
-  { id: 'uni', name: 'Adelaide University', lat: -34.9190, lng: 138.6046, type: 'education' },
-  { id: 'flinders', name: 'Flinders University', lat: -35.0244, lng: 138.5672, type: 'education' },
-  { id: 'rah', name: 'Royal Adelaide Hospital', lat: -34.9208, lng: 138.5872, type: 'medical' },
-  { id: 'fmc', name: 'Flinders Medical Centre', lat: -35.0197, lng: 138.5678, type: 'medical' },
-  { id: 'zoo', name: 'Adelaide Zoo', lat: -34.9125, lng: 138.6056, type: 'attraction' },
-  { id: 'hahndorf', name: 'Hahndorf', lat: -35.0297, lng: 138.8081, type: 'tourist' }
+  { id: 'cbd', name: 'Brisbane CBD', lat: -27.4698, lng: 153.0251, type: 'urban' },
+  { id: 'airport', name: 'Brisbane Airport', lat: -27.3942, lng: 153.1218, type: 'transport' },
+  { id: 'southbank', name: 'South Bank', lat: -27.4806, lng: 153.0231, type: 'beach' },
+  { id: 'gabba', name: 'The Gabba', lat: -27.4858, lng: 153.0381, type: 'venue' },
+  { id: 'convention', name: 'Convention Centre', lat: -27.4773, lng: 153.0197, type: 'venue' },
+  { id: 'fortvalley', name: 'Fortitude Valley', lat: -27.4568, lng: 153.0325, type: 'urban' },
+  { id: 'garden_city', name: 'Westfield Garden City', lat: -27.5568, lng: 153.0628, type: 'shopping' },
+  { id: 'chermside', name: 'Westfield Chermside', lat: -27.3855, lng: 153.0303, type: 'shopping' },
+  { id: 'capalaba', name: 'Capalaba', lat: -27.5253, lng: 153.1917, type: 'urban' },
+  { id: 'logan', name: 'Logan Central', lat: -27.6389, lng: 153.1089, type: 'urban' },
+  { id: 'mtgravatt', name: 'Mount Gravatt', lat: -27.5422, lng: 153.0789, type: 'hills' },
+  { id: 'goldcoast', name: 'Gold Coast', lat: -28.0167, lng: 153.4000, type: 'coastal' },
+  { id: 'sunshinecoast', name: 'Sunshine Coast', lat: -26.6500, lng: 153.0667, type: 'coastal' },
+  { id: 'ipswich', name: 'Ipswich', lat: -27.6167, lng: 152.7667, type: 'urban' },
+  { id: 'toowong', name: 'Toowong', lat: -27.4839, lng: 152.9833, type: 'hills' },
+  { id: 'redcliffe', name: 'Redcliffe', lat: -27.2306, lng: 153.1014, type: 'beach' },
+  { id: 'sandgate', name: 'Sandgate', lat: -27.3231, lng: 153.0681, type: 'beach' },
+  { id: 'paddington', name: 'Paddington', lat: -27.4619, lng: 153.0056, type: 'urban' },
+  { id: 'indooroopilly', name: 'Indooroopilly', lat: -27.4989, lng: 152.9753, type: 'shopping' },
+  { id: 'uq', name: 'University of Queensland', lat: -27.4975, lng: 153.0137, type: 'education' },
+  { id: 'qut', name: 'QUT Gardens Point', lat: -27.4769, lng: 153.0278, type: 'education' },
+  { id: 'rbwh', name: 'Royal Brisbane Hospital', lat: -27.4489, lng: 153.0278, type: 'medical' },
+  { id: 'pahospital', name: 'Princess Alexandra Hospital', lat: -27.5036, lng: 153.0336, type: 'medical' },
+  { id: 'lonepine', name: 'Lone Pine Koala Sanctuary', lat: -27.5333, lng: 152.9694, type: 'attraction' },
+  { id: 'mountcootha', name: 'Mt Coot-tha Lookout', lat: -27.4758, lng: 152.9583, type: 'tourist' }
 ];
 
 // Get location by id or name

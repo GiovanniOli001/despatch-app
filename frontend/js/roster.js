@@ -349,12 +349,12 @@ async function confirmScheduleRoster() {
   const endDate = document.getElementById('scheduleEndDate').value;
   
   if (!startDate || !endDate) {
-    showToast('Please select both start and end dates', 'error');
+    showToast('Please select both start and end dates', true);
     return;
   }
   
   if (startDate > endDate) {
-    showToast('Start date cannot be after end date', 'error');
+    showToast('Start date cannot be after end date', true);
     return;
   }
   
@@ -366,11 +366,11 @@ async function confirmScheduleRoster() {
         calendar_end_date: endDate
       }
     });
-    showToast('Roster added to calendar!', 'success');
+    showToast('Roster added to calendar!', false);
     closeScheduleModal();
     loadOpsCalendar();
   } catch (err) {
-    showToast(err.message || 'Failed to schedule roster', 'error');
+    showToast(err.message || 'Failed to schedule roster', true);
   }
 }
 
@@ -381,10 +381,10 @@ async function unscheduleRoster(rosterId) {
     async () => {
       try {
         await apiRequest(`/roster/containers/${rosterId}/unschedule`, { method: 'POST' });
-        showToast('Roster removed from calendar', 'success');
+        showToast('Roster removed from calendar', false);
         loadOpsCalendar();
       } catch (err) {
-        showToast(err.message || 'Failed to remove roster', 'error');
+        showToast(err.message || 'Failed to remove roster', true);
       }
     }
   );
@@ -403,17 +403,17 @@ async function publishRosterFromCalendar(rosterId) {
         
         if (result.error) {
           if (result.conflict) {
-            showToast(`Conflict: ${result.conflict.driverName} on ${result.conflict.date} (${result.conflict.conflictingRoster})`, 'error');
+            showToast(`Conflict: ${result.conflict.driverName} on ${result.conflict.date} (${result.conflict.conflictingRoster})`, true);
           } else {
-            showToast(result.error, 'error');
+            showToast(result.error, true);
           }
           return;
         }
-        showToast('Roster published!', 'success');
+        showToast('Roster published!', false);
         loadOpsCalendar();
       } catch (err) {
         hideProcessingOverlay();
-        showToast(err.message || 'Failed to publish', 'error');
+        showToast(err.message || 'Failed to publish', true);
       }
     },
     { confirmText: 'Publish' }
@@ -430,11 +430,11 @@ async function unpublishRosterFromCalendar(rosterId) {
       try {
         await apiRequest(`/roster/containers/${rosterId}/unpublish`, { method: 'POST' });
         hideProcessingOverlay();
-        showToast('Roster unpublished - duties removed from dispatch', 'success');
+        showToast('Roster unpublished - duties removed from dispatch', false);
         loadOpsCalendar();
       } catch (err) {
         hideProcessingOverlay();
-        showToast(err.message || 'Failed to unpublish', 'error');
+        showToast(err.message || 'Failed to unpublish', true);
       }
     },
     { confirmText: 'Unpublish', isDangerous: true }
@@ -520,10 +520,10 @@ async function clearAllDespatch() {
       `• ${result.deleted?.duty_lines || 0} duty lines cleared\n` +
       `• ${result.preserved?.entries || 0} roster entries preserved`;
     
-    showToast(msg, 'success');
+    showToast(msg, false);
     loadOpsCalendar();
   } catch (err) {
-    showToast(err.message || 'Failed to clear despatch', 'error');
+    showToast(err.message || 'Failed to clear despatch', true);
     btn.disabled = false;
     btn.textContent = 'Clear Despatch';
   }
@@ -616,11 +616,11 @@ async function openRoster(id) {
   // Check if roster is published or scheduled - block editing
   const roster = rostersData.find(r => r.id === id);
   if (roster && roster.status === 'published') {
-    showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', 'error');
+    showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', true);
     return;
   }
-  if (roster && roster.isScheduled) {
-    showToast('This roster cannot be opened for editing while scheduled on the calendar. Remove it from the calendar first.', 'error');
+  if (roster && (roster.isScheduled || roster.calendar_start_date)) {
+    showToast('This roster cannot be opened for editing while scheduled on the calendar. Remove it from the calendar first.', true);
     return;
   }
   
@@ -634,12 +634,12 @@ async function openRoster(id) {
     
     // Double-check from server response
     if (currentRoster.status === 'published') {
-      showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', 'error');
+      showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', true);
       backToRosterList();
       return;
     }
     if (currentRoster.calendar_start_date) {
-      showToast('This roster cannot be opened for editing while scheduled on the calendar. Remove it from the calendar first.', 'error');
+      showToast('This roster cannot be opened for editing while scheduled on the calendar. Remove it from the calendar first.', true);
       backToRosterList();
       return;
     }
@@ -653,7 +653,7 @@ async function openRoster(id) {
     
     await loadDayView();
   } catch (err) {
-    showToast(err.message || 'Failed to load roster', 'error');
+    showToast(err.message || 'Failed to load roster', true);
     backToRosterList();
   }
 }
@@ -1083,14 +1083,14 @@ async function doAssign(blockId, shiftId, driverId, includeConnected) {
     
     // Check if API returned an error
     if (result.error) {
-      showToast(result.error, 'error');
+      showToast(result.error, true);
       return;
     }
     
     showToast(driverId ? 'Block assigned' : 'Block unassigned');
     await loadDayView();
   } catch (err) {
-    showToast(err.message || 'Assignment failed', 'error');
+    showToast(err.message || 'Assignment failed', true);
   }
 }
 
@@ -1129,14 +1129,14 @@ async function toggleBlockDispatch(blockId, shiftId, include) {
     });
     
     if (result.error) {
-      showToast(result.error, 'error');
+      showToast(result.error, true);
       return;
     }
     
     showToast(include ? 'Block included in dispatch' : 'Block omitted from dispatch');
     await loadDayView();
   } catch (err) {
-    showToast(err.message || 'Toggle failed', 'error');
+    showToast(err.message || 'Toggle failed', true);
   }
 }
 
@@ -1152,14 +1152,14 @@ async function toggleDayDispatch(include) {
     });
     
     if (result.error) {
-      showToast(result.error, 'error');
+      showToast(result.error, true);
       return;
     }
     
     showToast(result.message || (include ? 'All included' : 'All omitted'));
     await loadDayView();
   } catch (err) {
-    showToast(err.message || 'Toggle failed', 'error');
+    showToast(err.message || 'Toggle failed', true);
   }
 }
 
@@ -1182,15 +1182,15 @@ async function toggleRosterDispatch(include) {
         hideProcessingOverlay();
         
         if (result.error) {
-          showToast(result.error, 'error');
+          showToast(result.error, true);
           return;
         }
         
-        showToast(result.message || (include ? 'All included' : 'All omitted'), 'success');
+        showToast(result.message || (include ? 'All included' : 'All omitted'), false);
         await loadDayView();
       } catch (err) {
         hideProcessingOverlay();
-        showToast(err.message || 'Toggle failed', 'error');
+        showToast(err.message || 'Toggle failed', true);
       }
     },
     { confirmText: include ? 'Include All' : 'Omit All' }
@@ -1256,7 +1256,7 @@ function editRosterDetails(id) {
   
   // Block editing if roster is published
   if (roster.status === 'published') {
-    showToast('This roster cannot be edited as it is published to the Ops calendar. Unpublish the roster to make changes.', 'error');
+    showToast('This roster cannot be edited as it is published to the Ops calendar. Unpublish the roster to make changes.', true);
     return;
   }
   
@@ -1288,7 +1288,7 @@ async function saveRoster() {
   };
   
   if (!data.code || !data.name || !data.start_date || !data.end_date) {
-    showToast('Please fill in all required fields', 'error');
+    showToast('Please fill in all required fields', true);
     return;
   }
   
@@ -1303,7 +1303,7 @@ async function saveRoster() {
     closeRosterModal();
     loadRosters();
   } catch (err) {
-    showToast(err.message || 'Failed to save', 'error');
+    showToast(err.message || 'Failed to save', true);
   }
 }
 
@@ -1317,7 +1317,7 @@ async function deleteRoster(id) {
         showToast('Roster deleted');
         loadRosters();
       } catch (err) {
-        showToast(err.message || 'Failed to delete', 'error');
+        showToast(err.message || 'Failed to delete', true);
       }
     },
     { confirmText: 'Delete', isDangerous: true }

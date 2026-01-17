@@ -166,9 +166,6 @@
             <button class="btn-secondary btn-sm" onclick="showCommitModal()" id="btnCommitDay">
               <span>📋</span> Commit Day
             </button>
-            <button class="btn-secondary btn-sm" onclick="uncommitDay()" id="btnUncommit" style="display: none;">
-              <span>↩️</span> Uncommit
-            </button>
           </div>
         </div>
 
@@ -568,9 +565,9 @@
         <button class="crud-modal-close" onclick="closeEmployeeModal()">&times;</button>
       </div>
       <div class="modal-tabs">
-        <button class="modal-tab active" onclick="switchEmployeeTab('general')">General</button>
-        <button class="modal-tab" onclick="switchEmployeeTab('custom')">Custom Fields</button>
-        <button class="modal-tab" onclick="switchEmployeeTab('payrecords')" style="display: none;">Pay Records</button>
+        <button class="modal-tab active" onclick="switchEmployeeTab('general', event)">General</button>
+        <button class="modal-tab" onclick="switchEmployeeTab('custom', event)">Custom Fields</button>
+        <button class="modal-tab" onclick="switchEmployeeTab('payrecords', event)" style="display: none;">Pay Records</button>
       </div>
       <div class="crud-modal-body" style="padding: 0;">
         <form id="employeeForm" onsubmit="event.preventDefault(); saveEmployee();">
@@ -666,8 +663,8 @@
         <button class="crud-modal-close" onclick="closeEmployeeFieldsSettings()">&times;</button>
       </div>
       <div class="modal-tabs">
-        <button class="modal-tab active" onclick="switchFieldsSettingsTab('fields')">Fields</button>
-        <button class="modal-tab" onclick="switchFieldsSettingsTab('layout')">Layout Designer</button>
+        <button class="modal-tab active" onclick="switchFieldsSettingsTab('fields', event)">Fields</button>
+        <button class="modal-tab" onclick="switchFieldsSettingsTab('layout', event)">Layout Designer</button>
       </div>
       <div class="crud-modal-body" style="padding: 0;">
         <!-- Fields Tab -->
@@ -876,7 +873,7 @@
       </div>
       <div class="crud-modal-body">
         <p style="margin-bottom: 16px; color: var(--text-secondary);">
-          Committing will lock pay records for this date. This action can be undone.
+          Committing will lock pay records for this date and generate payroll data.
         </p>
         <div class="form-group">
           <label class="form-label">Commit Scope</label>

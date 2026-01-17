@@ -109,18 +109,24 @@ async function saveVehicle() {
     closeVehicleModal();
     loadVehiclesData();
   } catch (err) {
-    showToast(err.message || 'Failed to save', 'error');
+    showToast(err.message || 'Failed to save', true);
   }
 }
 
 async function deleteVehicle(id, name) {
-  if (!confirm(`Delete vehicle ${name}?`)) return;
-  try {
-    await apiRequest(`/vehicles/${id}`, { method: 'DELETE' });
-    showToast('Vehicle deleted');
-    loadVehiclesData();
-  } catch (err) {
-    showToast(err.message || 'Failed to delete', 'error');
-  }
+  showConfirmModal(
+    'Delete Vehicle',
+    `Delete vehicle ${name}?\n\nThis action cannot be undone.`,
+    async () => {
+      try {
+        await apiRequest(`/vehicles/${id}`, { method: 'DELETE' });
+        showToast('Vehicle deleted');
+        loadVehiclesData();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', true);
+      }
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 

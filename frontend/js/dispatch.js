@@ -388,9 +388,9 @@ function findBestNextJobs(currentLocation, finishTime, availableJobs, limit = 5)
 const FIRST_NAMES = ['James', 'John', 'Michael', 'David', 'Robert', 'William', 'Sarah', 'Emma', 'Lisa', 'Maria'];
 const LAST_NAMES = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Wilson'];
 
-// Adelaide-area depots
+// Brisbane-area depots
 // Single depot for now (multi-depot support planned for future)
-const DEPOT = { id: 'mile_end', name: 'Mile End', lat: -34.9219, lng: 138.5697 };
+const DEPOT = { id: 'roma_st', name: 'Roma Street', lat: -27.4659, lng: 153.0178 };
 
 let drivers = [];
 let vehicles = [];
@@ -408,7 +408,7 @@ let currentStyle = 'style-b';
 let viewMode = 'horizontal'; // 'horizontal' or 'vertical'
 let dispatchMeta = null; // Metadata from real API
 let showCancelledDuties = false; // Toggle to show cancelled duties on Gantt
-var dispatchPayTypes = []; // Pay types from API
+let dispatchPayTypes = []; // Pay types from API
 
 // Filter state
 let driverFilters = { search: '', status: 'all', sort: 'status' };
@@ -561,11 +561,11 @@ async function loadDispatchData() {
       const rosterInfo = dispatchMeta?.publishedRosters?.length 
         ? `from ${dispatchMeta.publishedRosters.length} published roster(s)` 
         : 'no published rosters';
-      showToast(`Loaded real data - ${rosterInfo}`, 'success');
+      showToast(`Loaded real data - ${rosterInfo}`);
     }
   } catch (err) {
     console.error('Failed to load dispatch data:', err);
-    showToast(`Failed to load: ${err.message}`, 'error');
+    showToast(`Failed to load: ${err.message}`, true);
     
     // Show error in UI
     if (driverRows) driverRows.innerHTML = `<div style="padding: 20px; color: var(--accent-red);">Error: ${err.message}</div>`;
@@ -595,50 +595,7 @@ function updateDispatchStats(stats) {
   }
 }
 
-function loadFakeData() {
-  vehicleBookings.clear();
-  vehicles = generateVehicles(80);
-  drivers = generateDrivers(104);
-  unassignedJobs = generateUnassignedJobs(12);
-
-  // Rebuild lookup Maps for performance
-  rebuildLookupMaps();
-  
-  // Add test charters
-  const testCharters = [
-    { pickup: 'glenelg', dropoff: 'oval', start: 10, customer: 'Beach Wedding' },
-    { pickup: 'airport', dropoff: 'convention', start: 11, customer: 'Conference Group' },
-    { pickup: 'barossa', dropoff: 'cbd', start: 12, customer: 'Wine Tour' },
-    { pickup: 'hahndorf', dropoff: 'marion', start: 13, customer: 'German Club' },
-    { pickup: 'victor', dropoff: 'fmc', start: 14, customer: 'Medical Transfer' },
-    { pickup: 'zoo', dropoff: 'flinders', start: 15, customer: 'School Excursion' },
-    { pickup: 'henley', dropoff: 'modbury', start: 16, customer: 'Sports Team' },
-    { pickup: 'norwood', dropoff: 'airport', start: 17, customer: 'Airport Shuttle' },
-  ];
-  
-  testCharters.forEach((tc, i) => {
-    const pickupLoc = LOCATIONS.find(l => l.id === tc.pickup);
-    const dropoffLoc = LOCATIONS.find(l => l.id === tc.dropoff);
-    const duration = 2 + Math.floor(Math.random() * 2);
-    const end = tc.start + duration;
-    
-    unassignedJobs.push({
-      id: `CHT-T${String(i + 1).padStart(2, '0')}`,
-      name: `Charter #${200 + i}`,
-      type: 'charter',
-      start: tc.start,
-      end: end,
-      depot: DEPOT,
-      customer: tc.customer,
-      pickupLocation: pickupLoc,
-      dropoffLocation: dropoffLoc,
-      duties: generateJobDuties(tc.start, end, true, pickupLoc, dropoffLoc)
-    });
-  });
-  
-  drivers.sort((a, b) => ({ leave: 0, working: 1, available: 2 }[a.status] - { leave: 0, working: 1, available: 2 }[b.status]));
-  dispatchMeta = null;
-}
+// loadFakeData function removed - app uses real data via loadDispatchData()
 
 // Vertical view rendering
 const VERTICAL_SLOTS = (DISPATCH_CONFIG.VERTICAL_END_HOUR - DISPATCH_CONFIG.VERTICAL_START_HOUR) * 2; // 38 slots
@@ -1425,7 +1382,7 @@ function isVehicleAvailableForDuty(vehicleId, start, end, excludeDutyId = null) 
   return true;
 }
 
-// Initial data load will happen in init() - calling loadFakeData()
+// Initial data load happens in init() - calling loadDispatchData()
 
 function formatDate(date) {
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -3174,7 +3131,7 @@ async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
   const newTime = parseTime(value);
   
   if (isNaN(newTime)) {
-    showToast('Invalid time format', 'error');
+    showToast('Invalid time format', true);
     renderDetailPanel();
     return;
   }
@@ -3184,7 +3141,7 @@ async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
   const newEnd = field === 'end' ? newTime : duty.end;
   
   if (newStart >= newEnd) {
-    showToast('End must be after start', 'error');
+    showToast('End must be after start', true);
     renderDetailPanel();
     return;
   }
@@ -3196,7 +3153,7 @@ async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
   });
   
   if (overlapInShift) {
-    showToast(`Overlaps with ${formatTime(overlapInShift.start)}-${formatTime(overlapInShift.end)}`, 'error');
+    showToast(`Overlaps with ${formatTime(overlapInShift.start)}-${formatTime(overlapInShift.end)}`, true);
     renderDetailPanel();
     return;
   }
@@ -3209,14 +3166,14 @@ async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
   });
   
   if (overlapOtherShift) {
-    showToast(`Overlaps with ${overlapOtherShift.name || 'another shift'} (${formatTime(overlapOtherShift.start)}-${formatTime(overlapOtherShift.end)})`, 'error');
+    showToast(`Overlaps with ${overlapOtherShift.name || 'another shift'} (${formatTime(overlapOtherShift.start)}-${formatTime(overlapOtherShift.end)})`, true);
     renderDetailPanel();
     return;
   }
   
   // Check vehicle availability if vehicle assigned
   if (duty.vehicle && !isVehicleAvailableForDuty(duty.vehicle, newStart, newEnd, duty.id)) {
-    showToast(`${duty.vehicle} not available for new time`, 'error');
+    showToast(`${duty.vehicle} not available for new time`, true);
     renderDetailPanel();
     return;
   }
@@ -3234,12 +3191,12 @@ async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         renderDetailPanel();
         return;
       }
     } catch (err) {
-      showToast(err.message || 'Update failed', 'error');
+      showToast(err.message || 'Update failed', true);
       renderDetailPanel();
       return;
     }
@@ -3278,11 +3235,11 @@ async function updateDutyDesc(driverId, shiftId, dutyIdx, value) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
     } catch (err) {
-      showToast(err.message || 'Update failed', 'error');
+      showToast(err.message || 'Update failed', true);
       return;
     }
   }
@@ -3318,11 +3275,11 @@ async function updateDutyLocation(driverId, shiftId, dutyIdx, locationName, loca
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
     } catch (err) {
-      showToast(err.message || 'Update failed', 'error');
+      showToast(err.message || 'Update failed', true);
       return;
     }
   }
@@ -3383,11 +3340,11 @@ async function updateDutyType(driverId, shiftId, dutyIdx, value) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
     } catch (err) {
-      showToast(err.message || 'Update failed', 'error');
+      showToast(err.message || 'Update failed', true);
       return;
     }
   }
@@ -3418,7 +3375,7 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
   
   // Check availability
   if (newVehicle && !isVehicleAvailableForDuty(newVehicle, duty.start, duty.end, duty.id)) {
-    showToast(`${newVehicleObj?.rego || newVehicle} not available`, 'error');
+    showToast(`${newVehicleObj?.rego || newVehicle} not available`, true);
     renderDetailPanel();
     return;
   }
@@ -3458,11 +3415,11 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
       }
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
     } catch (err) {
-      showToast(err.message || 'Update failed', 'error');
+      showToast(err.message || 'Update failed', true);
       return;
     }
   }
@@ -3514,11 +3471,11 @@ async function updateDutyPayType(driverId, shiftId, dutyIdx, payType) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
     } catch (err) {
-      showToast(err.message || 'Update failed', 'error');
+      showToast(err.message || 'Update failed', true);
       return;
     }
   }
@@ -3549,7 +3506,7 @@ async function bulkUpdatePayType(driverId, shiftId, payType) {
       
       await Promise.all(promises);
     } catch (err) {
-      showToast(err.message || 'Bulk update failed', 'error');
+      showToast(err.message || 'Bulk update failed', true);
       return;
     }
   }
@@ -3599,7 +3556,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
         
         // Check if extension would overlap with another shift
         if (wouldOverlapOtherShift(newShiftStart, shift.end)) {
-          showToast('Cannot extend - would overlap with another shift', 'error');
+          showToast('Cannot extend - would overlap with another shift', true);
           return;
         }
         
@@ -3610,7 +3567,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
           extendedShift = true;
         } else {
           // Can't extend further (already at 05:00)
-          showToast('Cannot extend shift before 05:00', 'error');
+          showToast('Cannot extend shift before 05:00', true);
           return;
         }
       }
@@ -3621,7 +3578,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
       newEnd = refDuty.start;
       
       if (newEnd <= newStart) {
-        showToast('No gap between duties', 'error');
+        showToast('No gap between duties', true);
         return;
       }
     }
@@ -3643,7 +3600,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
         
         // Check if extension would overlap with another shift
         if (wouldOverlapOtherShift(shift.start, newShiftEnd)) {
-          showToast('Cannot extend - would overlap with another shift', 'error');
+          showToast('Cannot extend - would overlap with another shift', true);
           return;
         }
         
@@ -3654,7 +3611,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
           extendedShift = true;
         } else {
           // Can't extend further (already at 24:00)
-          showToast('Cannot extend shift past 24:00', 'error');
+          showToast('Cannot extend shift past 24:00', true);
           return;
         }
       }
@@ -3665,7 +3622,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
       newEnd = nextDuty.start;
       
       if (newEnd <= newStart) {
-        showToast('No gap between duties', 'error');
+        showToast('No gap between duties', true);
         return;
       }
     }
@@ -3679,7 +3636,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
     
     // If still invalid (start is already at or past 24), show error
     if (newEnd <= newStart) {
-      showToast('Cannot add duty - invalid time range', 'error');
+      showToast('Cannot add duty - invalid time range', true);
       return;
     }
   }
@@ -3716,7 +3673,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
       
@@ -3724,7 +3681,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
       newDuty.id = result.data.id;
       newDutyId = result.data.id;
     } catch (err) {
-      showToast(err.message || 'Failed to create duty', 'error');
+      showToast(err.message || 'Failed to create duty', true);
       return;
     }
   }
@@ -4265,7 +4222,7 @@ function updateVehicleDutyTime(vehicleId, shiftId, dutyIdx, field, value) {
   const newTime = parseTime(value);
   
   if (isNaN(newTime)) {
-    showToast('Invalid time format', 'error');
+    showToast('Invalid time format', true);
     renderDetailPanel();
     return;
   }
@@ -4274,7 +4231,7 @@ function updateVehicleDutyTime(vehicleId, shiftId, dutyIdx, field, value) {
   const newEnd = field === 'end' ? newTime : duty.end;
   
   if (newStart >= newEnd) {
-    showToast('End must be after start', 'error');
+    showToast('End must be after start', true);
     renderDetailPanel();
     return;
   }
@@ -4286,7 +4243,7 @@ function updateVehicleDutyTime(vehicleId, shiftId, dutyIdx, field, value) {
   });
   
   if (overlap) {
-    showToast(`Overlaps with ${formatTime(overlap.start)}-${formatTime(overlap.end)}`, 'error');
+    showToast(`Overlaps with ${formatTime(overlap.start)}-${formatTime(overlap.end)}`, true);
     renderDetailPanel();
     return;
   }
@@ -4335,7 +4292,7 @@ function updateVehicleDutyDriver(vehicleId, shiftId, dutyIdx, driverId) {
   
   // Check availability
   if (driverId && !isDriverAvailableForDuty(driverId, duty.start, duty.end, duty.id)) {
-    showToast('Driver not available', 'error');
+    showToast('Driver not available', true);
     renderDetailPanel();
     return;
   }
@@ -5561,7 +5518,7 @@ async function saveEdit() {
           });
           
           if (result.error) {
-            showToast(result.error, 'error');
+            showToast(result.error, true);
             return;
           }
           
@@ -5585,7 +5542,7 @@ async function saveEdit() {
           
           showToast('Adhoc duty created');
         } catch (err) {
-          showToast(err.message || 'Failed to create adhoc duty', 'error');
+          showToast(err.message || 'Failed to create adhoc duty', true);
           return;
         }
       } else {
@@ -5628,14 +5585,14 @@ async function saveEdit() {
           });
           
           if (result.error) {
-            showToast(result.error, 'error');
+            showToast(result.error, true);
             return;
           }
           
           // Use the real ID from API
           updatedDuty.id = result.data?.id || result.duty_line_id;
         } catch (err) {
-          showToast(err.message || 'Failed to create duty', 'error');
+          showToast(err.message || 'Failed to create duty', true);
           return;
         }
       }
@@ -5863,7 +5820,7 @@ async function cancelAllDuties(driverId, shiftId) {
   // Get active (non-cancelled) duties
   const activeDuties = shift.duties.filter(d => !d.cancelled);
   if (activeDuties.length === 0) {
-    showToast('All duties already cancelled', 'info');
+    showToast('All duties already cancelled');
     return;
   }
   
@@ -5942,7 +5899,7 @@ async function confirmCancelDuty() {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
       
@@ -5967,7 +5924,7 @@ async function confirmCancelDuty() {
       showToast('Duty cancelled');
       renderAll();
     } catch (err) {
-      showToast(err.message || 'Cancel failed', 'error');
+      showToast(err.message || 'Cancel failed', true);
     }
   } else {
     // Demo mode - just update local state
@@ -6010,7 +5967,7 @@ async function reinstateDutyLine(dutyId, driverId, shiftId) {
       
       // Check for time overlap
       if (duty.start < d.end && duty.end > d.start) {
-        showToast(`Cannot reinstate: overlaps with ${d.description || 'duty'} (${formatTimeCompact(d.start)}-${formatTimeCompact(d.end)})`, 'error');
+        showToast(`Cannot reinstate: overlaps with ${d.description || 'duty'} (${formatTimeCompact(d.start)}-${formatTimeCompact(d.end)})`, true);
         return;
       }
     }
@@ -6027,7 +5984,7 @@ async function reinstateDutyLine(dutyId, driverId, shiftId) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
       
@@ -6047,7 +6004,7 @@ async function reinstateDutyLine(dutyId, driverId, shiftId) {
       showToast('Duty reinstated');
       renderAll();
     } catch (err) {
-      showToast(err.message || 'Reinstate failed', 'error');
+      showToast(err.message || 'Reinstate failed', true);
     }
   } else {
     // Demo mode - just update local state
@@ -6083,7 +6040,7 @@ async function assignDriverToJob(jobIndex, driverIndex) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
       
@@ -6092,7 +6049,7 @@ async function assignDriverToJob(jobIndex, driverIndex) {
       await loadDispatchData();  // Reload from API
       return;
     } catch (err) {
-      showToast(err.message || 'Assignment failed', 'error');
+      showToast(err.message || 'Assignment failed', true);
       return;
     }
   }
@@ -6180,7 +6137,7 @@ async function executeTransferDriverShift(targetDriverId) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
       
@@ -6190,7 +6147,7 @@ async function executeTransferDriverShift(targetDriverId) {
       await loadDispatchData();  // Reload from API
       return;
     } catch (err) {
-      showToast(err.message || 'Transfer failed', 'error');
+      showToast(err.message || 'Transfer failed', true);
       return;
     }
   }
@@ -6242,7 +6199,7 @@ async function unassignDriverShift(driverId, shiftIdx) {
       });
       
       if (result.error) {
-        showToast(result.error, 'error');
+        showToast(result.error, true);
         return;
       }
       
@@ -6251,7 +6208,7 @@ async function unassignDriverShift(driverId, shiftIdx) {
       await loadDispatchData();  // Reload from API
       return;
     } catch (err) {
-      showToast(err.message || 'Unassign failed', 'error');
+      showToast(err.message || 'Unassign failed', true);
       return;
     }
   }
@@ -7643,14 +7600,14 @@ async function toggleBlockDispatch(blockId, shiftId, include) {
     });
     
     if (result.error) {
-      showToast(result.error, 'error');
+      showToast(result.error, true);
       return;
     }
     
     showToast(include ? 'Block included in dispatch' : 'Block omitted from dispatch');
     await loadDayView();
   } catch (err) {
-    showToast(err.message || 'Toggle failed', 'error');
+    showToast(err.message || 'Toggle failed', true);
   }
 }
 
@@ -7666,14 +7623,14 @@ async function toggleDayDispatch(include) {
     });
     
     if (result.error) {
-      showToast(result.error, 'error');
+      showToast(result.error, true);
       return;
     }
     
     showToast(result.message || (include ? 'All included' : 'All omitted'));
     await loadDayView();
   } catch (err) {
-    showToast(err.message || 'Toggle failed', 'error');
+    showToast(err.message || 'Toggle failed', true);
   }
 }
 
@@ -7683,7 +7640,7 @@ async function toggleRosterDispatch(include) {
   }
   
   try {
-    showToast('Processing...', 'info');
+    showToast('Processing...');
     
     const result = await apiRequest('/roster/toggle-dispatch-all', {
       method: 'POST',
@@ -7694,14 +7651,14 @@ async function toggleRosterDispatch(include) {
     });
     
     if (result.error) {
-      showToast(result.error, 'error');
+      showToast(result.error, true);
       return;
     }
     
     showToast(result.message || (include ? 'All included' : 'All omitted'), 'success');
     await loadDayView();
   } catch (err) {
-    showToast(err.message || 'Toggle failed', 'error');
+    showToast(err.message || 'Toggle failed', true);
   }
 }
 
@@ -7903,7 +7860,7 @@ async function executeCommit() {
   if (scope === 'individual') {
     const driverId = document.getElementById('commitDriver').value;
     if (!driverId) {
-      showToast('Please select a driver', 'error');
+      showToast('Please select a driver', true);
       return;
     }
     payload.employee_id = driverId;
@@ -7912,10 +7869,10 @@ async function executeCommit() {
   try {
     const result = await apiRequest('/dispatch/commit', { method: 'POST', body: payload });
     closeCommitModal();
-    showToast(`Day committed - ${result.data.pay_records_created} pay records created`, 'success');
+    showToast(`Day committed - ${result.data.pay_records_created} pay records created`);
     await loadCommitStatus();
   } catch (err) {
-    showToast(err.message || 'Failed to commit', 'error');
+    showToast(err.message || 'Failed to commit', true);
   }
 }
 

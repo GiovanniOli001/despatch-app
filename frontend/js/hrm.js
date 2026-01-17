@@ -64,12 +64,12 @@ let customFieldDefinitions = [];
 let editingCustomFieldId = null;
 
 // Switch employee modal tabs
-function switchEmployeeTab(tabName) {
+function switchEmployeeTab(tabName, evt) {
   // Update tab buttons
   document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach(tab => {
     tab.classList.remove('active');
   });
-  event.target.classList.add('active');
+  if (evt && evt.target) evt.target.classList.add('active');
   
   // Update tab content
   document.querySelectorAll('#employeeModalOverlay .modal-tab-content').forEach(content => {
@@ -207,7 +207,7 @@ async function saveEmployee() {
     const value = field.type === 'checkbox' ? field.checked : field.value;
     if (!value || value === '') {
       const fieldName = field.getAttribute('data-field-name') || 'Field';
-      showToast(`${fieldName} is required`, 'error');
+      showToast(`${fieldName} is required`, true);
       // Switch to Custom Fields tab
       document.querySelectorAll('#employeeModalOverlay .modal-tab').forEach((tab, i) => {
         tab.classList.toggle('active', i === 1);
@@ -238,7 +238,7 @@ async function saveEmployee() {
     closeEmployeeModal();
     loadEmployees();
   } catch (err) {
-    showToast(err.message || 'Failed to save', 'error');
+    showToast(err.message || 'Failed to save', true);
   }
 }
 
@@ -391,11 +391,11 @@ function closeEmployeeFieldsSettings() {
 }
 
 // Switch tabs in settings modal
-function switchFieldsSettingsTab(tabName) {
+function switchFieldsSettingsTab(tabName, evt) {
   document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab').forEach(tab => {
     tab.classList.remove('active');
   });
-  event.target.classList.add('active');
+  if (evt && evt.target) evt.target.classList.add('active');
   
   document.querySelectorAll('#employeeFieldsSettingsOverlay .modal-tab-content').forEach(content => {
     content.classList.remove('active');
@@ -523,7 +523,7 @@ async function handleLayoutDrop(event, targetRow) {
     });
     renderLayoutEditor();
   } catch (err) {
-    showToast('Failed to update layout', 'error');
+    showToast('Failed to update layout', true);
   }
 }
 
@@ -541,7 +541,7 @@ async function toggleFieldWidth(fieldId) {
     });
     renderLayoutEditor();
   } catch (err) {
-    showToast('Failed to update width', 'error');
+    showToast('Failed to update width', true);
   }
 }
 
@@ -558,7 +558,7 @@ async function moveFieldUp(fieldId) {
     });
     renderLayoutEditor();
   } catch (err) {
-    showToast('Failed to move field', 'error');
+    showToast('Failed to move field', true);
   }
 }
 
@@ -576,7 +576,7 @@ async function moveFieldDown(fieldId) {
     });
     renderLayoutEditor();
   } catch (err) {
-    showToast('Failed to move field', 'error');
+    showToast('Failed to move field', true);
   }
 }
 
@@ -589,132 +589,13 @@ async function loadCustomFieldDefinitions() {
   try {
     const result = await apiRequest('/employee-fields/definitions');
     customFieldDefinitions = result.data || [];
-    renderFieldDefinitionsTable();
+    // Render custom fields list if element exists
+    if (document.getElementById('customFieldsList')) {
+      renderCustomFieldsList();
+    }
   } catch (err) {
     console.error('Failed to load field definitions:', err);
   }
-}
-
-function renderFieldDefinitionsTable() {
-  const tbody = document.getElementById('fieldDefinitionsBody');
-  
-  if (customFieldDefinitions.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--text-muted);">No custom fields defined. Click "+ Add Field" to create one.</td></tr>';
-    return;
-  }
-  
-  const typeLabels = {
-    text: 'Text',
-    number: 'Number',
-    date: 'Date',
-    boolean: 'Yes/No',
-    select: 'Dropdown'
-  };
-  
-  tbody.innerHTML = customFieldDefinitions.map(field => `
-    <tr>
-      <td>${escapeHtml(field.field_name)}</td>
-      <td>${typeLabels[field.field_type] || field.field_type}</td>
-      <td>${field.is_required ? '✓' : ''}</td>
-      <td>${field.field_width === 'half' ? 'Half' : 'Full'}</td>
-      <td>
-        <button class="action-btn" onclick="editFieldDefinition('${field.id}')">Edit</button>
-        <button class="action-btn danger" onclick="deleteFieldDefinition('${field.id}', '${escapeHtml(field.field_name)}')">Delete</button>
-      </td>
-    </tr>
-  `).join('');
-}
-
-function showAddFieldModal() {
-  editingCustomFieldId = null;
-  document.getElementById('fieldModalTitle').textContent = 'Add Custom Field';
-  document.getElementById('fieldDefForm').reset();
-  document.getElementById('fieldOptionsGroup').style.display = 'none';
-  document.getElementById('fieldDefModalOverlay').classList.add('show');
-}
-
-function editFieldDefinition(id) {
-  const field = customFieldDefinitions.find(f => f.id === id);
-  if (!field) return;
-  
-  editingCustomFieldId = id;
-  document.getElementById('fieldModalTitle').textContent = 'Edit Custom Field';
-  document.getElementById('fieldDefName').value = field.field_name || '';
-  document.getElementById('fieldDefType').value = field.field_type || 'text';
-  document.getElementById('fieldDefRequired').checked = field.is_required || false;
-  document.getElementById('fieldDefWidth').value = field.field_width || 'full';
-  document.getElementById('fieldDefOptions').value = (field.field_options || []).join('\n');
-  
-  // Show/hide options based on type
-  document.getElementById('fieldOptionsGroup').style.display = 
-    field.field_type === 'select' ? 'block' : 'none';
-  
-  document.getElementById('fieldDefModalOverlay').classList.add('show');
-}
-
-function closeFieldDefModal() {
-  document.getElementById('fieldDefModalOverlay').classList.remove('show');
-  editingCustomFieldId = null;
-}
-
-function onFieldTypeChange() {
-  const type = document.getElementById('fieldDefType').value;
-  document.getElementById('fieldOptionsGroup').style.display = 
-    type === 'select' ? 'block' : 'none';
-}
-
-async function saveFieldDefinition() {
-  const data = {
-    field_name: document.getElementById('fieldDefName').value,
-    field_type: document.getElementById('fieldDefType').value,
-    is_required: document.getElementById('fieldDefRequired').checked,
-    field_width: document.getElementById('fieldDefWidth').value,
-    field_options: document.getElementById('fieldDefType').value === 'select'
-      ? document.getElementById('fieldDefOptions').value.split('\n').map(s => s.trim()).filter(s => s)
-      : null,
-    display_row: editingCustomFieldId 
-      ? customFieldDefinitions.find(f => f.id === editingCustomFieldId)?.display_row || 0
-      : customFieldDefinitions.length > 0 
-        ? Math.max(...customFieldDefinitions.map(f => f.display_row || 0)) + 1
-        : 0
-  };
-  
-  try {
-    if (editingCustomFieldId) {
-      await apiRequest(`/employee-fields/definitions/${editingCustomFieldId}`, {
-        method: 'PUT',
-        body: data
-      });
-      showToast('Field updated');
-    } else {
-      await apiRequest('/employee-fields/definitions', {
-        method: 'POST',
-        body: data
-      });
-      showToast('Field added');
-    }
-    closeFieldDefModal();
-    await loadCustomFieldDefinitions();
-  } catch (err) {
-    showToast(err.message || 'Failed to save field', 'error');
-  }
-}
-
-async function deleteFieldDefinition(id, name) {
-  showConfirmModal(
-    'Delete Field',
-    `Delete field "${name}"?\n\nThis will also delete all values for this field.`,
-    async () => {
-      try {
-        await apiRequest(`/employee-fields/definitions/${id}`, { method: 'DELETE' });
-        showToast('Field deleted');
-        await loadCustomFieldDefinitions();
-      } catch (err) {
-        showToast(err.message || 'Failed to delete', 'error');
-      }
-    },
-    { confirmText: 'Delete', isDangerous: true }
-  );
 }
 
 // ============================================
@@ -778,7 +659,7 @@ async function saveCustomField() {
     const optionsText = document.getElementById('customFieldOptions').value;
     data.field_options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
     if (data.field_options.length === 0) {
-      showToast('Please add at least one option for dropdown field', 'error');
+      showToast('Please add at least one option for dropdown field', true);
       return;
     }
   }
@@ -794,7 +675,7 @@ async function saveCustomField() {
     closeCustomFieldModal();
     loadCustomFieldDefinitions();
   } catch (err) {
-    showToast(err.message || 'Failed to save custom field', 'error');
+    showToast(err.message || 'Failed to save custom field', true);
   }
 }
 
@@ -808,7 +689,7 @@ async function deleteCustomField(id, name) {
         showToast('Custom field deleted');
         loadCustomFieldDefinitions();
       } catch (err) {
-        showToast(err.message || 'Failed to delete', 'error');
+        showToast(err.message || 'Failed to delete', true);
       }
     },
     { confirmText: 'Delete', isDangerous: true }
@@ -820,15 +701,7 @@ async function saveFieldLayouts() {
   showToast('Layout saved');
 }
 
-async function loadCustomFieldDefinitions() {
-  try {
-    const result = await apiRequest('/employee-fields/definitions');
-    customFieldDefinitions = result.data || [];
-    renderCustomFieldsList();
-  } catch (err) {
-    console.error('Failed to load custom field definitions:', err);
-  }
-}
+// Duplicate function removed - loadCustomFieldDefinitions is defined above
 
 function renderCustomFieldsList() {
   const container = document.getElementById('customFieldsList');
@@ -875,7 +748,7 @@ async function deleteEmployee(id, name) {
         showToast('Employee deleted');
         loadEmployees();
       } catch (err) {
-        showToast(err.message || 'Failed to delete', 'error');
+        showToast(err.message || 'Failed to delete', true);
       }
     },
     { confirmText: 'Delete', isDangerous: true }
@@ -990,7 +863,7 @@ async function savePayType() {
   };
   
   if (!data.code || !data.name || isNaN(data.hourly_rate)) {
-    showToast('Please fill in all required fields', 'error');
+    showToast('Please fill in all required fields', true);
     return;
   }
   
@@ -1005,7 +878,7 @@ async function savePayType() {
     closePayTypeModal();
     loadPayTypes();
   } catch (err) {
-    showToast(err.message || 'Failed to save pay type', 'error');
+    showToast(err.message || 'Failed to save pay type', true);
   }
 }
 
@@ -1019,7 +892,7 @@ async function deletePayType(id, name) {
         showToast('Pay type deleted');
         loadPayTypes();
       } catch (err) {
-        showToast(err.message || 'Failed to delete pay type', 'error');
+        showToast(err.message || 'Failed to delete pay type', true);
       }
     },
     { confirmText: 'Delete', isDangerous: true }
@@ -1264,7 +1137,7 @@ async function savePayRecordEdit() {
   };
   
   if (isNaN(data.hours) || isNaN(data.rate)) {
-    showToast('Hours and rate must be valid numbers', 'error');
+    showToast('Hours and rate must be valid numbers', true);
     return;
   }
   
@@ -1277,7 +1150,7 @@ async function savePayRecordEdit() {
       loadEmployeePayRecords(editingEmployeeId);
     }
   } catch (err) {
-    showToast(err.message || 'Failed to update pay record', 'error');
+    showToast(err.message || 'Failed to update pay record', true);
   }
 }
 
@@ -1312,15 +1185,15 @@ function parseNotesArray(notesData) {
 function showPayRecordNotes(recordId) {
   const record = employeePayRecordsData.find(r => r.id === recordId);
   if (!record || !record.notes) {
-    showToast('No notes for this record', 'info');
+    showToast('No notes for this record');
     return;
   }
-  
+
   // Parse notes using helper function
   const notesArray = parseNotesArray(record.notes);
-  
+
   if (notesArray.length === 0) {
-    showToast('No notes for this record', 'info');
+    showToast('No notes for this record');
     return;
   }
   
