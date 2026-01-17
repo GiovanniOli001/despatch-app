@@ -379,9 +379,7 @@ let expandedSection = null;
 let editingDuty = null;
 let formErrors = {};
 let currentStyle = 'style-b';
-let allocationMode = 'driver'; // 'driver' or 'vehicle'
 let viewMode = 'horizontal'; // 'horizontal' or 'vertical'
-let dataSource = 'fake'; // 'fake' or 'real'
 let dispatchMeta = null; // Metadata from real API
 let showCancelledDuties = false; // Toggle to show cancelled duties on Gantt
 var dispatchPayTypes = []; // Pay types from API
@@ -427,15 +425,6 @@ function changeStyle() {
   renderAll();
 }
 
-function changeAllocationMode() {
-  allocationMode = document.getElementById('allocationMode').value;
-  selectedItem = null;
-  editingDuty = null;
-  formErrors = {};
-  updateSectionOrder();
-  renderAll();
-}
-
 function changeViewMode() {
   viewMode = document.getElementById('viewMode').value;
   
@@ -453,38 +442,10 @@ function changeViewMode() {
 }
 
 // ============================================
-// DATA SOURCE MANAGEMENT
+// DATA LOADING
 // ============================================
 
-async function changeDataSource() {
-  dataSource = document.getElementById('dataSourceSelect').value;
-  selectedItem = null;
-  editingDuty = null;
-  formErrors = {};
-  
-  if (dataSource === 'real') {
-    // Reset to today when switching to real data
-    currentDate = new Date();
-    await loadDispatchData();
-  } else {
-    // Generate fake data
-    currentDate = new Date(2025, 6, 14); // Reset to fake date
-    loadFakeData();
-    syncAllVehicleAssignments();
-    renderAll();
-  }
-  
-  document.getElementById('currentDate').textContent = formatDate(currentDate);
-}
-
 async function loadDispatchData() {
-  if (dataSource === 'fake') {
-    loadFakeData();
-    syncAllVehicleAssignments();
-    renderAll();
-    return;
-  }
-  
   // Show loading state
   const driverRows = document.getElementById('driverRows');
   const vehicleRows = document.getElementById('vehicleRows');
@@ -969,47 +930,25 @@ function updateSectionOrder() {
     s.style.height = '';
   });
   expandedSection = null;
-  
-  if (allocationMode === 'vehicle') {
-    // Vehicle first, then drivers, then unassigned
-    // Clear and rebuild
-    container.innerHTML = '';
-    container.appendChild(vehiclesSection);
-    container.appendChild(resizeHandle1);
-    container.appendChild(driversSection);
-    container.appendChild(resizeHandle2);
-    container.appendChild(unassignedSection);
-    
-    // Update resize handle data attributes
-    resizeHandle1.dataset.above = 'vehiclesSection';
-    resizeHandle1.dataset.below = 'driversSection';
-    resizeHandle2.dataset.above = 'driversSection';
-    resizeHandle2.dataset.below = 'unassignedSection';
-    
-    // Adjust flex values
-    vehiclesSection.style.flex = '1.2';
-    driversSection.style.flex = '1';
-    unassignedSection.style.flex = '0.6';
-  } else {
-    // Driver first (default)
-    container.innerHTML = '';
-    container.appendChild(driversSection);
-    container.appendChild(resizeHandle1);
-    container.appendChild(vehiclesSection);
-    container.appendChild(resizeHandle2);
-    container.appendChild(unassignedSection);
-    
-    // Update resize handle data attributes
-    resizeHandle1.dataset.above = 'driversSection';
-    resizeHandle1.dataset.below = 'vehiclesSection';
-    resizeHandle2.dataset.above = 'vehiclesSection';
-    resizeHandle2.dataset.below = 'unassignedSection';
-    
-    // Reset flex values
-    driversSection.style.flex = '1.2';
-    vehiclesSection.style.flex = '1';
-    unassignedSection.style.flex = '0.6';
-  }
+
+  // Driver first layout
+  container.innerHTML = '';
+  container.appendChild(driversSection);
+  container.appendChild(resizeHandle1);
+  container.appendChild(vehiclesSection);
+  container.appendChild(resizeHandle2);
+  container.appendChild(unassignedSection);
+
+  // Update resize handle data attributes
+  resizeHandle1.dataset.above = 'driversSection';
+  resizeHandle1.dataset.below = 'vehiclesSection';
+  resizeHandle2.dataset.above = 'vehiclesSection';
+  resizeHandle2.dataset.below = 'unassignedSection';
+
+  // Reset flex values
+  driversSection.style.flex = '1.2';
+  vehiclesSection.style.flex = '1';
+  unassignedSection.style.flex = '0.6';
 }
 
 // Track vehicle bookings during data generation to prevent conflicts
@@ -1465,7 +1404,7 @@ async function changeDate(delta) {
   selectedItem = null;  // Clear selection when changing date
   
   // Reload data when changing date
-  if (dataSource === 'real') {
+  if (true) {
     await loadDispatchData();
   } else {
     // For fake data, just re-render (data doesn't change by date in fake mode)
@@ -1851,7 +1790,7 @@ function redistributeSectionSpace() {
     const section = document.getElementById(id);
     if (id === 'unassignedSection') {
       section.style.flex = '0.6';
-    } else if (allocationMode === 'vehicle') {
+    } else if (false) {
       section.style.flex = id === 'vehiclesSection' ? '1.2' : '1';
     } else {
       section.style.flex = id === 'driversSection' ? '1.2' : '1';
@@ -2452,7 +2391,7 @@ function renderVehicleRows() {
         return false;
       };
       
-      if (allocationMode === 'vehicle' && vehicle.shifts) {
+      if (false && vehicle.shifts) {
         // Vehicle-centric: show duties with driver assignment indicators
         (vehicle.shifts || []).forEach(shift => {
           const allDuties = shift.duties || [];
@@ -2816,7 +2755,7 @@ function renderDetailPanel() {
   const panel = document.getElementById('detailPanel');
   
   if (!selectedItem) {
-    panel.innerHTML = `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Select a ${allocationMode === 'vehicle' ? 'vehicle' : 'driver'}, ${allocationMode === 'vehicle' ? 'driver' : 'vehicle'}, or job</div></div>`;
+    panel.innerHTML = `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Select a driver, vehicle, or job</div></div>`;
     return;
   }
   
@@ -2862,7 +2801,7 @@ function renderDetailPanel() {
     panel.innerHTML = renderJobDetail(job);
     // Populate assignment list after render
     setTimeout(() => {
-      if (allocationMode === 'vehicle') {
+      if (false) {
         updateVehicleAssignmentList(selectedItem.index);
       } else {
         updateDriverAssignmentList(selectedItem.index);
@@ -2872,7 +2811,7 @@ function renderDetailPanel() {
 }
 
 function renderDriverDetail(driver) {
-  if (allocationMode === 'vehicle') {
+  if (false) {
     return renderDriverDetailVehicleCentric(driver);
   }
   return renderDriverDetailDriverCentric(driver);
@@ -3248,7 +3187,7 @@ async function updateDutyTime(driverId, shiftId, dutyIdx, field, value) {
   }
   
   // Call API in real mode
-  if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+  if (true && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
       const body = { duty_line_id: duty.id };
       if (field === 'start') body.start_time = newTime;
@@ -3293,7 +3232,7 @@ async function updateDutyDesc(driverId, shiftId, dutyIdx, value) {
   const duty = shift.duties[dutyIdx];
   
   // Call API in real mode
-  if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+  if (true && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
       const result = await apiRequest('/dispatch/update-duty-line', {
         method: 'POST',
@@ -3331,7 +3270,7 @@ async function updateDutyLocation(driverId, shiftId, dutyIdx, locationName, loca
   const duty = shift.duties[dutyIdx];
   
   // Call API in real mode
-  if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+  if (true && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
       const result = await apiRequest('/dispatch/update-duty-line', {
         method: 'POST',
@@ -3398,7 +3337,7 @@ async function updateDutyType(driverId, shiftId, dutyIdx, value) {
   };
   
   // Call API in real mode
-  if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+  if (true && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
       const result = await apiRequest('/dispatch/update-duty-line', {
         method: 'POST',
@@ -3450,7 +3389,7 @@ async function updateDutyVehicle(driverId, shiftId, dutyIdx, value) {
   }
   
   // Call API in real mode
-  if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+  if (true && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
       let result;
       
@@ -3529,7 +3468,7 @@ async function updateDutyPayType(driverId, shiftId, dutyIdx, payType) {
   const duty = shift.duties[dutyIdx];
   
   // Call API in real mode
-  if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+  if (true && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
     try {
       const result = await apiRequest('/dispatch/update-duty-line', {
         method: 'POST',
@@ -3561,7 +3500,7 @@ async function bulkUpdatePayType(driverId, shiftId, payType) {
   if (!shift) return;
   
   // Call API for each duty in real mode
-  if (dataSource === 'real') {
+  if (true) {
     try {
       const promises = shift.duties
         .filter(duty => duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-'))
@@ -3727,7 +3666,7 @@ async function insertDuty(driverId, shiftId, dutyIdx, position) {
   };
   
   // Call API in real mode if we have an entry ID
-  if (dataSource === 'real' && shift.entryId) {
+  if (true && shift.entryId) {
     try {
       const result = await apiRequest('/dispatch/create-duty-line', {
         method: 'POST',
@@ -3979,7 +3918,7 @@ function renderEditForm() {
 }
 
 function renderVehicleDetail(vehicle) {
-  if (allocationMode === 'vehicle') {
+  if (false) {
     return renderVehicleDetailVehicleCentric(vehicle);
   }
   return renderVehicleDetailDriverCentric(vehicle);
@@ -4555,7 +4494,7 @@ function renderVehicleShiftTotals(shift, vehicleId) {
 
 function renderJobDetail(job) {
   if (!job) return `<div class="empty-panel"><div class="empty-icon">📋</div><div class="empty-text">Select a job to view details</div></div>`;
-  if (allocationMode === 'vehicle') {
+  if (false) {
     return renderJobDetailVehicleCentric(job);
   }
   return renderJobDetailDriverCentric(job);
@@ -5565,7 +5504,7 @@ async function saveEdit() {
   if (editingDuty.isNew) {
     if (editingDuty.isAdhoc || !editingDuty.shift) {
       // Create new adhoc shift via API
-      if (dataSource === 'real') {
+      if (true) {
         try {
           const result = await apiRequest('/dispatch/create-adhoc-shift', {
             method: 'POST',
@@ -5635,7 +5574,7 @@ async function saveEdit() {
       }
     } else {
       // Add to existing shift - call API if in real mode
-      if (dataSource === 'real' && editingDuty.shift.entryId) {
+      if (true && editingDuty.shift.entryId) {
         try {
           const result = await apiRequest('/dispatch/create-duty-line', {
             method: 'POST',
@@ -5901,7 +5840,7 @@ async function cancelAllDuties(driverId, shiftId) {
   let failed = 0;
   
   for (const duty of activeDuties) {
-    if (dataSource === 'real' && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
+    if (true && duty.id && !duty.id.startsWith('placeholder-') && !duty.id.startsWith('d-')) {
       try {
         const result = await apiRequest('/dispatch/cancel-duty-line', {
           method: 'POST',
@@ -5957,7 +5896,7 @@ async function confirmCancelDuty() {
   const reason = document.getElementById('cancelDutyReason').value.trim() || null;
   
   // Call API to cancel
-  if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
+  if (true && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
     try {
       const result = await apiRequest('/dispatch/cancel-duty-line', {
         method: 'POST',
@@ -6043,7 +5982,7 @@ async function reinstateDutyLine(dutyId, driverId, shiftId) {
   }
   
   // Call API to reinstate
-  if (dataSource === 'real' && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
+  if (true && dutyId && !dutyId.startsWith('placeholder-') && !dutyId.startsWith('d-')) {
     try {
       const result = await apiRequest('/dispatch/reinstate-duty-line', {
         method: 'POST',
@@ -6098,7 +6037,7 @@ async function assignDriverToJob(jobIndex, driverIndex) {
   const driver = drivers[driverIndex];
   
   // If real data mode, call API to persist
-  if (dataSource === 'real' && job.entryId) {
+  if (true && job.entryId) {
     try {
       const result = await apiRequest('/dispatch/assign', {
         method: 'POST',
@@ -6195,7 +6134,7 @@ async function executeTransferDriverShift(targetDriverId) {
   const shift = transferringShift.shift;
   
   // If real data mode, call API to persist
-  if (dataSource === 'real' && shift.entryId) {
+  if (true && shift.entryId) {
     try {
       const result = await apiRequest('/dispatch/transfer', {
         method: 'POST',
@@ -6257,7 +6196,7 @@ async function unassignDriverShift(driverId, shiftIdx) {
   const shift = driver.shifts[shiftIdx];
   
   // If real data mode, call API to persist
-  if (dataSource === 'real' && shift.entryId) {
+  if (true && shift.entryId) {
     try {
       const result = await apiRequest('/dispatch/unassign', {
         method: 'POST',
@@ -6511,7 +6450,7 @@ async function executeBulkAssignVehicle(vehicleId) {
   }
   
   // Call API for each duty in real mode
-  if (dataSource === 'real') {
+  if (true) {
     let succeeded = 0;
     let failed = 0;
     

@@ -214,8 +214,8 @@ function init() {
   // Initialize navigation
   initNavigation();
   
-  // Load initial fake data
-  loadFakeData();
+  // Load dispatch data from API
+  loadDispatchData();
   
   // Set initial date display
   document.getElementById('currentDate').textContent = formatDate(currentDate);
