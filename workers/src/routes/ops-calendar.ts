@@ -343,17 +343,11 @@ async function clearAllDispatch(env: Env): Promise<Response> {
     DELETE FROM dispatch_adhoc_shifts WHERE tenant_id = ?
   `).bind(TENANT_ID).run();
   
-  // Step 3: Reset dispatch-time assignments on roster_entries
-  // This clears driver_id and vehicle_id so shifts return to unassigned state
-  const entriesResetResult = await env.DB.prepare(`
-    UPDATE roster_entries 
-    SET driver_id = NULL, 
-        vehicle_id = NULL,
-        updated_at = ?
-    WHERE tenant_id = ? AND deleted_at IS NULL
-  `).bind(now, TENANT_ID).run();
+  // NOTE: We do NOT reset roster_entries.driver_id or vehicle_id
+  // Roster assignments are user-controlled and should be preserved
+  // Users assign drivers to shifts in the Roster screen, and that should persist
   
-  // Step 4: Clear calendar dates and reset status to draft
+  // Step 3: Clear calendar dates and reset status to draft
   // This removes rosters from the calendar view but keeps all roster data intact
   const rostersResult = await env.DB.prepare(`
     UPDATE rosters 
@@ -373,15 +367,14 @@ async function clearAllDispatch(env: Env): Promise<Response> {
   
   return json({
     success: true,
-    message: 'Dispatch cleared. Rosters removed from calendar. All assignments reset.',
+    message: 'Dispatch cleared. Rosters removed from calendar. Roster assignments preserved.',
     deleted: {
       duty_lines: dutyLinesResult.meta?.changes || 0,
       adhoc_duty_lines: adhocDutyLinesResult.meta?.changes || 0,
       adhoc_shifts: adhocShiftsResult.meta?.changes || 0
     },
     updated: {
-      rosters: rostersResult.meta?.changes || 0,
-      entries_reset: entriesResetResult.meta?.changes || 0
+      rosters: rostersResult.meta?.changes || 0
     },
     preserved: {
       rosters: stats?.roster_count || 0,

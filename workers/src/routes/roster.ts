@@ -380,23 +380,14 @@ async function unscheduleRoster(env: Env, id: string): Promise<Response> {
   
   const now = new Date().toISOString();
   
-  // Reset dispatch-time assignments on roster_entries for this roster
-  // This clears driver_id and vehicle_id so shifts return to unassigned state
-  await env.DB.prepare(`
-    UPDATE roster_entries 
-    SET driver_id = NULL, 
-        vehicle_id = NULL,
-        updated_at = ?
-    WHERE roster_id = ? AND deleted_at IS NULL
-  `).bind(now, id).run();
-  
-  // Clear calendar dates
+  // Clear calendar dates only - do NOT reset driver assignments
+  // Roster assignments are user-controlled and should be preserved
   await env.DB.prepare(`
     UPDATE rosters SET calendar_start_date = NULL, calendar_end_date = NULL, updated_at = ?
     WHERE id = ?
   `).bind(now, id).run();
   
-  return json({ success: true, message: 'Roster removed from calendar. Assignments reset.' });
+  return json({ success: true, message: 'Roster removed from calendar' });
 }
 
 async function publishRoster(env: Env, id: string): Promise<Response> {
@@ -758,14 +749,16 @@ async function assignBlock(env: Env, input: AssignInput): Promise<Response> {
 // Helper: Copy duty lines from template to roster instance
 async function copyDutyLinesToRosterEntry(env: Env, entryId: string, dutyBlockId: string): Promise<void> {
   try {
-    // Check if duty lines already exist for this entry
-    const existingLines = await env.DB.prepare(`
+    // Check if TEMPLATE-SOURCED duty lines already exist for this entry
+    // (source_duty_line_id IS NOT NULL means it came from a template)
+    // We only skip if template lines exist - user-added lines (source_duty_line_id IS NULL) don't count
+    const existingTemplateLines = await env.DB.prepare(`
       SELECT COUNT(*) as count FROM roster_duty_lines 
-      WHERE roster_entry_id = ? AND deleted_at IS NULL
+      WHERE roster_entry_id = ? AND deleted_at IS NULL AND source_duty_line_id IS NOT NULL
     `).bind(entryId).first() as { count: number } | null;
     
-    if (existingLines && existingLines.count > 0) {
-      // Lines already exist, don't duplicate
+    if (existingTemplateLines && existingTemplateLines.count > 0) {
+      // Template lines already exist, don't duplicate
       return;
     }
     

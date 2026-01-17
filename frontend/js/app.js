@@ -286,20 +286,27 @@ function setupNavigationHooks() {
   navigateTo = function(screen) {
     originalNavigateTo(screen);
     
-    // Load data for the screen
+    // Load data for the screen - use typeof checks since screen-specific JS may not be loaded
     if (screen === 'dispatch') {
-      // loadDispatchData is defined in dispatch.js
       if (typeof loadDispatchData === 'function') {
         loadDispatchData();
       }
     } else if (screen === 'hrm') {
-      loadEmployees();
+      if (typeof loadEmployees === 'function') {
+        loadEmployees();
+      }
     } else if (screen === 'vehicles') {
-      loadVehiclesData();
+      if (typeof loadVehiclesData === 'function') {
+        loadVehiclesData();
+      }
     } else if (screen === 'shifts') {
-      loadShifts();
+      if (typeof loadShifts === 'function') {
+        loadShifts();
+      }
     } else if (screen === 'roster') {
-      loadRoster();
+      if (typeof loadRoster === 'function') {
+        loadRoster();
+      }
     }
   };
 }
