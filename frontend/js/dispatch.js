@@ -384,7 +384,7 @@ let viewMode = 'horizontal'; // 'horizontal' or 'vertical'
 let dataSource = 'fake'; // 'fake' or 'real'
 let dispatchMeta = null; // Metadata from real API
 let showCancelledDuties = false; // Toggle to show cancelled duties on Gantt
-let payTypesData = []; // Pay types from API
+var dispatchPayTypes = []; // Pay types from API
 
 // Filter state
 let driverFilters = { search: '', status: 'all', sort: 'status' };
@@ -395,8 +395,8 @@ let assignmentSearch = '';
 // Falls back to hardcoded PAY_TYPES if API data not loaded
 function getPayTypeOptions(selectedPayType) {
   // Use API data if available
-  if (payTypesData && payTypesData.length > 0) {
-    return payTypesData
+  if (dispatchPayTypes && dispatchPayTypes.length > 0) {
+    return dispatchPayTypes
       .filter(pt => pt.is_active !== 0)
       .map(pt => `<option value="${pt.code}" ${selectedPayType === pt.code ? 'selected' : ''}>${pt.code}</option>`)
       .join('');
@@ -409,8 +409,8 @@ function getPayTypeOptions(selectedPayType) {
 
 // Helper to get pay type label
 function getPayTypeLabel(payTypeCode) {
-  if (payTypesData && payTypesData.length > 0) {
-    const pt = payTypesData.find(p => p.code === payTypeCode);
+  if (dispatchPayTypes && dispatchPayTypes.length > 0) {
+    const pt = dispatchPayTypes.find(p => p.code === payTypeCode);
     if (pt) return pt.name;
   }
   // Fallback to hardcoded
@@ -504,7 +504,7 @@ async function loadDispatchData() {
     try {
       const payTypesResult = await apiRequest('/config/pay-types');
       if (payTypesResult.data) {
-        payTypesData = payTypesResult.data;
+        dispatchPayTypes = payTypesResult.data;
       }
     } catch (ptErr) {
       console.warn('Failed to load pay types, using defaults:', ptErr);
