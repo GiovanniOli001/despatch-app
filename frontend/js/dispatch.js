@@ -384,11 +384,40 @@ let viewMode = 'horizontal'; // 'horizontal' or 'vertical'
 let dataSource = 'fake'; // 'fake' or 'real'
 let dispatchMeta = null; // Metadata from real API
 let showCancelledDuties = false; // Toggle to show cancelled duties on Gantt
+let payTypesData = []; // Pay types from API
 
 // Filter state
 let driverFilters = { search: '', status: 'all', sort: 'status' };
 let vehicleFilters = { search: '', status: 'all', sort: 'status' };
 let assignmentSearch = '';
+
+// Helper to generate pay type options from API data
+// Falls back to hardcoded PAY_TYPES if API data not loaded
+function getPayTypeOptions(selectedPayType) {
+  // Use API data if available
+  if (payTypesData && payTypesData.length > 0) {
+    return payTypesData
+      .filter(pt => pt.is_active !== 0)
+      .map(pt => `<option value="${pt.code}" ${selectedPayType === pt.code ? 'selected' : ''}>${pt.code}</option>`)
+      .join('');
+  }
+  // Fallback to hardcoded PAY_TYPES from app.js
+  return Object.entries(PAY_TYPES).map(([key, val]) => 
+    `<option value="${key}" ${selectedPayType === key ? 'selected' : ''}>${val.code}</option>`
+  ).join('');
+}
+
+// Helper to get pay type label
+function getPayTypeLabel(payTypeCode) {
+  if (payTypesData && payTypesData.length > 0) {
+    const pt = payTypesData.find(p => p.code === payTypeCode);
+    if (pt) return pt.name;
+  }
+  // Fallback to hardcoded
+  const hardcoded = Object.entries(PAY_TYPES).find(([k, v]) => k === payTypeCode || v.code === payTypeCode);
+  if (hardcoded) return hardcoded[1].label;
+  return payTypeCode;
+}
 
 function changeStyle() {
   // Remove old style class
@@ -467,10 +496,20 @@ async function loadDispatchData() {
   
   try {
     const dateStr = formatDateISO(currentDate);
-    const result = await apiRequest(`/dispatch/${dateStr}`);
     
-    if (result.data) {
-      const data = result.data;
+    // Fetch dispatch data and pay types in parallel
+    const [dispatchResult, payTypesResult] = await Promise.all([
+      apiRequest(`/dispatch/${dateStr}`),
+      apiRequest('/config/pay-types')
+    ]);
+    
+    // Store pay types
+    if (payTypesResult.data) {
+      payTypesData = payTypesResult.data;
+    }
+    
+    if (dispatchResult.data) {
+      const data = dispatchResult.data;
       
       // Map API response to frontend format
       // Ensure each driver has a shifts array, and each shift has duties
@@ -3078,10 +3117,8 @@ function renderDutyItem(duty, driverId, shiftId, dutyIdx) {
     `<option value="${key}" ${duty.type === key ? 'selected' : ''}>${val.label}</option>`
   ).join('');
   
-  // Pay type options
-  const payTypeOptions = Object.entries(PAY_TYPES).map(([key, val]) => 
-    `<option value="${key}" ${payType === key ? 'selected' : ''}>${val.code}</option>`
-  ).join('');
+  // Pay type options - use API data
+  const payTypeOptions = getPayTypeOptions(payType);
   
   // For cancelled duties, show simplified row with reinstate button
   if (isCancelled) {
@@ -3511,7 +3548,7 @@ async function updateDutyPayType(driverId, shiftId, dutyIdx, payType) {
   }
   
   duty.payType = payType;
-  showToast(`Pay type updated to ${PAY_TYPES[payType]?.label || payType}`);
+  showToast(`Pay type updated to ${getPayTypeLabel(payType)}`);
 }
 
 async function bulkUpdatePayType(driverId, shiftId, payType) {
@@ -3546,7 +3583,7 @@ async function bulkUpdatePayType(driverId, shiftId, payType) {
   });
   
   renderDetailPanel();
-  showToast(`All duties updated to ${PAY_TYPES[payType]?.label || payType}`);
+  showToast(`All duties updated to ${getPayTypeLabel(payType)}`);
 }
 
 async function insertDuty(driverId, shiftId, dutyIdx, position) {
@@ -3772,10 +3809,8 @@ function renderShiftTotals(shift, driverId) {
     `;
   }).join('');
   
-  // Pay type bulk assign options
-  const payTypeOptions = Object.entries(PAY_TYPES).map(([key, val]) => 
-    `<option value="${key}">${val.label}</option>`
-  ).join('');
+  // Pay type bulk assign options - use API data
+  const payTypeOptions = getPayTypeOptions('');
   
   return `
     <div class="shift-totals">
@@ -4184,10 +4219,8 @@ function renderVehicleDutyItem(duty, vehicleId, shiftId, dutyIdx) {
     `<option value="${key}" ${duty.type === key ? 'selected' : ''}>${val.label}</option>`
   ).join('');
   
-  // Pay type options
-  const payTypeOptions = Object.entries(PAY_TYPES).map(([key, val]) => 
-    `<option value="${key}" ${payType === key ? 'selected' : ''}>${val.code}</option>`
-  ).join('');
+  // Pay type options - use API data
+  const payTypeOptions = getPayTypeOptions(payType);
   
   return `
     <div class="duty-item-inline">
@@ -4353,7 +4386,7 @@ function updateVehicleDutyPayType(vehicleId, shiftId, dutyIdx, payType) {
   if (!shift || !shift.duties[dutyIdx]) return;
   
   shift.duties[dutyIdx].payType = payType;
-  showToast(`Pay type updated to ${PAY_TYPES[payType].label}`);
+  showToast(`Pay type updated to ${getPayTypeLabel(payType)}`);
 }
 
 function bulkUpdateVehiclePayType(vehicleId, shiftId, payType) {
@@ -4368,7 +4401,7 @@ function bulkUpdateVehiclePayType(vehicleId, shiftId, payType) {
   });
   
   renderDetailPanel();
-  showToast(`All duties updated to ${PAY_TYPES[payType].label}`);
+  showToast(`All duties updated to ${getPayTypeLabel(payType)}`);
 }
 
 function insertVehicleDuty(vehicleId, shiftId, dutyIdx, position) {
@@ -4498,9 +4531,8 @@ function renderVehicleShiftTotals(shift, vehicleId) {
     `;
   }).join('');
   
-  const payTypeOptions = Object.entries(PAY_TYPES).map(([key, val]) => 
-    `<option value="${key}">${val.label}</option>`
-  ).join('');
+  // Pay type bulk assign options - use API data
+  const payTypeOptions = getPayTypeOptions('');
   
   return `
     <div class="shift-totals">

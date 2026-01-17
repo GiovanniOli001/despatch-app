@@ -500,10 +500,14 @@ function filterRosters() {
 // ============================================
 
 async function openRoster(id) {
-  // Check if roster is published - block editing
+  // Check if roster is published or scheduled - block editing
   const roster = rostersData.find(r => r.id === id);
   if (roster && roster.status === 'published') {
     showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', 'error');
+    return;
+  }
+  if (roster && roster.isScheduled) {
+    showToast('This roster cannot be opened for editing while scheduled on the calendar. Remove it from the calendar first.', 'error');
     return;
   }
   
@@ -518,6 +522,11 @@ async function openRoster(id) {
     // Double-check from server response
     if (currentRoster.status === 'published') {
       showToast('This roster cannot be opened for editing as it is published. Unpublish it first to make changes.', 'error');
+      backToRosterList();
+      return;
+    }
+    if (currentRoster.calendar_start_date) {
+      showToast('This roster cannot be opened for editing while scheduled on the calendar. Remove it from the calendar first.', 'error');
       backToRosterList();
       return;
     }

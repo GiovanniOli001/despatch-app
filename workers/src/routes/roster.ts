@@ -310,6 +310,21 @@ async function updateRoster(env: Env, id: string, input: Partial<RosterInput>): 
 }
 
 async function deleteRoster(env: Env, id: string): Promise<Response> {
+  // Check if roster is scheduled on calendar or published
+  const roster = await env.DB.prepare(`
+    SELECT id, calendar_start_date, status FROM rosters WHERE id = ? AND tenant_id = ? AND deleted_at IS NULL
+  `).bind(id, TENANT_ID).first() as { id: string; calendar_start_date: string | null; status: string } | null;
+  
+  if (!roster) return error('Roster not found', 404);
+  
+  if (roster.status === 'published') {
+    return error('Cannot delete a published roster. Unpublish it first.');
+  }
+  
+  if (roster.calendar_start_date) {
+    return error('Cannot delete a roster while it is scheduled on the calendar. Remove it from the calendar first.');
+  }
+  
   const now = new Date().toISOString();
   await env.DB.prepare(`
     UPDATE rosters SET deleted_at = ? WHERE id = ? AND tenant_id = ?
@@ -474,14 +489,15 @@ async function unpublishRoster(env: Env, id: string): Promise<Response> {
   
   if (!roster) return error('Roster not found', 404);
   
-  // Delete all roster_duty_lines for this roster's entries
-  // This ensures fresh duty lines (without cancelled status) are created on next publish
+  // Delete only TEMPLATE-SOURCED roster_duty_lines (where source_duty_line_id IS NOT NULL)
+  // This preserves user-added inline duties (where source_duty_line_id IS NULL)
   await env.DB.prepare(`
     DELETE FROM roster_duty_lines 
     WHERE roster_entry_id IN (
       SELECT id FROM roster_entries 
       WHERE roster_id = ? AND deleted_at IS NULL
     )
+    AND source_duty_line_id IS NOT NULL
   `).bind(id).run();
   
   // Revert to draft
