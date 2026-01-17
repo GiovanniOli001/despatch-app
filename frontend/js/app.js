@@ -181,6 +181,12 @@ function navigateTo(screen) {
   if (screen === 'roster') {
     loadRosters();
   }
+  if (screen === 'charters') {
+    // Load customers by default (first tab)
+    if (typeof loadCharterCustomers === 'function') {
+      loadCharterCustomers();
+    }
+  }
 }
 
 function updateHeaderForScreen(screen) {

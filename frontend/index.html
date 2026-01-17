@@ -519,9 +519,92 @@
       
       <!-- Charters Screen -->
       <div class="screen" id="screen-charters" style="display: none;">
-        <div class="screen-placeholder">
-          <div class="screen-placeholder-title">Charter Management</div>
-          <div class="screen-placeholder-desc">Create, manage, and track charter bookings and quotations.</div>
+        <!-- Sub-navigation tabs -->
+        <div class="hrm-tabs" style="margin-bottom: 20px;">
+          <button class="hrm-tab active" onclick="switchCharterTab('customers')">Customers</button>
+          <button class="hrm-tab" onclick="switchCharterTab('bookings')">Bookings</button>
+        </div>
+
+        <!-- Customers Tab -->
+        <div id="charterTabCustomers" class="hrm-tab-content active">
+          <div class="screen-header">
+            <div class="header-title">
+              <h1>Charter Customers</h1>
+            </div>
+            <div class="header-actions">
+              <input type="text" class="search-input" placeholder="Search customers..." oninput="filterCharterCustomers(this.value)">
+              <select class="filter-select" onchange="filterCustomerStatus(this.value)">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="on_hold">On Hold</option>
+                <option value="closed">Closed</option>
+              </select>
+              <button class="btn btn-primary" onclick="showAddCustomerModal()">+ Add Customer</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Contact</th>
+                  <th>Phone</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="charterCustomersTableBody">
+                <tr><td colspan="6" class="loading-cell">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Bookings Tab -->
+        <div id="charterTabBookings" class="hrm-tab-content" style="display: none;">
+          <div class="screen-header">
+            <div class="header-title">
+              <h1>Charter Bookings</h1>
+            </div>
+            <div class="header-actions">
+              <input type="text" class="search-input" placeholder="Search charters..." oninput="filterCharters({search: this.value})">
+              <select class="filter-select" onchange="filterCharters({status: this.value})">
+                <option value="">All Status</option>
+                <option value="enquiry">Enquiry</option>
+                <option value="quoted">Quoted</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="completed">Completed</option>
+                <option value="invoiced">Invoiced</option>
+                <option value="paid">Paid</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <button class="btn btn-primary" onclick="showAddCharterModal()">+ New Charter</button>
+            </div>
+          </div>
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Charter #</th>
+                  <th>Customer</th>
+                  <th>Event</th>
+                  <th>Event Date</th>
+                  <th>Trips</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="chartersTableBody">
+                <tr><td colspan="7" class="loading-cell">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Charter Detail View (hidden by default) -->
+        <div id="charterDetailView" style="display: none;">
+          <!-- Will be populated dynamically -->
         </div>
       </div>
       
@@ -555,6 +638,7 @@
   <script src="js/vehicles.js"></script>
   <script src="js/shifts.js"></script>
   <script src="js/roster.js"></script>
+  <script src="js/charters.js"></script>
   
   
   <!-- Employee Modal -->
@@ -1136,6 +1220,361 @@
       <div class="crud-modal-footer" style="justify-content: space-between;">
         <button class="btn-secondary" onclick="confirmConnected(false)">Just This Block</button>
         <button class="btn-primary" onclick="confirmConnected(true)">All Connected Blocks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charter Customer Modal -->
+  <div class="crud-modal-overlay" id="charterCustomerModalOverlay">
+    <div class="crud-modal" style="width: 700px; max-height: 90vh;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="customerModalTitle">Add Customer</span>
+        <button class="crud-modal-close" onclick="closeCustomerModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body" style="overflow-y: auto; max-height: calc(90vh - 140px);">
+        <!-- Tabs -->
+        <div class="modal-tabs" style="margin-bottom: 16px;">
+          <button class="modal-tab active" onclick="switchCustomerModalTab('details', event)">Details</button>
+          <button class="modal-tab" onclick="switchCustomerModalTab('contacts', event)">Contacts</button>
+        </div>
+
+        <!-- Details Tab -->
+        <div id="customerTabDetails" class="modal-tab-content active">
+          <form id="customerForm">
+            <div class="form-row">
+              <div class="form-group" style="flex: 2;">
+                <label class="form-label">Company Name *</label>
+                <input type="text" class="form-input" id="custCompanyName" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label class="form-label">Trading Name</label>
+                <input type="text" class="form-input" id="custTradingName">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">ABN</label>
+                <input type="text" class="form-input" id="custAbn" placeholder="XX XXX XXX XXX">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Website</label>
+                <input type="text" class="form-input" id="custWebsite">
+              </div>
+            </div>
+
+            <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Billing Address</h4>
+            <div class="form-group">
+              <label class="form-label">Street Address</label>
+              <input type="text" class="form-input" id="custBillingAddress">
+            </div>
+            <div class="form-row">
+              <div class="form-group" style="flex: 2;">
+                <label class="form-label">Suburb</label>
+                <input type="text" class="form-input" id="custBillingSuburb">
+              </div>
+              <div class="form-group">
+                <label class="form-label">State</label>
+                <select class="form-input" id="custBillingState">
+                  <option value="">--</option>
+                  <option value="QLD">QLD</option>
+                  <option value="NSW">NSW</option>
+                  <option value="VIC">VIC</option>
+                  <option value="SA">SA</option>
+                  <option value="WA">WA</option>
+                  <option value="TAS">TAS</option>
+                  <option value="NT">NT</option>
+                  <option value="ACT">ACT</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Postcode</label>
+                <input type="text" class="form-input" id="custBillingPostcode" maxlength="4">
+              </div>
+            </div>
+
+            <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Account Settings</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Primary Email</label>
+                <input type="email" class="form-input" id="custPrimaryEmail">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Primary Phone</label>
+                <input type="text" class="form-input" id="custPrimaryPhone">
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Payment Terms (days)</label>
+                <input type="number" class="form-input" id="custPaymentTerms" value="14">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Credit Limit ($)</label>
+                <input type="number" class="form-input" id="custCreditLimit" value="0" step="100">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Account Status</label>
+                <select class="form-input" id="custAccountStatus">
+                  <option value="active">Active</option>
+                  <option value="on_hold">On Hold</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Notes</label>
+              <textarea class="form-input" id="custNotes" rows="3"></textarea>
+            </div>
+          </form>
+        </div>
+
+        <!-- Contacts Tab -->
+        <div id="customerTabContacts" class="modal-tab-content" style="display: none;">
+          <div style="margin-bottom: 12px;">
+            <button class="btn btn-secondary" onclick="showAddContactModal()">+ Add Contact</button>
+          </div>
+          <div id="customerContactsList">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn btn-secondary" onclick="closeCustomerModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCharterCustomer()">Save Customer</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charter Modal -->
+  <div class="crud-modal-overlay" id="charterModalOverlay">
+    <div class="crud-modal" style="width: 600px;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="charterModalTitle">New Charter</span>
+        <button class="crud-modal-close" onclick="closeCharterModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="charterForm">
+          <div class="form-group">
+            <label class="form-label">Customer *</label>
+            <select class="form-input" id="charterCustomerId" required>
+              <option value="">-- Select Customer --</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Event/Booking Name</label>
+              <input type="text" class="form-input" id="charterName" placeholder="e.g., Smith Wedding">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Event Date</label>
+              <input type="date" class="form-input" id="charterEventDate">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea class="form-input" id="charterDescription" rows="3"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn btn-secondary" onclick="closeCharterModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveCharter()">Save Charter</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charter Trip Modal -->
+  <div class="crud-modal-overlay" id="charterTripModalOverlay">
+    <div class="crud-modal" style="width: 800px; max-height: 90vh;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="tripModalTitle">Add Trip</span>
+        <button class="crud-modal-close" onclick="closeTripModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body" style="overflow-y: auto; max-height: calc(90vh - 140px);">
+        <form id="tripForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Trip Name</label>
+              <input type="text" class="form-input" id="tripName" placeholder="e.g., Outbound, Return">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Date *</label>
+              <input type="date" class="form-input" id="tripDate" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Pickup Time *</label>
+              <input type="time" class="form-input" id="tripPickupTime" required>
+            </div>
+          </div>
+
+          <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Pickup Location</h4>
+          <div class="form-row">
+            <div class="form-group" style="flex: 2; position: relative;">
+              <label class="form-label">Location Name *</label>
+              <input type="text" class="form-input" id="tripPickupName" required autocomplete="off">
+              <div id="tripPickupSuggestions" class="location-suggestions" style="display: none;"></div>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label class="form-label">Lat/Lng</label>
+              <input type="text" class="form-input" id="tripPickupCoords" placeholder="-27.xxx, 153.xxx" readonly>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Address</label>
+            <input type="text" class="form-input" id="tripPickupAddress">
+          </div>
+
+          <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Dropoff Location</h4>
+          <div class="form-row">
+            <div class="form-group" style="flex: 2; position: relative;">
+              <label class="form-label">Location Name *</label>
+              <input type="text" class="form-input" id="tripDropoffName" required autocomplete="off">
+              <div id="tripDropoffSuggestions" class="location-suggestions" style="display: none;"></div>
+            </div>
+            <div class="form-group" style="flex: 1;">
+              <label class="form-label">Lat/Lng</label>
+              <input type="text" class="form-input" id="tripDropoffCoords" placeholder="-27.xxx, 153.xxx" readonly>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Address</label>
+            <input type="text" class="form-input" id="tripDropoffAddress">
+          </div>
+
+          <h4 style="margin: 16px 0 8px; color: var(--text-secondary);">Passengers & Vehicle</h4>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Passengers *</label>
+              <input type="number" class="form-input" id="tripPassengerCount" value="1" min="1" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Min Vehicle Capacity</label>
+              <input type="number" class="form-input" id="tripVehicleCapacity">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Vehicle Requirements</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px;">
+              <label><input type="checkbox" id="tripReqWheelchair"> Wheelchair</label>
+              <label><input type="checkbox" id="tripReqAc"> A/C</label>
+              <label><input type="checkbox" id="tripReqToilet"> Toilet</label>
+              <label><input type="checkbox" id="tripReqLuggage"> Luggage</label>
+              <label><input type="checkbox" id="tripReqWifi"> WiFi</label>
+              <label><input type="checkbox" id="tripReqSeatbelts"> Seatbelts</label>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Passenger Notes</label>
+            <input type="text" class="form-input" id="tripPassengerNotes" placeholder="e.g., 3 wheelchairs, includes 5 children">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Special Instructions</label>
+            <textarea class="form-input" id="tripInstructions" rows="2"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn btn-secondary" onclick="closeTripModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveTrip()">Save Trip</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Modal -->
+  <div class="crud-modal-overlay" id="contactModalOverlay">
+    <div class="crud-modal" style="width: 500px;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="contactModalTitle">Add Contact</span>
+        <button class="crud-modal-close" onclick="closeContactModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="contactForm">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">First Name *</label>
+              <input type="text" class="form-input" id="contactFirstName" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Last Name *</label>
+              <input type="text" class="form-input" id="contactLastName" required>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <input type="text" class="form-input" id="contactRole" placeholder="e.g., Booking Manager">
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Email</label>
+              <input type="email" class="form-input" id="contactEmail">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input type="text" class="form-input" id="contactPhone">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mobile</label>
+            <input type="text" class="form-input" id="contactMobile">
+          </div>
+          <div style="display: flex; gap: 16px; margin-top: 12px;">
+            <label><input type="checkbox" id="contactIsPrimary"> Primary Contact</label>
+            <label><input type="checkbox" id="contactReceivesInvoices"> Receives Invoices</label>
+            <label><input type="checkbox" id="contactReceivesQuotes"> Receives Quotes</label>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn btn-secondary" onclick="closeContactModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveContact()">Save Contact</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Line Item Modal -->
+  <div class="crud-modal-overlay" id="lineItemModalOverlay">
+    <div class="crud-modal" style="width: 500px;">
+      <div class="crud-modal-header">
+        <span class="crud-modal-title" id="lineItemModalTitle">Add Line Item</span>
+        <button class="crud-modal-close" onclick="closeLineItemModal()">&times;</button>
+      </div>
+      <div class="crud-modal-body">
+        <form id="lineItemForm">
+          <div class="form-group">
+            <label class="form-label">Type *</label>
+            <select class="form-input" id="lineItemType" required>
+              <option value="base_rate">Base Rate</option>
+              <option value="per_km">Per KM</option>
+              <option value="waiting">Waiting Time</option>
+              <option value="tolls">Tolls</option>
+              <option value="parking">Parking</option>
+              <option value="admin">Admin Fee</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description *</label>
+            <input type="text" class="form-input" id="lineItemDescription" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Quantity</label>
+              <input type="number" class="form-input" id="lineItemQty" value="1" step="0.01">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Unit Price ($) *</label>
+              <input type="number" class="form-input" id="lineItemPrice" step="0.01" required>
+            </div>
+          </div>
+          <div style="display: flex; gap: 16px; margin-top: 12px;">
+            <label><input type="checkbox" id="lineItemTaxable" checked> GST Applicable</label>
+            <label><input type="checkbox" id="lineItemHidden"> Hidden from customer</label>
+          </div>
+        </form>
+      </div>
+      <div class="crud-modal-footer">
+        <button class="btn btn-secondary" onclick="closeLineItemModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveLineItem()">Save</button>
       </div>
     </div>
   </div>

@@ -491,3 +491,216 @@ CREATE INDEX idx_pay_records_source_duty ON employee_pay_records(source_duty_lin
 
 -- Cancellation index
 CREATE INDEX idx_cancellations_duty_line ON dispatch_duty_cancellations(roster_duty_line_id);
+
+-- ============================================
+-- CHARTER MODULE (Added January 18, 2026)
+-- ============================================
+
+-- Vehicle features for requirement matching
+CREATE TABLE vehicle_features (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_active INTEGER DEFAULT 1,
+  display_order INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(tenant_id, code)
+);
+
+CREATE TABLE vehicle_feature_assignments (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  vehicle_id TEXT NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+  feature_id TEXT NOT NULL REFERENCES vehicle_features(id) ON DELETE CASCADE,
+  created_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(vehicle_id, feature_id)
+);
+
+-- Charter customers
+CREATE TABLE charter_customers (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  company_name TEXT NOT NULL,
+  trading_name TEXT,
+  abn TEXT,
+  billing_address TEXT,
+  billing_suburb TEXT,
+  billing_state TEXT,
+  billing_postcode TEXT,
+  physical_address TEXT,
+  physical_suburb TEXT,
+  physical_state TEXT,
+  physical_postcode TEXT,
+  payment_terms INTEGER DEFAULT 14,
+  credit_limit REAL DEFAULT 0,
+  account_status TEXT DEFAULT 'active',  -- active, on_hold, closed
+  primary_email TEXT,
+  primary_phone TEXT,
+  website TEXT,
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+CREATE TABLE charter_customer_contacts (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  customer_id TEXT NOT NULL REFERENCES charter_customers(id) ON DELETE CASCADE,
+  first_name TEXT NOT NULL,
+  last_name TEXT NOT NULL,
+  role TEXT,
+  email TEXT,
+  phone TEXT,
+  mobile TEXT,
+  is_primary INTEGER DEFAULT 0,
+  receives_invoices INTEGER DEFAULT 0,
+  receives_quotes INTEGER DEFAULT 0,
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+-- Charters (booking containers)
+CREATE TABLE charters (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  customer_id TEXT NOT NULL REFERENCES charter_customers(id),
+  charter_number TEXT NOT NULL,  -- CHT-2026-0001
+  name TEXT,
+  description TEXT,
+  status TEXT DEFAULT 'enquiry',  -- enquiry, quoted, confirmed, completed, invoiced, paid, cancelled
+  cancelled_at TEXT,
+  cancellation_reason TEXT,
+  booking_date TEXT NOT NULL,
+  event_date TEXT,
+  quoted_total REAL DEFAULT 0,
+  invoiced_total REAL DEFAULT 0,
+  paid_total REAL DEFAULT 0,
+  contact_id TEXT REFERENCES charter_customer_contacts(id),
+  notes TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT,
+  UNIQUE(tenant_id, charter_number)
+);
+
+CREATE TABLE charter_notes (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  charter_id TEXT NOT NULL REFERENCES charters(id) ON DELETE CASCADE,
+  note_text TEXT NOT NULL,
+  created_by TEXT,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Charter trips (individual legs)
+CREATE TABLE charter_trips (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  charter_id TEXT NOT NULL REFERENCES charters(id) ON DELETE CASCADE,
+  trip_number INTEGER NOT NULL,
+  name TEXT,
+  trip_date TEXT NOT NULL,
+  pickup_time TEXT NOT NULL,  -- HH:MM
+  estimated_end_time TEXT,
+  estimated_duration_mins INTEGER,
+  passenger_count INTEGER NOT NULL DEFAULT 1,
+  passenger_notes TEXT,
+  pickup_name TEXT NOT NULL,
+  pickup_address TEXT,
+  pickup_lat REAL,
+  pickup_lng REAL,
+  pickup_notes TEXT,
+  dropoff_name TEXT NOT NULL,
+  dropoff_address TEXT,
+  dropoff_lat REAL,
+  dropoff_lng REAL,
+  dropoff_notes TEXT,
+  vehicle_capacity_required INTEGER,
+  vehicle_features_required TEXT,  -- JSON array: ["wheelchair", "ac"]
+  assigned_vehicle_id TEXT REFERENCES vehicles(id),
+  assigned_driver_id TEXT REFERENCES employees(id),
+  operational_status TEXT DEFAULT 'draft',  -- draft, booked, in_progress, completed, cancelled
+  billing_status TEXT DEFAULT 'not_invoiced',  -- not_invoiced, invoiced, paid
+  cancelled_at TEXT,
+  cancellation_reason TEXT,
+  special_instructions TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  deleted_at TEXT
+);
+
+CREATE TABLE charter_trip_stops (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  trip_id TEXT NOT NULL REFERENCES charter_trips(id) ON DELETE CASCADE,
+  sequence INTEGER NOT NULL,
+  stop_name TEXT NOT NULL,
+  stop_address TEXT,
+  stop_lat REAL,
+  stop_lng REAL,
+  estimated_arrival TEXT,
+  stop_duration_mins INTEGER DEFAULT 0,
+  stop_type TEXT DEFAULT 'stop',  -- stop, pickup, dropoff, break
+  notes TEXT,
+  passengers_on INTEGER DEFAULT 0,
+  passengers_off INTEGER DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE charter_trip_line_items (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  trip_id TEXT NOT NULL REFERENCES charter_trips(id) ON DELETE CASCADE,
+  item_type TEXT NOT NULL,  -- base_rate, per_km, waiting, tolls, parking, admin, other
+  description TEXT NOT NULL,
+  quantity REAL DEFAULT 1,
+  unit_price REAL NOT NULL,
+  total_price REAL NOT NULL,
+  is_taxable INTEGER DEFAULT 1,
+  tax_amount REAL DEFAULT 0,
+  display_order INTEGER DEFAULT 0,
+  is_hidden INTEGER DEFAULT 0,  -- Hidden from customer documents
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE charter_documents (
+  id TEXT PRIMARY KEY,
+  tenant_id TEXT NOT NULL DEFAULT 'default',
+  charter_id TEXT NOT NULL REFERENCES charters(id) ON DELETE CASCADE,
+  document_type TEXT NOT NULL,  -- quote, invoice, booking_confirmation, run_sheet, statement
+  document_number TEXT,
+  status TEXT DEFAULT 'draft',  -- draft, sent, viewed, paid
+  issue_date TEXT,
+  due_date TEXT,
+  sent_at TEXT,
+  subtotal REAL,
+  tax_total REAL,
+  grand_total REAL,
+  file_path TEXT,
+  sent_to_email TEXT,
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
+);
+
+-- Charter indexes
+CREATE INDEX idx_charter_customers_tenant ON charter_customers(tenant_id);
+CREATE INDEX idx_charter_customers_status ON charter_customers(tenant_id, account_status);
+CREATE INDEX idx_customer_contacts_customer ON charter_customer_contacts(customer_id);
+CREATE INDEX idx_charters_tenant ON charters(tenant_id);
+CREATE INDEX idx_charters_customer ON charters(customer_id);
+CREATE INDEX idx_charters_status ON charters(tenant_id, status);
+CREATE INDEX idx_charters_event_date ON charters(tenant_id, event_date);
+CREATE INDEX idx_charter_trips_charter ON charter_trips(charter_id);
+CREATE INDEX idx_charter_trips_date ON charter_trips(tenant_id, trip_date);
+CREATE INDEX idx_charter_trips_dispatch ON charter_trips(tenant_id, trip_date, operational_status);
+CREATE INDEX idx_trip_stops_trip ON charter_trip_stops(trip_id);
+CREATE INDEX idx_trip_line_items_trip ON charter_trip_line_items(trip_id);
+CREATE INDEX idx_charter_documents_charter ON charter_documents(charter_id);

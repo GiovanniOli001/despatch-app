@@ -12,6 +12,9 @@ import { handleDispatch } from './routes/dispatch';
 import { handleConfig } from './routes/config';
 import { handleOpsCalendar } from './routes/ops-calendar';
 import { handlePayTypes } from './routes/pay-types';
+import { handleCharterCustomers } from './routes/charter-customers';
+import { handleCharters } from './routes/charters';
+import { handleCharterTrips } from './routes/charter-trips';
 
 export interface Env {
   DB: D1Database;
@@ -108,6 +111,15 @@ export default {
 
         case 'pay-types':
           return handlePayTypes(request, env, segments.slice(1));
+
+        case 'charter-customers':
+          return handleCharterCustomers(request, env, segments.slice(1));
+
+        case 'charters':
+          return handleCharters(request, env, segments.slice(1));
+
+        case 'charter-trips':
+          return handleCharterTrips(request, env, segments.slice(1));
 
         default:
           return error('Not found', 404);
