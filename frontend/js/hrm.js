@@ -1109,11 +1109,10 @@ function renderPayRecordsTab(totals) {
     html += `<tr><td colspan="9" class="loading-cell">No pay records found</td></tr>`;
   } else {
     for (const rec of employeePayRecordsData) {
-      const isManual = rec.is_manual ? '<span class="badge badge-warning" title="Manually edited">M</span>' : '';
       const hasNotes = rec.notes && rec.notes.trim().length > 0;
       const notesCell = hasNotes 
-        ? `<button type="button" class="notes-icon-btn has-notes" onclick="showPayRecordNotes('${rec.id}')" title="View notes">📝</button> ${isManual}`
-        : `<span class="notes-empty">—</span> ${isManual}`;
+        ? `<button type="button" class="notes-icon-btn has-notes" onclick="showPayRecordNotes('${rec.id}')" title="View notes">📝</button>`
+        : `<span class="notes-empty">—</span>`;
       html += `
         <tr data-record-id="${rec.id}" class="${rec.is_manual ? 'manual-edit' : ''}">
           <td>${rec.work_date}</td>
