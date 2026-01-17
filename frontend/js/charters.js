@@ -515,8 +515,57 @@ function renderChartersTable() {
   }).join('');
 }
 
-function filterCharters(filters) {
-  loadCharters();
+function filterCharters() {
+  const searchInput = document.querySelector('#charterTabBookings .filter-input');
+  const statusSelect = document.querySelector('#charterTabBookings .filter-select');
+
+  const search = (searchInput?.value || '').toLowerCase();
+  const status = statusSelect?.value || '';
+
+  const tbody = document.getElementById('chartersTableBody');
+  if (!tbody) return;
+
+  let filtered = chartersData;
+
+  // Apply search filter
+  if (search) {
+    filtered = filtered.filter(ch => {
+      const charterNum = (ch.charter_number || '').toLowerCase();
+      const customerName = (ch.customer_name || '').toLowerCase();
+      const name = (ch.name || ch.description || '').toLowerCase();
+      return charterNum.includes(search) || customerName.includes(search) || name.includes(search);
+    });
+  }
+
+  // Apply status filter
+  if (status) {
+    filtered = filtered.filter(ch => ch.status === status);
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">No charters match your filters</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(ch => {
+    const statusBadge = CHARTER_STATUS_COLORS[ch.status] || 'badge-info';
+    const displayDate = ch.booking_date || ch.event_date || ch.start_date || '—';
+
+    return `
+      <tr style="cursor: pointer;" onclick="openCharterDetail('${ch.id}')">
+        <td style="font-family: 'JetBrains Mono', monospace;">${escapeHtml(ch.charter_number || '')}</td>
+        <td>${escapeHtml(ch.customer_name || '—')}</td>
+        <td>${escapeHtml(ch.name || ch.description || '—')}</td>
+        <td>${displayDate}</td>
+        <td>${ch.trip_count || 0}</td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(ch.status || 'enquiry')}</span></td>
+        <td onclick="event.stopPropagation();">
+          <button class="action-btn" onclick="openCharterDetail('${ch.id}')">Open</button>
+          <button class="action-btn danger" onclick="deleteCharter('${ch.id}', '${escapeHtml(ch.charter_number || '')}')">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 // ============================================
@@ -536,13 +585,13 @@ async function openCharterDetail(id) {
   }
 
   modal.innerHTML = `
-    <div class="crud-modal charter-detail-modal" style="width: 95%; max-width: 1400px; height: 90vh; display: flex; flex-direction: column;">
+    <div class="crud-modal charter-detail-modal">
       <div class="crud-modal-header">
         <span class="crud-modal-title" id="charterDetailTitle">Loading...</span>
         <button type="button" class="crud-modal-close" onclick="closeCharterDetailModal()">&times;</button>
       </div>
-      <div class="crud-modal-body" style="flex: 1; overflow: hidden; padding: 0; display: flex; flex-direction: column;">
-        <div style="padding: 20px; text-align: center;">Loading charter details...</div>
+      <div class="crud-modal-body">
+        <div class="charter-placeholder">Loading charter details...</div>
       </div>
     </div>
   `;
@@ -592,13 +641,13 @@ function renderCharterDetailModal() {
 
   const modalContent = modal.querySelector('.crud-modal');
   modalContent.innerHTML = `
-    <div class="crud-modal-header" style="border-bottom: none; padding-bottom: 0;">
+    <div class="crud-modal-header">
       <div style="display: flex; align-items: center; gap: 16px;">
-        <span class="crud-modal-title" style="font-family: 'JetBrains Mono', monospace; font-size: 20px;">
+        <span class="crud-modal-title" style="font-family: 'JetBrains Mono', monospace; font-size: 18px;">
           ${escapeHtml(charter.charter_number || 'NEW')}
         </span>
         <span class="badge ${statusBadge}">${escapeHtml(charter.status || 'enquiry')}</span>
-        <span style="color: var(--text-secondary); font-size: 14px;">
+        <span style="color: var(--text-secondary); font-size: 13px;">
           ${escapeHtml(charter.customer_name || '')}
           ${charter.name ? ` - ${escapeHtml(charter.name)}` : ''}
         </span>
@@ -607,14 +656,14 @@ function renderCharterDetailModal() {
     </div>
 
     <!-- Tab Navigation -->
-    <div class="modal-tabs" style="display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 20px;">
+    <div class="modal-tabs">
       <button type="button" class="modal-tab ${charterDetailTab === 'charter' ? 'active' : ''}" onclick="switchCharterDetailTab('charter')">Charter</button>
       <button type="button" class="modal-tab ${charterDetailTab === 'trips' ? 'active' : ''}" onclick="switchCharterDetailTab('trips')">Trips</button>
       <button type="button" class="modal-tab ${charterDetailTab === 'billing' ? 'active' : ''}" onclick="switchCharterDetailTab('billing')">Billing</button>
       <button type="button" class="modal-tab ${charterDetailTab === 'history' ? 'active' : ''}" onclick="switchCharterDetailTab('history')">History</button>
     </div>
 
-    <div class="crud-modal-body" id="charterDetailContent" style="flex: 1; overflow-y: auto; padding: 20px;">
+    <div class="charter-detail-content" id="charterDetailContent">
       <!-- Tab content rendered here -->
     </div>
   `;
@@ -646,31 +695,27 @@ function renderCharterDetailModalContent() {
 
 function renderCharterTabContent(charter) {
   return `
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-      <div>
-        <h4 style="margin: 0 0 16px 0; color: var(--text-secondary);">Charter Details</h4>
-        <div class="form-group">
-          <label>Charter Name</label>
-          <input type="text" id="charterDetailName" value="${escapeHtml(charter.name || '')}"
-            onchange="updateCharterField('name', this.value)"
-            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+    <div class="charter-detail-grid">
+      <div class="charter-detail-section">
+        <h4 class="charter-section-title">Charter Details</h4>
+        <div class="charter-form-group">
+          <label class="charter-form-label">Charter Name</label>
+          <input type="text" id="charterDetailName" class="charter-form-input" value="${escapeHtml(charter.name || '')}"
+            onchange="updateCharterField('name', this.value)">
         </div>
-        <div class="form-group">
-          <label>Description</label>
-          <textarea id="charterDetailDesc" rows="3"
-            onchange="updateCharterField('description', this.value)"
-            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); resize: vertical;">${escapeHtml(charter.description || '')}</textarea>
+        <div class="charter-form-group">
+          <label class="charter-form-label">Description</label>
+          <textarea id="charterDetailDesc" class="charter-form-input" rows="3"
+            onchange="updateCharterField('description', this.value)">${escapeHtml(charter.description || '')}</textarea>
         </div>
-        <div class="form-group">
-          <label>Event Date</label>
-          <input type="date" id="charterDetailDate" value="${charter.booking_date || charter.event_date || ''}"
-            onchange="updateCharterField('booking_date', this.value)"
-            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+        <div class="charter-form-group">
+          <label class="charter-form-label">Event Date</label>
+          <input type="date" id="charterDetailDate" class="charter-form-input" value="${charter.booking_date || charter.event_date || ''}"
+            onchange="updateCharterField('booking_date', this.value)">
         </div>
-        <div class="form-group">
-          <label>Status</label>
-          <select id="charterDetailStatus" onchange="updateCharterField('status', this.value)"
-            style="width: 100%; padding: 8px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary);">
+        <div class="charter-form-group">
+          <label class="charter-form-label">Status</label>
+          <select id="charterDetailStatus" class="charter-form-input" onchange="updateCharterField('status', this.value)">
             <option value="enquiry" ${charter.status === 'enquiry' ? 'selected' : ''}>Enquiry</option>
             <option value="quoted" ${charter.status === 'quoted' ? 'selected' : ''}>Quoted</option>
             <option value="confirmed" ${charter.status === 'confirmed' ? 'selected' : ''}>Confirmed</option>
@@ -681,25 +726,25 @@ function renderCharterTabContent(charter) {
           </select>
         </div>
       </div>
-      <div>
-        <h4 style="margin: 0 0 16px 0; color: var(--text-secondary);">Customer Information</h4>
-        <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 6px; border: 1px solid var(--border);">
-          <p style="margin: 0 0 8px 0;"><strong>${escapeHtml(charter.customer_name || '')}</strong></p>
-          <p style="margin: 0; color: var(--text-muted); font-size: 13px;">
+      <div class="charter-detail-section">
+        <h4 class="charter-section-title">Customer Information</h4>
+        <div class="charter-info-card">
+          <p style="margin: 0 0 6px 0; font-weight: 600;">${escapeHtml(charter.customer_name || '')}</p>
+          <p style="margin: 0; color: var(--text-muted); font-size: 12px;">
             ${charter.customer_email ? `Email: ${escapeHtml(charter.customer_email)}<br>` : ''}
             ${charter.customer_phone ? `Phone: ${escapeHtml(charter.customer_phone)}` : ''}
           </p>
         </div>
 
-        <h4 style="margin: 24px 0 16px 0; color: var(--text-secondary);">Summary</h4>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-          <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; border: 1px solid var(--border); text-align: center;">
-            <div style="font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', monospace;">${charterTripsData.length}</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Total Trips</div>
+        <h4 class="charter-section-title" style="margin-top: 20px;">Summary</h4>
+        <div class="charter-summary-grid">
+          <div class="charter-summary-card">
+            <div class="charter-summary-value">${charterTripsData.length}</div>
+            <div class="charter-summary-label">Total Trips</div>
           </div>
-          <div style="background: var(--bg-tertiary); padding: 12px; border-radius: 6px; border: 1px solid var(--border); text-align: center;">
-            <div style="font-size: 24px; font-weight: 600; font-family: 'JetBrains Mono', monospace;">${charterTripsData.reduce((sum, t) => sum + (t.passenger_count || 0), 0)}</div>
-            <div style="font-size: 12px; color: var(--text-muted);">Total Passengers</div>
+          <div class="charter-summary-card">
+            <div class="charter-summary-value">${charterTripsData.reduce((sum, t) => sum + (t.passenger_count || 0), 0)}</div>
+            <div class="charter-summary-label">Total Passengers</div>
           </div>
         </div>
       </div>
@@ -762,20 +807,20 @@ function renderTripsTabContent() {
 
 function renderBillingTabContent(charter) {
   return `
-    <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
-      <h4 style="margin: 0 0 8px 0;">Billing</h4>
+    <div class="charter-placeholder">
+      <h4>Billing</h4>
       <p>Billing functionality coming soon.</p>
-      <p style="font-size: 13px;">This will include invoices, payments, and billing line items.</p>
+      <p>This will include invoices, payments, and billing line items.</p>
     </div>
   `;
 }
 
 function renderHistoryTabContent(charter) {
   return `
-    <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
-      <h4 style="margin: 0 0 8px 0;">History</h4>
+    <div class="charter-placeholder">
+      <h4>History</h4>
       <p>Audit history coming soon.</p>
-      <p style="font-size: 13px;">This will show all changes made to this charter.</p>
+      <p>This will show all changes made to this charter.</p>
     </div>
   `;
 }
@@ -1206,29 +1251,29 @@ function renderTripJourneys() {
 
   if (tripJourneys.length === 0) {
     container.innerHTML = `
-      <div class="journey-editor-empty" style="padding: 20px; text-align: center; color: var(--text-muted);">
+      <div class="journey-editor-empty">
         No journeys added. Click "+ Add Journey" to start.
       </div>
     `;
     return;
   }
 
-  // New column structure: # | Pickup Time | Pickup Location | Dropoff Time | Dropoff Location | Distance | Time | Notes | Actions
   container.innerHTML = `
     <div class="journey-editor">
-      <div class="journey-header" style="display: grid; grid-template-columns: 36px 70px 1fr 70px 1fr 70px 60px 100px 36px; gap: 6px; padding: 8px 10px; background: var(--bg-tertiary); font-size: 10px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); border-bottom: 1px solid var(--border);">
+      <div class="journey-header">
         <span>#</span>
         <span>Pickup</span>
-        <span>Location</span>
+        <span>Pickup Location</span>
         <span>Dropoff</span>
-        <span>Location</span>
-        <span>Dist (km)</span>
-        <span>Time</span>
+        <span>Dropoff Location</span>
+        <span>Dist</span>
+        <span>Mins</span>
         <span>Notes</span>
         <span></span>
       </div>
       ${tripJourneys.map((j, idx) => renderJourneyRow(j, idx)).join('')}
     </div>
+    <button type="button" class="journey-add-btn" onclick="addJourney()">+ Add Journey</button>
   `;
 }
 
@@ -1237,64 +1282,57 @@ function renderJourneyRow(journey, index) {
   const timeDisplay = journey.journey_time_mins ? journey.journey_time_mins : '';
 
   return `
-    <div class="journey-row" style="display: grid; grid-template-columns: 36px 70px 1fr 70px 1fr 70px 60px 100px 36px; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); align-items: start;">
-      <div style="display: flex; flex-direction: column; gap: 2px; align-items: center;">
-        <button type="button" onclick="moveJourney(${index}, 'up')" ${index === 0 ? 'disabled' : ''} style="padding: 1px 4px; font-size: 9px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; color: var(--text-muted);">▲</button>
-        <span style="font-weight: 600; font-size: 11px;">${index + 1}</span>
-        <button type="button" onclick="moveJourney(${index}, 'down')" ${index === tripJourneys.length - 1 ? 'disabled' : ''} style="padding: 1px 4px; font-size: 9px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 2px; cursor: pointer; color: var(--text-muted);">▼</button>
+    <div class="journey-row">
+      <div class="journey-seq-controls">
+        <button type="button" class="journey-seq-btn" onclick="moveJourney(${index}, 'up')" ${index === 0 ? 'disabled' : ''}>▲</button>
+        <span class="journey-seq-num">${index + 1}</span>
+        <button type="button" class="journey-seq-btn" onclick="moveJourney(${index}, 'down')" ${index === tripJourneys.length - 1 ? 'disabled' : ''}>▼</button>
       </div>
 
       <div>
-        <input type="time" value="${journey.pickup_time || ''}"
-          onchange="updateJourney(${index}, 'pickup_time', this.value)"
-          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
+        <input type="time" class="journey-input journey-input-time" value="${journey.pickup_time || ''}"
+          onchange="updateJourney(${index}, 'pickup_time', this.value)">
       </div>
 
-      <div style="position: relative;">
-        <input type="text" id="journeyPickup_${index}" value="${escapeHtml(journey.pickup_name || '')}"
+      <div class="journey-location-wrapper">
+        <input type="text" class="journey-input" id="journeyPickup_${index}" value="${escapeHtml(journey.pickup_name || '')}"
           oninput="onJourneyLocationInput(${index}, 'pickup', this.value)"
-          placeholder="Search location..."
-          style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
-        <div id="journeyPickupSuggestions_${index}" class="location-suggestions" style="display: none;"></div>
+          placeholder="Search location...">
+        <div id="journeyPickupSuggestions_${index}" class="journey-location-suggestions" style="display: none;"></div>
       </div>
 
       <div>
-        <input type="time" value="${journey.dropoff_time || ''}"
-          onchange="updateJourney(${index}, 'dropoff_time', this.value); calculateJourneyTime(${index});"
-          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
+        <input type="time" class="journey-input journey-input-time" value="${journey.dropoff_time || ''}"
+          onchange="updateJourney(${index}, 'dropoff_time', this.value); calculateJourneyTime(${index});">
       </div>
 
-      <div style="position: relative;">
-        <input type="text" id="journeyDropoff_${index}" value="${escapeHtml(journey.dropoff_name || '')}"
+      <div class="journey-location-wrapper">
+        <input type="text" class="journey-input" id="journeyDropoff_${index}" value="${escapeHtml(journey.dropoff_name || '')}"
           oninput="onJourneyLocationInput(${index}, 'dropoff', this.value)"
-          placeholder="Search location..."
-          style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
-        <div id="journeyDropoffSuggestions_${index}" class="location-suggestions" style="display: none;"></div>
+          placeholder="Search location...">
+        <div id="journeyDropoffSuggestions_${index}" class="journey-location-suggestions" style="display: none;"></div>
       </div>
 
       <div>
-        <input type="number" step="0.1" value="${distanceDisplay}"
+        <input type="number" class="journey-input journey-input-number" step="0.1" value="${distanceDisplay}"
           onchange="updateJourney(${index}, 'distance_km', parseFloat(this.value) || null)"
-          placeholder="—"
-          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); text-align: center;">
+          placeholder="—">
       </div>
 
       <div>
-        <input type="number" value="${timeDisplay}"
+        <input type="number" class="journey-input journey-input-number" value="${timeDisplay}"
           onchange="updateJourney(${index}, 'journey_time_mins', parseInt(this.value) || null)"
-          placeholder="—"
-          style="width: 100%; padding: 4px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary); text-align: center;">
+          placeholder="—">
       </div>
 
       <div>
-        <input type="text" value="${escapeHtml(journey.notes || '')}"
+        <input type="text" class="journey-input" value="${escapeHtml(journey.notes || '')}"
           onchange="updateJourney(${index}, 'notes', this.value)"
-          placeholder="Notes..."
-          style="width: 100%; padding: 4px 6px; font-size: 11px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: 3px; color: var(--text-primary);">
+          placeholder="Notes...">
       </div>
 
       <div style="text-align: center;">
-        <button type="button" onclick="removeJourney(${index})" title="Remove journey" style="padding: 2px 6px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px;">&times;</button>
+        <button type="button" class="journey-remove-btn" onclick="removeJourney(${index})" title="Remove journey">&times;</button>
       </div>
     </div>
   `;
@@ -1363,15 +1401,14 @@ function showJourneySuggestions(index, type, results) {
   if (!suggestions) return;
 
   if (results.length === 0) {
-    suggestions.innerHTML = '<div class="location-suggestion-item" style="padding: 8px; color: var(--text-muted);">No results found</div>';
+    suggestions.innerHTML = '<div class="journey-location-item" style="color: var(--text-muted);">No results found</div>';
     suggestions.style.display = 'block';
     return;
   }
 
   suggestions.innerHTML = results.map(r => `
-    <div class="location-suggestion-item"
-         onclick="selectJourneyLocation(${index}, '${type}', '${escapeHtml(r.display_name).replace(/'/g, "\\'")}', ${r.lat}, ${r.lon})"
-         style="padding: 8px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px;">
+    <div class="journey-location-item"
+         onclick="selectJourneyLocation(${index}, '${type}', '${escapeHtml(r.display_name).replace(/'/g, "\\'")}', ${r.lat}, ${r.lon})">
       ${escapeHtml(r.display_name)}
     </div>
   `).join('');
@@ -1396,9 +1433,18 @@ async function selectJourneyLocation(index, type, name, lat, lng) {
   const j = tripJourneys[index];
   if (j.pickup_lat && j.pickup_lng && j.dropoff_lat && j.dropoff_lng) {
     await calculateJourneyRoute(index);
-  }
+    // Re-render to show updated distance/time without losing focus
+    const distInput = document.querySelector(`.journey-row:nth-child(${index + 2}) input[type="number"][step="0.1"]`);
+    const timeInput = document.querySelector(`.journey-row:nth-child(${index + 2}) input[type="number"]:not([step])`);
+    if (distInput) distInput.value = tripJourneys[index].distance_km?.toFixed(1) || '';
+    if (timeInput) timeInput.value = tripJourneys[index].journey_time_mins || '';
 
-  renderTripJourneys();
+    // Update dropoff time if calculated
+    const dropoffTimeInput = document.querySelector(`.journey-row:nth-child(${index + 2}) input[type="time"]:last-of-type`);
+    if (dropoffTimeInput && tripJourneys[index].dropoff_time) {
+      dropoffTimeInput.value = tripJourneys[index].dropoff_time;
+    }
+  }
 }
 
 async function calculateJourneyRoute(index) {
