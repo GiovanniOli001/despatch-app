@@ -779,7 +779,7 @@
   
   <!-- Pay Record Edit Modal -->
   <div class="crud-modal-overlay" id="payRecordEditOverlay">
-    <div class="crud-modal" style="max-width: 400px;">
+    <div class="crud-modal" style="max-width: 500px;">
       <div class="crud-modal-header">
         <span class="crud-modal-title">Edit Pay Record</span>
         <button class="crud-modal-close" onclick="closePayRecordEditModal()">&times;</button>
@@ -812,8 +812,14 @@
             </div>
           </div>
           <div class="form-group">
-            <label class="form-label">Notes</label>
-            <input type="text" id="prEditNotes" class="form-input" placeholder="Reason for adjustment...">
+            <label class="form-label">Notes History</label>
+            <div id="prEditNotesHistory" class="notes-history-container">
+              <span class="notes-empty">No notes yet</span>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Add Note</label>
+            <input type="text" id="prEditNewNote" class="form-input" placeholder="Add a new note...">
           </div>
           <p style="font-size: 11px; color: var(--text-muted); margin-top: 8px;">
             ⚠️ This record will be marked as manually edited.

@@ -1110,6 +1110,10 @@ function renderPayRecordsTab(totals) {
   } else {
     for (const rec of employeePayRecordsData) {
       const isManual = rec.is_manual ? '<span class="badge badge-warning" title="Manually edited">M</span>' : '';
+      const hasNotes = rec.notes && rec.notes.trim().length > 0;
+      const notesCell = hasNotes 
+        ? `<button type="button" class="notes-icon-btn has-notes" onclick="showPayRecordNotes('${rec.id}')" title="View notes">📝</button> ${isManual}`
+        : `<span class="notes-empty">—</span> ${isManual}`;
       html += `
         <tr data-record-id="${rec.id}" class="${rec.is_manual ? 'manual-edit' : ''}">
           <td>${rec.work_date}</td>
@@ -1119,7 +1123,7 @@ function renderPayRecordsTab(totals) {
           <td class="numeric">${parseFloat(rec.hours).toFixed(2)}</td>
           <td class="numeric">$${parseFloat(rec.rate).toFixed(2)}</td>
           <td class="numeric">$${parseFloat(rec.total_amount).toFixed(2)}</td>
-          <td>${escapeHtml(rec.notes || '')} ${isManual}</td>
+          <td>${notesCell}</td>
           <td>
             <button type="button" class="action-btn small" onclick="editPayRecord('${rec.id}')">Edit</button>
           </td>
@@ -1181,7 +1185,22 @@ function editPayRecord(id) {
   document.getElementById('prEditHours').value = record.hours;
   document.getElementById('prEditRate').value = record.rate;
   document.getElementById('prEditPayType').value = record.pay_type_code || 'STD';
-  document.getElementById('prEditNotes').value = record.notes || '';
+  document.getElementById('prEditNewNote').value = '';
+  
+  // Populate notes history
+  const historyContainer = document.getElementById('prEditNotesHistory');
+  const notesArray = parseNotesArray(record.notes);
+  
+  if (notesArray.length === 0) {
+    historyContainer.innerHTML = '<span class="notes-empty">No notes yet</span>';
+  } else {
+    historyContainer.innerHTML = notesArray.map(note => `
+      <div class="notes-history-entry">
+        <span class="notes-timestamp">${formatNotesTimestamp(note.timestamp)}</span>
+        <span class="notes-text">${escapeHtml(note.text)}</span>
+      </div>
+    `).join('');
+  }
   
   // Calculate amount display
   updatePayRecordAmountPreview();
@@ -1204,11 +1223,24 @@ function updatePayRecordAmountPreview() {
 async function savePayRecordEdit() {
   if (!editingPayRecordId) return;
   
+  const record = employeePayRecordsData.find(r => r.id === editingPayRecordId);
+  const newNoteText = document.getElementById('prEditNewNote').value.trim();
+  
+  // Build notes array - keep existing notes and add new one if provided
+  let notesArray = parseNotesArray(record?.notes);
+  
+  if (newNoteText) {
+    notesArray.push({
+      timestamp: new Date().toISOString(),
+      text: newNoteText
+    });
+  }
+  
   const data = {
     hours: parseFloat(document.getElementById('prEditHours').value),
     rate: parseFloat(document.getElementById('prEditRate').value),
     pay_type_code: document.getElementById('prEditPayType').value,
-    notes: document.getElementById('prEditNotes').value || null
+    notes: notesArray.length > 0 ? JSON.stringify(notesArray) : null
   };
   
   if (isNaN(data.hours) || isNaN(data.rate)) {
@@ -1226,5 +1258,121 @@ async function savePayRecordEdit() {
     }
   } catch (err) {
     showToast(err.message || 'Failed to update pay record', 'error');
+  }
+}
+
+// ============================================
+// PAY RECORD NOTES HELPERS
+// ============================================
+
+function parseNotesArray(notesData) {
+  if (!notesData) return [];
+  
+  try {
+    const parsed = JSON.parse(notesData);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    } else if (typeof parsed === 'object' && parsed.text) {
+      // Single note object
+      return [parsed];
+    }
+  } catch (e) {
+    // Plain text - convert to array with unknown timestamp
+    if (typeof notesData === 'string' && notesData.trim()) {
+      return [{ timestamp: null, text: notesData.trim() }];
+    }
+  }
+  return [];
+}
+
+// ============================================
+// PAY RECORD NOTES MODAL
+// ============================================
+
+function showPayRecordNotes(recordId) {
+  const record = employeePayRecordsData.find(r => r.id === recordId);
+  if (!record || !record.notes) {
+    showToast('No notes for this record', 'info');
+    return;
+  }
+  
+  // Parse notes using helper function
+  const notesArray = parseNotesArray(record.notes);
+  
+  if (notesArray.length === 0) {
+    showToast('No notes for this record', 'info');
+    return;
+  }
+  
+  const notesHtml = notesArray.map(note => `
+    <div class="notes-entry">
+      <div class="notes-timestamp">${formatNotesTimestamp(note.timestamp)}</div>
+      <div class="notes-text">${escapeHtml(note.text)}</div>
+    </div>
+  `).join('');
+  
+  // Show in a simple alert-style modal using existing showModal or create one
+  showNotesModal(record, notesHtml);
+}
+
+function formatNotesTimestamp(timestamp) {
+  if (!timestamp) return 'Date unknown';
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return 'Date unknown';
+    return date.toLocaleDateString('en-AU', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch (e) {
+    return timestamp;
+  }
+}
+
+function showNotesModal(record, notesHtml) {
+  // Create modal if it doesn't exist
+  let modal = document.getElementById('payRecordNotesModalOverlay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'payRecordNotesModalOverlay';
+    modal.className = 'crud-modal-overlay';
+    modal.innerHTML = `
+      <div class="crud-modal" style="width: 500px;">
+        <div class="crud-modal-header">
+          <span class="crud-modal-title" id="notesModalTitle">Pay Record Notes</span>
+          <button type="button" class="crud-modal-close" onclick="closeNotesModal()">&times;</button>
+        </div>
+        <div class="crud-modal-body" id="notesModalBody">
+        </div>
+        <div class="crud-modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="closeNotesModal()">Close</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  
+  // Set title with record info
+  const title = `Notes - ${record.work_date} - ${record.shift_name || 'Unknown Shift'}`;
+  document.getElementById('notesModalTitle').textContent = title;
+  
+  // Set body content
+  document.getElementById('notesModalBody').innerHTML = `
+    <div class="notes-modal-content">
+      ${notesHtml}
+    </div>
+  `;
+  
+  // Show modal
+  modal.classList.add('show');
+}
+
+function closeNotesModal() {
+  const modal = document.getElementById('payRecordNotesModalOverlay');
+  if (modal) {
+    modal.classList.remove('show');
   }
 }

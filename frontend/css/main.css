@@ -4101,8 +4101,9 @@
     
     /* Tabbed modal - larger size for employee modal */
     .crud-modal-tabbed {
-      width: 700px;
+      width: 900px;
       max-width: 95vw;
+      min-height: 500px;
     }
     
     .modal-tabs {
@@ -4835,7 +4836,7 @@
     }
     
     .pay-records-table-wrapper {
-      max-height: 350px;
+      max-height: 450px;
       overflow-y: auto;
       position: relative;
     }
@@ -4923,13 +4924,104 @@
       font-size: 11px;
     }
     
-    /* Make modal wider for pay records */
-    .crud-modal-tabbed {
-      max-width: 800px;
-    }
-    
+    /* Pay records tab specific styles */
     #empTabPayRecords {
       padding: 0;
+    }
+    
+    /* Notes icon button */
+    .notes-icon-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      font-size: 16px;
+      opacity: 0.7;
+      transition: opacity 0.2s;
+    }
+    
+    .notes-icon-btn:hover {
+      opacity: 1;
+    }
+    
+    .notes-icon-btn.has-notes {
+      opacity: 1;
+      color: var(--accent-blue);
+    }
+    
+    .notes-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      font-size: 11px;
+    }
+    
+    /* Notes history in edit modal */
+    .notes-history-container {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    
+    .notes-history-entry {
+      padding: 8px;
+      margin-bottom: 6px;
+      background: var(--bg-secondary);
+      border-radius: 4px;
+      border-left: 3px solid var(--accent-blue);
+    }
+    
+    .notes-history-entry:last-child {
+      margin-bottom: 0;
+    }
+    
+    .notes-history-entry .notes-timestamp {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      display: block;
+      margin-bottom: 2px;
+    }
+    
+    .notes-history-entry .notes-text {
+      font-size: 12px;
+      color: var(--text-primary);
+    }
+    
+    /* Notes modal */
+    .notes-modal-content {
+      padding: 16px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    
+    .notes-entry {
+      padding: 12px;
+      margin-bottom: 8px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      border-left: 3px solid var(--accent-blue);
+    }
+    
+    .notes-entry:last-child {
+      margin-bottom: 0;
+    }
+    
+    .notes-timestamp {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .notes-text {
+      font-size: 13px;
+      color: var(--text-primary);
+      line-height: 1.5;
     }
 
     /* ============================================
