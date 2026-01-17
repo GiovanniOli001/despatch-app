@@ -524,13 +524,15 @@ function renderChartersTable() {
 
   tbody.innerHTML = chartersData.map(ch => {
     const statusBadge = CHARTER_STATUS_COLORS[ch.status] || 'badge-info';
+    // API uses booking_date
+    const displayDate = ch.booking_date || ch.event_date || ch.start_date || '—';
 
     return `
       <tr style="cursor: pointer;" onclick="openCharterDetail('${ch.id}')">
         <td style="font-family: 'JetBrains Mono', monospace;">${escapeHtml(ch.charter_number || '')}</td>
         <td>${escapeHtml(ch.customer_name || '—')}</td>
         <td>${escapeHtml(ch.name || ch.description || '—')}</td>
-        <td>${ch.event_date || ch.start_date || '—'}</td>
+        <td>${displayDate}</td>
         <td>${ch.trip_count || 0}</td>
         <td><span class="badge ${statusBadge}">${escapeHtml(ch.status || 'enquiry')}</span></td>
         <td onclick="event.stopPropagation();">
@@ -605,7 +607,8 @@ async function editCharterWithData(charter) {
 
   setInputValue('charterCustomerId', charter.customer_id);
   setInputValue('charterName', charter.name || charter.description);
-  setInputValue('charterEventDate', charter.event_date || charter.start_date);
+  // API uses booking_date, but also check event_date for backwards compat
+  setInputValue('charterEventDate', charter.booking_date || charter.event_date || charter.start_date);
   setInputValue('charterDescription', charter.description);
 
   const modal = document.getElementById('charterModalOverlay');
@@ -623,8 +626,8 @@ async function saveCharter() {
     customer_id: getInputValue('charterCustomerId') || null,
     name: getInputValue('charterName') || null,
     description: getInputValue('charterDescription') || null,
+    booking_date: getInputValue('charterEventDate') || null,
     event_date: getInputValue('charterEventDate') || null,
-    start_date: getInputValue('charterEventDate') || null,
     status: 'enquiry'
   };
 
@@ -731,7 +734,7 @@ function renderCharterDetailView(charter) {
             <strong>${escapeHtml(charter.customer_name || '')}</strong>
             ${charter.name ? ` - ${escapeHtml(charter.name)}` : ''}
           </p>
-          ${charter.event_date ? `<p style="margin: 4px 0 0 0; color: var(--text-muted);">Event Date: ${charter.event_date}</p>` : ''}
+          ${charter.booking_date || charter.event_date ? `<p style="margin: 4px 0 0 0; color: var(--text-muted);">Event Date: ${charter.booking_date || charter.event_date}</p>` : ''}
         </div>
         <div style="display: flex; gap: 8px;">
           <button class="btn btn-secondary" onclick="editCharter('${charter.id}')">Edit Charter</button>
@@ -769,11 +772,13 @@ function renderDetailTripsRows() {
   }
 
   return charterTripsData.map(trip => {
-    const statusBadge = TRIP_STATUS_COLORS[trip.status] || 'badge-info';
+    // API uses operational_status, fallback to status
+    const tripStatus = trip.operational_status || trip.status || 'draft';
+    const statusBadge = TRIP_STATUS_COLORS[tripStatus] || 'badge-info';
 
     return `
       <tr>
-        <td>${escapeHtml(trip.name || trip.trip_name || 'Trip')}</td>
+        <td>${escapeHtml(trip.name || trip.trip_name || `Trip ${trip.trip_number || ''}`)}</td>
         <td>${trip.trip_date || '—'}</td>
         <td>
           <div>${escapeHtml(trip.pickup_name || trip.pickup_location || '—')}</div>
@@ -781,7 +786,7 @@ function renderDetailTripsRows() {
         </td>
         <td>${escapeHtml(trip.dropoff_name || trip.dropoff_location || '—')}</td>
         <td>${trip.passenger_count || '—'}</td>
-        <td><span class="badge ${statusBadge}">${escapeHtml(trip.status || 'draft')}</span></td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(tripStatus)}</span></td>
         <td>
           <button class="action-btn" onclick="editTrip('${trip.id}')">Edit</button>
           <button class="action-btn danger" onclick="deleteTrip('${trip.id}')">Delete</button>
@@ -919,8 +924,9 @@ async function saveTrip() {
     vehicle_capacity: parseInt(getInputValue('tripVehicleCapacity')) || null,
     vehicle_requirements: JSON.stringify(vehicleRequirements),
     passenger_notes: getInputValue('tripPassengerNotes') || null,
-    instructions: getInputValue('tripInstructions') || null,
+    special_instructions: getInputValue('tripInstructions') || null,
     notes: getInputValue('tripInstructions') || null,
+    operational_status: editingTripId ? undefined : 'draft', // Only set on create
     status: 'draft'
   };
 
