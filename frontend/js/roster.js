@@ -7,6 +7,48 @@ let opsCalendarMonth = new Date().getMonth() + 1;
 let opsCalendarData = null;
 let allRostersData = []; // All rosters (for sidebar)
 let selectedRosterForSchedule = null; // For schedule modal
+let opsRosterFilter = 'all'; // Filter: 'all', 'thisMonth', 'published', 'unpublished'
+
+// ============================================
+// PROCESSING OVERLAY
+// ============================================
+
+function showProcessingOverlay(message = 'Processing...', subtext = '') {
+  // Remove existing if any
+  hideProcessingOverlay();
+  
+  const overlay = document.createElement('div');
+  overlay.id = 'processingOverlay';
+  overlay.className = 'processing-overlay';
+  overlay.innerHTML = `
+    <div class="processing-spinner"></div>
+    <div class="processing-text">${message}</div>
+    ${subtext ? `<div class="processing-subtext">${subtext}</div>` : ''}
+  `;
+  document.body.appendChild(overlay);
+}
+
+function updateProcessingOverlay(message, subtext = '') {
+  const textEl = document.querySelector('#processingOverlay .processing-text');
+  const subtextEl = document.querySelector('#processingOverlay .processing-subtext');
+  if (textEl) textEl.textContent = message;
+  if (subtextEl) {
+    subtextEl.textContent = subtext;
+  } else if (subtext) {
+    const overlay = document.getElementById('processingOverlay');
+    if (overlay) {
+      const sub = document.createElement('div');
+      sub.className = 'processing-subtext';
+      sub.textContent = subtext;
+      overlay.appendChild(sub);
+    }
+  }
+}
+
+function hideProcessingOverlay() {
+  const overlay = document.getElementById('processingOverlay');
+  if (overlay) overlay.remove();
+}
 
 async function loadOpsCalendar() {
   const grid = document.getElementById('opsCalendarGrid');
@@ -133,15 +175,46 @@ function renderOpsRosterList() {
     return;
   }
   
+  // Apply filter
+  let filteredRosters = [...allRostersData];
+  const now = new Date();
+  const currentMonthStart = new Date(opsCalendarYear, opsCalendarMonth - 1, 1);
+  const currentMonthEnd = new Date(opsCalendarYear, opsCalendarMonth, 0);
+  
+  if (opsRosterFilter === 'thisMonth') {
+    filteredRosters = filteredRosters.filter(r => {
+      const start = new Date(r.startDate);
+      const end = new Date(r.endDate);
+      // Roster overlaps with current calendar month
+      return start <= currentMonthEnd && end >= currentMonthStart;
+    });
+  } else if (opsRosterFilter === 'published') {
+    filteredRosters = filteredRosters.filter(r => r.status === 'published');
+  } else if (opsRosterFilter === 'unpublished') {
+    filteredRosters = filteredRosters.filter(r => r.status !== 'published');
+  }
+  
+  // Sort by start date ascending
+  filteredRosters.sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
+  
   // Separate scheduled and unscheduled
-  const scheduled = allRostersData.filter(r => r.isScheduled);
-  const unscheduled = allRostersData.filter(r => !r.isScheduled);
+  const scheduled = filteredRosters.filter(r => r.isScheduled);
+  const unscheduled = filteredRosters.filter(r => !r.isScheduled);
   
   let html = '';
   
+  // Filter buttons
+  html += `
+    <div class="ops-roster-filters">
+      <button class="filter-btn ${opsRosterFilter === 'all' ? 'active' : ''}" onclick="setOpsRosterFilter('all')">All</button>
+      <button class="filter-btn ${opsRosterFilter === 'thisMonth' ? 'active' : ''}" onclick="setOpsRosterFilter('thisMonth')">This Month</button>
+      <button class="filter-btn ${opsRosterFilter === 'published' ? 'active' : ''}" onclick="setOpsRosterFilter('published')">Published</button>
+      <button class="filter-btn ${opsRosterFilter === 'unpublished' ? 'active' : ''}" onclick="setOpsRosterFilter('unpublished')">Draft</button>
+    </div>
+  `;
+  
   // Clear Despatch button at top
   const scheduledCount = allRostersData.filter(r => r.isScheduled).length;
-  const publishedCount = allRostersData.filter(r => r.status === 'published').length;
   if (scheduledCount > 0) {
     html += `
       <div class="ops-clear-section">
@@ -150,6 +223,13 @@ function renderOpsRosterList() {
         </button>
       </div>
     `;
+  }
+  
+  // Check if filter returned no results
+  if (filteredRosters.length === 0) {
+    html += `<div class="ops-no-results">No rosters match the current filter.</div>`;
+    list.innerHTML = html;
+    return;
   }
   
   // Scheduled rosters section
@@ -169,6 +249,11 @@ function renderOpsRosterList() {
   }
   
   list.innerHTML = html;
+}
+
+function setOpsRosterFilter(filter) {
+  opsRosterFilter = filter;
+  renderOpsRosterList();
 }
 
 function renderOpsRosterItem(roster, isScheduled) {
@@ -304,8 +389,12 @@ async function unscheduleRoster(rosterId) {
 async function publishRosterFromCalendar(rosterId) {
   if (!confirm('Publish this roster? It will become visible in Dispatch.')) return;
   
+  showProcessingOverlay('Publishing roster...', 'This may take a moment');
+  
   try {
     const result = await apiRequest(`/roster/containers/${rosterId}/publish`, { method: 'POST' });
+    hideProcessingOverlay();
+    
     if (result.error) {
       if (result.conflict) {
         showToast(`Conflict: ${result.conflict.driverName} on ${result.conflict.date} (${result.conflict.conflictingRoster})`, 'error');
@@ -317,6 +406,7 @@ async function publishRosterFromCalendar(rosterId) {
     showToast('Roster published!', 'success');
     loadOpsCalendar();
   } catch (err) {
+    hideProcessingOverlay();
     showToast(err.message || 'Failed to publish', 'error');
   }
 }
@@ -325,11 +415,15 @@ async function unpublishRosterFromCalendar(rosterId) {
   const confirmMsg = 'WARNING: Unpublishing this roster will remove ALL duties from this roster from Dispatch.\n\nDrivers will no longer see these assignments until the roster is published again.\n\nContinue?';
   if (!confirm(confirmMsg)) return;
   
+  showProcessingOverlay('Unpublishing roster...', 'Removing duties from dispatch');
+  
   try {
     await apiRequest(`/roster/containers/${rosterId}/unpublish`, { method: 'POST' });
+    hideProcessingOverlay();
     showToast('Roster unpublished - duties removed from dispatch', 'success');
     loadOpsCalendar();
   } catch (err) {
+    hideProcessingOverlay();
     showToast(err.message || 'Failed to unpublish', 'error');
   }
 }
@@ -446,6 +540,12 @@ const GANTT_HOURS = GANTT_END_HOUR - GANTT_START_HOUR;
 // ============================================
 
 async function loadRosters() {
+  // P4.3: Always reset to list view when loading rosters
+  document.getElementById('rosterDetailView').style.display = 'none';
+  document.getElementById('rosterListView').style.display = 'block';
+  currentRoster = null;
+  currentRosterId = null;
+  
   const tbody = document.getElementById('rosterListTableBody');
   tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Loading rosters...</td></tr>';
   
@@ -1055,9 +1155,9 @@ async function toggleRosterDispatch(include) {
     return;
   }
   
+  showProcessingOverlay(include ? 'Including all blocks...' : 'Omitting all blocks...', 'Processing roster entries');
+  
   try {
-    showToast('Processing...', 'info');
-    
     const result = await apiRequest('/roster/toggle-dispatch-all', {
       method: 'POST',
       body: {
@@ -1065,6 +1165,8 @@ async function toggleRosterDispatch(include) {
         include: include
       }
     });
+    
+    hideProcessingOverlay();
     
     if (result.error) {
       showToast(result.error, 'error');
@@ -1074,6 +1176,7 @@ async function toggleRosterDispatch(include) {
     showToast(result.message || (include ? 'All included' : 'All omitted'), 'success');
     await loadDayView();
   } catch (err) {
+    hideProcessingOverlay();
     showToast(err.message || 'Toggle failed', 'error');
   }
 }

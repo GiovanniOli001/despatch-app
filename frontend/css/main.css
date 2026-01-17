@@ -3586,6 +3586,20 @@
       flex-direction: column;
     }
     
+    .crud-modal.confirm-modal {
+      width: 420px;
+    }
+    
+    .crud-modal.confirm-modal .crud-modal-body {
+      padding: 24px 20px;
+    }
+    
+    .crud-modal.confirm-modal .crud-modal-body p {
+      margin: 0;
+      line-height: 1.6;
+      color: var(--text-primary);
+    }
+    
     .crud-modal-header {
       display: flex;
       justify-content: space-between;
@@ -5022,6 +5036,90 @@
       font-size: 13px;
       color: var(--text-primary);
       line-height: 1.5;
+    }
+
+    /* ============================================
+       OPS ROSTER FILTERS
+       ============================================ */
+    
+    .ops-roster-filters {
+      display: flex;
+      gap: 4px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-tertiary);
+    }
+    
+    .ops-roster-filters .filter-btn {
+      flex: 1;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    
+    .ops-roster-filters .filter-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+    
+    .ops-roster-filters .filter-btn.active {
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+      color: white;
+    }
+    
+    .ops-no-results {
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+    
+    /* Processing Overlay */
+    .processing-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    
+    .processing-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--border);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    
+    .processing-text {
+      margin-top: 16px;
+      color: white;
+      font-size: 16px;
+      font-weight: 500;
+    }
+    
+    .processing-subtext {
+      margin-top: 8px;
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
     }
 
     /* ============================================

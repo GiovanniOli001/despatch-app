@@ -258,7 +258,7 @@ async function loadCustomFieldsForEmployee(employeeId) {
       container.innerHTML = `
         <div style="padding: 20px; text-align: center; color: var(--text-muted);">
           <p>No custom fields defined yet.</p>
-          <p style="font-size: 12px; margin-top: 8px;">Click the ⚙️ settings button to add custom fields.</p>
+          <p style="font-size: 12px; margin-top: 8px;">Click the "Custom Fields" button to add custom fields.</p>
         </div>
       `;
       return;

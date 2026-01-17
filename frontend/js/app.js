@@ -278,6 +278,72 @@ function toMinutes(decimalHours) {
 }
 
 // ============================================
+// CONFIRM MODAL (replaces browser confirm())
+// ============================================
+
+let confirmModalCallback = null;
+
+function showConfirmModal(title, message, onConfirm, options = {}) {
+  const {
+    confirmText = 'Confirm',
+    cancelText = 'Cancel',
+    confirmClass = 'btn-primary',
+    isDangerous = false
+  } = options;
+  
+  // Store callback
+  confirmModalCallback = onConfirm;
+  
+  // Create modal if doesn't exist
+  let modal = document.getElementById('confirmModalOverlay');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'confirmModalOverlay';
+    modal.className = 'crud-modal-overlay';
+    modal.innerHTML = `
+      <div class="crud-modal confirm-modal">
+        <div class="crud-modal-header">
+          <span class="crud-modal-title" id="confirmModalTitle">Confirm</span>
+          <button type="button" class="crud-modal-close" onclick="closeConfirmModal()">&times;</button>
+        </div>
+        <div class="crud-modal-body">
+          <p id="confirmModalMessage"></p>
+        </div>
+        <div class="crud-modal-footer">
+          <button type="button" class="btn-secondary" id="confirmModalCancel" onclick="closeConfirmModal()">Cancel</button>
+          <button type="button" id="confirmModalConfirm" onclick="executeConfirmModal()">Confirm</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+  
+  // Update content
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalMessage').innerHTML = message.replace(/\n/g, '<br>');
+  document.getElementById('confirmModalCancel').textContent = cancelText;
+  
+  const confirmBtn = document.getElementById('confirmModalConfirm');
+  confirmBtn.textContent = confirmText;
+  confirmBtn.className = isDangerous ? 'btn-danger' : confirmClass;
+  
+  // Show modal
+  modal.classList.add('show');
+}
+
+function closeConfirmModal() {
+  const modal = document.getElementById('confirmModalOverlay');
+  if (modal) modal.classList.remove('show');
+  confirmModalCallback = null;
+}
+
+function executeConfirmModal() {
+  const callback = confirmModalCallback;
+  closeConfirmModal();
+  if (callback) callback();
+}
+
+// ============================================
 // NAVIGATION HOOKS (extends navigateTo)
 // ============================================
 
