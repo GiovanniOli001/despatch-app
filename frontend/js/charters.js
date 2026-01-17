@@ -10,19 +10,14 @@ let editingCustomerId = null;
 let editingCharterId = null;
 let editingTripId = null;
 let currentCharterView = 'customers'; // 'customers', 'bookings', 'detail'
-let currentCharterId = null; // For detail view
+let currentCharterId = null;
 let customerContactsData = [];
 let editingContactId = null;
 let tripLineItemsData = [];
 let editingLineItemId = null;
 
-// Filter states
-let customerFiltersState = { search: '', type: '' };
-let charterFiltersState = { search: '', status: '', customer: '', dateFrom: '', dateTo: '' };
-
 // Location autocomplete state
-let locationAutocompleteTimeout;
-let currentLocationInput = null;
+let locationAutocompleteTimeout = null;
 
 // Status badge colors
 const CHARTER_STATUS_COLORS = {
@@ -44,32 +39,54 @@ const TRIP_STATUS_COLORS = {
 };
 
 // ============================================
-// CHARTER SUB-NAVIGATION
+// CHARTER TAB NAVIGATION
 // ============================================
 function switchCharterTab(tab) {
   currentCharterView = tab;
 
   // Update tab buttons
-  document.querySelectorAll('.charter-tab-btn').forEach(btn => {
+  document.querySelectorAll('#screen-charters .hrm-tab').forEach(btn => {
     btn.classList.remove('active');
   });
-  document.querySelector(`.charter-tab-btn[data-tab="${tab}"]`)?.classList.add('active');
 
-  // Update visible sections
-  document.querySelectorAll('.charter-section').forEach(section => {
-    section.classList.remove('active');
+  // Find and activate the correct tab button
+  const tabBtns = document.querySelectorAll('#screen-charters .hrm-tab');
+  tabBtns.forEach(btn => {
+    const btnText = btn.textContent.toLowerCase();
+    if ((tab === 'customers' && btnText === 'customers') ||
+        (tab === 'bookings' && btnText === 'bookings')) {
+      btn.classList.add('active');
+    }
   });
 
+  // Hide all tab content
+  const customersTab = document.getElementById('charterTabCustomers');
+  const bookingsTab = document.getElementById('charterTabBookings');
+  const detailView = document.getElementById('charterDetailView');
+
+  if (customersTab) customersTab.style.display = 'none';
+  if (bookingsTab) bookingsTab.style.display = 'none';
+  if (detailView) detailView.style.display = 'none';
+
+  // Show target tab/view
   if (tab === 'customers') {
-    document.getElementById('charterCustomersSection').classList.add('active');
+    if (customersTab) {
+      customersTab.style.display = 'block';
+      customersTab.classList.add('active');
+    }
     loadCharterCustomers();
   } else if (tab === 'bookings') {
-    document.getElementById('charterBookingsSection').classList.add('active');
+    if (bookingsTab) {
+      bookingsTab.style.display = 'block';
+      bookingsTab.classList.add('active');
+    }
     loadCharters();
   } else if (tab === 'detail') {
-    document.getElementById('charterDetailSection').classList.add('active');
+    if (detailView) {
+      detailView.style.display = 'block';
+    }
     if (currentCharterId) {
-      openCharterDetail(currentCharterId);
+      loadCharterDetail(currentCharterId);
     }
   }
 }
@@ -79,81 +96,141 @@ function switchCharterTab(tab) {
 // ============================================
 async function loadCharterCustomers() {
   const tbody = document.getElementById('charterCustomersTableBody');
-  tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Loading customers...</td></tr>';
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Loading customers...</td></tr>';
 
   try {
-    const params = new URLSearchParams();
-    if (customerFiltersState.search) params.set('search', customerFiltersState.search);
-    if (customerFiltersState.type) params.set('type', customerFiltersState.type);
-
-    const result = await apiRequest(`/charter-customers?${params}`);
+    const result = await apiRequest('/charter-customers');
     charterCustomersData = result.data || [];
     renderCustomersTable();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="7" class="loading-cell">Error: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-cell">Error: ${err.message}</td></tr>`;
   }
 }
 
 function renderCustomersTable() {
   const tbody = document.getElementById('charterCustomersTableBody');
+  if (!tbody) return;
+
   if (charterCustomersData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">No customers found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No customers found. Click "+ Add Customer" to create one.</td></tr>';
     return;
   }
 
   tbody.innerHTML = charterCustomersData.map(c => {
-    const typeLabel = c.type || 'Individual';
-    const typeBadge = typeLabel === 'Corporate' ? 'badge-info' : typeLabel === 'School' ? 'badge-success' : 'badge-warning';
+    const statusBadge = c.account_status === 'active' ? 'badge-success' :
+                        c.account_status === 'on_hold' ? 'badge-warning' : 'badge-error';
 
     return `
       <tr>
-        <td>${escapeHtml(c.name)}</td>
-        <td><span class="badge ${typeBadge}">${escapeHtml(typeLabel)}</span></td>
-        <td>${c.contact_name ? escapeHtml(c.contact_name) : '—'}</td>
-        <td>${c.contact_phone ? escapeHtml(c.contact_phone) : '—'}</td>
-        <td>${c.contact_email ? escapeHtml(c.contact_email) : '—'}</td>
-        <td><span class="badge ${c.is_active ? 'badge-success' : 'badge-warning'}">${c.is_active ? 'Active' : 'Inactive'}</span></td>
+        <td>${escapeHtml(c.name || c.company_name || '')}</td>
+        <td>${escapeHtml(c.primary_contact_name || c.contact_name || '—')}</td>
+        <td>${escapeHtml(c.primary_phone || c.contact_phone || '—')}</td>
+        <td>${escapeHtml(c.primary_email || c.contact_email || '—')}</td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(c.account_status || 'active')}</span></td>
         <td>
           <button class="action-btn" onclick="editCharterCustomer('${c.id}')">Edit</button>
-          <button class="action-btn danger" onclick="deleteCharterCustomer('${c.id}', '${escapeHtml(c.name)}')">Delete</button>
+          <button class="action-btn danger" onclick="deleteCharterCustomer('${c.id}', '${escapeHtml(c.name || c.company_name || '')}')">Delete</button>
         </td>
       </tr>
     `;
   }).join('');
 }
 
-let customerSearchTimeout;
-function filterCharterCustomers(search) {
-  clearTimeout(customerSearchTimeout);
-  customerSearchTimeout = setTimeout(() => {
-    customerFiltersState.search = search;
-    loadCharterCustomers();
-  }, 300);
+function filterCharterCustomers(searchValue) {
+  // Simple client-side filter
+  const search = searchValue.toLowerCase();
+  const tbody = document.getElementById('charterCustomersTableBody');
+  if (!tbody) return;
+
+  const filtered = charterCustomersData.filter(c => {
+    const name = (c.name || c.company_name || '').toLowerCase();
+    const contact = (c.primary_contact_name || c.contact_name || '').toLowerCase();
+    const email = (c.primary_email || c.contact_email || '').toLowerCase();
+    return name.includes(search) || contact.includes(search) || email.includes(search);
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No customers match your search</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(c => {
+    const statusBadge = c.account_status === 'active' ? 'badge-success' :
+                        c.account_status === 'on_hold' ? 'badge-warning' : 'badge-error';
+
+    return `
+      <tr>
+        <td>${escapeHtml(c.name || c.company_name || '')}</td>
+        <td>${escapeHtml(c.primary_contact_name || c.contact_name || '—')}</td>
+        <td>${escapeHtml(c.primary_phone || c.contact_phone || '—')}</td>
+        <td>${escapeHtml(c.primary_email || c.contact_email || '—')}</td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(c.account_status || 'active')}</span></td>
+        <td>
+          <button class="action-btn" onclick="editCharterCustomer('${c.id}')">Edit</button>
+          <button class="action-btn danger" onclick="deleteCharterCustomer('${c.id}', '${escapeHtml(c.name || c.company_name || '')}')">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
-function filterCustomerType(type) {
-  customerFiltersState.type = type;
-  loadCharterCustomers();
+function filterCustomerStatus(status) {
+  if (!status) {
+    renderCustomersTable();
+    return;
+  }
+
+  const tbody = document.getElementById('charterCustomersTableBody');
+  if (!tbody) return;
+
+  const filtered = charterCustomersData.filter(c => c.account_status === status);
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-cell">No ${status} customers found</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(c => {
+    const statusBadge = c.account_status === 'active' ? 'badge-success' :
+                        c.account_status === 'on_hold' ? 'badge-warning' : 'badge-error';
+
+    return `
+      <tr>
+        <td>${escapeHtml(c.name || c.company_name || '')}</td>
+        <td>${escapeHtml(c.primary_contact_name || c.contact_name || '—')}</td>
+        <td>${escapeHtml(c.primary_phone || c.contact_phone || '—')}</td>
+        <td>${escapeHtml(c.primary_email || c.contact_email || '—')}</td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(c.account_status || 'active')}</span></td>
+        <td>
+          <button class="action-btn" onclick="editCharterCustomer('${c.id}')">Edit</button>
+          <button class="action-btn danger" onclick="deleteCharterCustomer('${c.id}', '${escapeHtml(c.name || c.company_name || '')}')">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function showAddCustomerModal() {
   editingCustomerId = null;
-  document.getElementById('customerModalTitle').textContent = 'Add Customer';
-  document.getElementById('customerForm').reset();
+  const title = document.getElementById('customerModalTitle');
+  if (title) title.textContent = 'Add Customer';
 
-  // Reset to primary tab
-  document.querySelectorAll('#customerModalOverlay .modal-tab').forEach((tab, i) => {
-    tab.classList.toggle('active', i === 0);
-  });
-  document.querySelectorAll('#customerModalOverlay .modal-tab-content').forEach((content, i) => {
-    content.classList.toggle('active', i === 0);
-  });
+  // Reset form
+  const form = document.getElementById('customerForm');
+  if (form) form.reset();
+
+  // Reset to details tab
+  switchCustomerModalTab('details');
 
   // Clear contacts
   customerContactsData = [];
   renderContactsList();
 
-  document.getElementById('customerModalOverlay').classList.add('show');
+  // Show modal
+  const modal = document.getElementById('charterCustomerModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
 async function editCharterCustomer(id) {
@@ -161,77 +238,92 @@ async function editCharterCustomer(id) {
   if (!customer) return;
 
   editingCustomerId = id;
-  document.getElementById('customerModalTitle').textContent = 'Edit Customer';
+  const title = document.getElementById('customerModalTitle');
+  if (title) title.textContent = 'Edit Customer';
 
-  // Fill form
-  document.getElementById('custName').value = customer.name || '';
-  document.getElementById('custType').value = customer.type || '';
-  document.getElementById('custABN').value = customer.abn || '';
-  document.getElementById('custBillingEmail').value = customer.billing_email || '';
-  document.getElementById('custBillingAddress').value = customer.billing_address || '';
-  document.getElementById('custContactName').value = customer.contact_name || '';
-  document.getElementById('custContactPhone').value = customer.contact_phone || '';
-  document.getElementById('custContactEmail').value = customer.contact_email || '';
-  document.getElementById('custPaymentTerms').value = customer.payment_terms || 30;
-  document.getElementById('custIsActive').checked = customer.is_active !== 0;
-  document.getElementById('custNotes').value = customer.notes || '';
+  // Fill form fields - map to actual HTML IDs
+  setInputValue('custCompanyName', customer.name || customer.company_name);
+  setInputValue('custTradingName', customer.trading_name);
+  setInputValue('custAbn', customer.abn);
+  setInputValue('custWebsite', customer.website);
+  setInputValue('custBillingAddress', customer.billing_address);
+  setInputValue('custBillingSuburb', customer.billing_suburb);
+  setInputValue('custBillingState', customer.billing_state);
+  setInputValue('custBillingPostcode', customer.billing_postcode);
+  setInputValue('custPrimaryEmail', customer.primary_email || customer.billing_email || customer.contact_email);
+  setInputValue('custPrimaryPhone', customer.primary_phone || customer.contact_phone);
+  setInputValue('custPaymentTerms', customer.payment_terms || 14);
+  setInputValue('custCreditLimit', customer.credit_limit || 0);
+  setInputValue('custAccountStatus', customer.account_status || 'active');
+  setInputValue('custNotes', customer.notes);
 
-  // Reset to primary tab
-  document.querySelectorAll('#customerModalOverlay .modal-tab').forEach((tab, i) => {
-    tab.classList.toggle('active', i === 0);
-  });
-  document.querySelectorAll('#customerModalOverlay .modal-tab-content').forEach((content, i) => {
-    content.classList.toggle('active', i === 0);
-  });
+  // Reset to details tab
+  switchCustomerModalTab('details');
 
   // Load contacts
   await loadCustomerContacts(id);
 
-  document.getElementById('customerModalOverlay').classList.add('show');
+  // Show modal
+  const modal = document.getElementById('charterCustomerModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
-function switchCustomerTab(tabName, evt) {
+function switchCustomerModalTab(tabName, evt) {
   // Update tab buttons
-  document.querySelectorAll('#customerModalOverlay .modal-tab').forEach(tab => {
+  document.querySelectorAll('#charterCustomerModalOverlay .modal-tab').forEach(tab => {
     tab.classList.remove('active');
   });
-  if (evt && evt.target) evt.target.classList.add('active');
+  if (evt && evt.target) {
+    evt.target.classList.add('active');
+  } else {
+    // Find the correct tab button
+    document.querySelectorAll('#charterCustomerModalOverlay .modal-tab').forEach(tab => {
+      if ((tabName === 'details' && tab.textContent === 'Details') ||
+          (tabName === 'contacts' && tab.textContent === 'Contacts')) {
+        tab.classList.add('active');
+      }
+    });
+  }
 
   // Update tab content
-  document.querySelectorAll('#customerModalOverlay .modal-tab-content').forEach(content => {
-    content.classList.remove('active');
-  });
+  const detailsTab = document.getElementById('customerTabDetails');
+  const contactsTab = document.getElementById('customerTabContacts');
 
-  if (tabName === 'primary') {
-    document.getElementById('custTabPrimary').classList.add('active');
-  } else if (tabName === 'contacts') {
-    document.getElementById('custTabContacts').classList.add('active');
-  }
+  if (detailsTab) detailsTab.style.display = tabName === 'details' ? 'block' : 'none';
+  if (contactsTab) contactsTab.style.display = tabName === 'contacts' ? 'block' : 'none';
 }
 
 function closeCustomerModal() {
-  document.getElementById('customerModalOverlay').classList.remove('show');
+  const modal = document.getElementById('charterCustomerModalOverlay');
+  if (modal) modal.classList.remove('show');
   editingCustomerId = null;
   customerContactsData = [];
 }
 
 async function saveCharterCustomer() {
   const data = {
-    name: document.getElementById('custName').value,
-    type: document.getElementById('custType').value || null,
-    abn: document.getElementById('custABN').value || null,
-    billing_email: document.getElementById('custBillingEmail').value || null,
-    billing_address: document.getElementById('custBillingAddress').value || null,
-    contact_name: document.getElementById('custContactName').value || null,
-    contact_phone: document.getElementById('custContactPhone').value || null,
-    contact_email: document.getElementById('custContactEmail').value || null,
-    payment_terms: parseInt(document.getElementById('custPaymentTerms').value) || 30,
-    is_active: document.getElementById('custIsActive').checked ? 1 : 0,
-    notes: document.getElementById('custNotes').value || null
+    name: getInputValue('custCompanyName'),
+    company_name: getInputValue('custCompanyName'),
+    trading_name: getInputValue('custTradingName') || null,
+    abn: getInputValue('custAbn') || null,
+    website: getInputValue('custWebsite') || null,
+    billing_address: getInputValue('custBillingAddress') || null,
+    billing_suburb: getInputValue('custBillingSuburb') || null,
+    billing_state: getInputValue('custBillingState') || null,
+    billing_postcode: getInputValue('custBillingPostcode') || null,
+    primary_email: getInputValue('custPrimaryEmail') || null,
+    billing_email: getInputValue('custPrimaryEmail') || null,
+    primary_phone: getInputValue('custPrimaryPhone') || null,
+    contact_phone: getInputValue('custPrimaryPhone') || null,
+    payment_terms: parseInt(getInputValue('custPaymentTerms')) || 14,
+    credit_limit: parseFloat(getInputValue('custCreditLimit')) || 0,
+    account_status: getInputValue('custAccountStatus') || 'active',
+    is_active: getInputValue('custAccountStatus') === 'active' ? 1 : 0,
+    notes: getInputValue('custNotes') || null
   };
 
   if (!data.name) {
-    showToast('Customer name is required', true);
+    showToast('Company name is required', true);
     return;
   }
 
@@ -260,11 +352,11 @@ async function saveCharterCustomer() {
 async function deleteCharterCustomer(id, name) {
   showConfirmModal(
     'Delete Customer',
-    `Are you sure you want to delete customer "${name}"? This action cannot be undone.`,
+    `Are you sure you want to delete "${name}"? This cannot be undone.`,
     async () => {
       try {
         await apiRequest(`/charter-customers/${id}`, { method: 'DELETE' });
-        showToast('Customer deleted successfully');
+        showToast('Customer deleted');
         loadCharterCustomers();
       } catch (err) {
         showToast(`Error: ${err.message}`, true);
@@ -289,65 +381,85 @@ async function loadCustomerContacts(customerId) {
     customerContactsData = result.data || [];
     renderContactsList();
   } catch (err) {
-    showToast(`Error loading contacts: ${err.message}`, true);
+    console.error('Error loading contacts:', err);
     customerContactsData = [];
     renderContactsList();
   }
 }
 
 function renderContactsList() {
-  const tbody = document.getElementById('customerContactsTableBody');
+  const container = document.getElementById('customerContactsList');
+  if (!container) return;
 
   if (!editingCustomerId) {
-    tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">Save customer first to add contacts</td></tr>';
+    container.innerHTML = '<p style="color: var(--text-muted);">Save the customer first to add contacts.</p>';
     return;
   }
 
   if (customerContactsData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="loading-cell">No contacts added</td></tr>';
+    container.innerHTML = '<p style="color: var(--text-muted);">No contacts added yet.</p>';
     return;
   }
 
-  tbody.innerHTML = customerContactsData.map(c => `
-    <tr>
-      <td>${escapeHtml(c.name)}</td>
-      <td>${escapeHtml(c.position || '—')}</td>
-      <td>${escapeHtml(c.phone || '—')}</td>
-      <td>${escapeHtml(c.email || '—')}</td>
-      <td>
-        <button class="action-btn danger" onclick="deleteContact('${c.id}')">Delete</button>
-      </td>
-    </tr>
+  container.innerHTML = customerContactsData.map(c => `
+    <div class="contact-card" style="border: 1px solid var(--border); padding: 12px; margin-bottom: 8px; border-radius: 4px;">
+      <div style="display: flex; justify-content: space-between; align-items: start;">
+        <div>
+          <strong>${escapeHtml(c.first_name || '')} ${escapeHtml(c.last_name || c.name || '')}</strong>
+          ${c.role ? `<span style="color: var(--text-muted);"> - ${escapeHtml(c.role)}</span>` : ''}
+          ${c.is_primary ? '<span class="badge badge-info" style="margin-left: 8px;">Primary</span>' : ''}
+        </div>
+        <button class="action-btn danger" onclick="deleteContact('${c.id}')">Remove</button>
+      </div>
+      <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+        ${c.email ? `<span>${escapeHtml(c.email)}</span>` : ''}
+        ${c.phone ? `<span style="margin-left: 12px;">${escapeHtml(c.phone)}</span>` : ''}
+        ${c.mobile ? `<span style="margin-left: 12px;">${escapeHtml(c.mobile)}</span>` : ''}
+      </div>
+    </div>
   `).join('');
 }
 
 function showAddContactModal() {
   if (!editingCustomerId) {
-    showToast('Please save the customer first', true);
+    showToast('Save the customer first', true);
     return;
   }
 
   editingContactId = null;
-  document.getElementById('contactForm').reset();
-  document.getElementById('contactModalOverlay').classList.add('show');
+  const title = document.getElementById('contactModalTitle');
+  if (title) title.textContent = 'Add Contact';
+
+  const form = document.getElementById('contactForm');
+  if (form) form.reset();
+
+  const modal = document.getElementById('contactModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
 function closeContactModal() {
-  document.getElementById('contactModalOverlay').classList.remove('show');
+  const modal = document.getElementById('contactModalOverlay');
+  if (modal) modal.classList.remove('show');
   editingContactId = null;
 }
 
 async function saveContact() {
   const data = {
-    name: document.getElementById('contactName').value,
-    position: document.getElementById('contactPosition').value || null,
-    phone: document.getElementById('contactPhone').value || null,
-    email: document.getElementById('contactEmail').value || null,
-    notes: document.getElementById('contactNotes').value || null
+    first_name: getInputValue('contactFirstName'),
+    last_name: getInputValue('contactLastName'),
+    name: `${getInputValue('contactFirstName')} ${getInputValue('contactLastName')}`.trim(),
+    role: getInputValue('contactRole') || null,
+    position: getInputValue('contactRole') || null,
+    email: getInputValue('contactEmail') || null,
+    phone: getInputValue('contactPhone') || null,
+    mobile: getInputValue('contactMobile') || null,
+    is_primary: document.getElementById('contactIsPrimary')?.checked ? 1 : 0,
+    receives_invoices: document.getElementById('contactReceivesInvoices')?.checked ? 1 : 0,
+    receives_quotes: document.getElementById('contactReceivesQuotes')?.checked ? 1 : 0
   };
 
-  if (!data.name) {
-    showToast('Contact name is required', true);
+  if (!data.first_name || !data.last_name) {
+    showToast('First and last name are required', true);
     return;
   }
 
@@ -356,8 +468,7 @@ async function saveContact() {
       method: 'POST',
       body: data
     });
-
-    showToast('Contact added successfully');
+    showToast('Contact added');
     closeContactModal();
     await loadCustomerContacts(editingCustomerId);
   } catch (err) {
@@ -367,20 +478,20 @@ async function saveContact() {
 
 async function deleteContact(id) {
   showConfirmModal(
-    'Delete Contact',
-    'Are you sure you want to delete this contact?',
+    'Remove Contact',
+    'Are you sure you want to remove this contact?',
     async () => {
       try {
         await apiRequest(`/charter-customers/${editingCustomerId}/contacts/${id}`, {
           method: 'DELETE'
         });
-        showToast('Contact deleted successfully');
+        showToast('Contact removed');
         await loadCustomerContacts(editingCustomerId);
       } catch (err) {
         showToast(`Error: ${err.message}`, true);
       }
     },
-    { isDangerous: true, confirmText: 'Delete' }
+    { isDangerous: true, confirmText: 'Remove' }
   );
 }
 
@@ -389,144 +500,136 @@ async function deleteContact(id) {
 // ============================================
 async function loadCharters() {
   const tbody = document.getElementById('chartersTableBody');
-  tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">Loading charters...</td></tr>';
+  if (!tbody) return;
+
+  tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">Loading charters...</td></tr>';
 
   try {
-    const params = new URLSearchParams();
-    if (charterFiltersState.search) params.set('search', charterFiltersState.search);
-    if (charterFiltersState.status) params.set('status', charterFiltersState.status);
-    if (charterFiltersState.customer) params.set('customer_id', charterFiltersState.customer);
-    if (charterFiltersState.dateFrom) params.set('date_from', charterFiltersState.dateFrom);
-    if (charterFiltersState.dateTo) params.set('date_to', charterFiltersState.dateTo);
-
-    const result = await apiRequest(`/charters?${params}`);
+    const result = await apiRequest('/charters');
     chartersData = result.data || [];
     renderChartersTable();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="loading-cell">Error: ${err.message}</td></tr>`;
   }
 }
 
 function renderChartersTable() {
   const tbody = document.getElementById('chartersTableBody');
+  if (!tbody) return;
+
   if (chartersData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="loading-cell">No charters found</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="loading-cell">No charters found. Click "+ New Charter" to create one.</td></tr>';
     return;
   }
 
   tbody.innerHTML = chartersData.map(ch => {
     const statusBadge = CHARTER_STATUS_COLORS[ch.status] || 'badge-info';
-    const totalFormatted = ch.total_amount ? `$${parseFloat(ch.total_amount).toFixed(2)}` : '—';
 
     return `
-      <tr onclick="openCharterDetail('${ch.id}')" style="cursor: pointer;">
-        <td style="font-family: 'JetBrains Mono', monospace;">${escapeHtml(ch.charter_number)}</td>
-        <td>${escapeHtml(ch.customer_name || 'Unknown')}</td>
-        <td>${escapeHtml(ch.description || '—')}</td>
-        <td>${ch.start_date || '—'}</td>
-        <td>${ch.end_date || '—'}</td>
-        <td><span class="badge ${statusBadge}">${escapeHtml(ch.status)}</span></td>
-        <td>${totalFormatted}</td>
+      <tr style="cursor: pointer;" onclick="openCharterDetail('${ch.id}')">
+        <td style="font-family: 'JetBrains Mono', monospace;">${escapeHtml(ch.charter_number || '')}</td>
+        <td>${escapeHtml(ch.customer_name || '—')}</td>
+        <td>${escapeHtml(ch.name || ch.description || '—')}</td>
+        <td>${ch.event_date || ch.start_date || '—'}</td>
+        <td>${ch.trip_count || 0}</td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(ch.status || 'enquiry')}</span></td>
         <td onclick="event.stopPropagation();">
           <button class="action-btn" onclick="editCharter('${ch.id}')">Edit</button>
-          <button class="action-btn danger" onclick="deleteCharter('${ch.id}', '${escapeHtml(ch.charter_number)}')">Delete</button>
+          <button class="action-btn danger" onclick="deleteCharter('${ch.id}', '${escapeHtml(ch.charter_number || '')}')">Delete</button>
         </td>
       </tr>
     `;
   }).join('');
 }
 
-let charterSearchTimeout;
-function filterCharters(search) {
-  clearTimeout(charterSearchTimeout);
-  charterSearchTimeout = setTimeout(() => {
-    charterFiltersState.search = search;
-    loadCharters();
-  }, 300);
-}
-
-function filterCharterStatus(status) {
-  charterFiltersState.status = status;
-  loadCharters();
-}
-
-function filterCharterCustomer(customerId) {
-  charterFiltersState.customer = customerId;
-  loadCharters();
-}
-
-function filterCharterDateRange(from, to) {
-  charterFiltersState.dateFrom = from;
-  charterFiltersState.dateTo = to;
-  loadCharters();
+function filterCharters(filters) {
+  // This function handles the inline filter inputs
+  // Filters can contain: search, status
+  loadCharters(); // For now, just reload - could enhance with client-side filtering
 }
 
 async function showAddCharterModal() {
   editingCharterId = null;
-  document.getElementById('charterModalTitle').textContent = 'Add Charter';
-  document.getElementById('charterForm').reset();
+  const title = document.getElementById('charterModalTitle');
+  if (title) title.textContent = 'New Charter';
 
-  // Load customer dropdown
+  const form = document.getElementById('charterForm');
+  if (form) form.reset();
+
+  // Load customers for dropdown
   await populateCustomerDropdown();
 
-  document.getElementById('charterModalOverlay').classList.add('show');
+  const modal = document.getElementById('charterModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
 async function populateCustomerDropdown() {
   try {
-    const result = await apiRequest('/charter-customers?is_active=1');
+    const result = await apiRequest('/charter-customers');
     const customers = result.data || [];
 
     const select = document.getElementById('charterCustomerId');
-    select.innerHTML = '<option value="">Select Customer...</option>' +
-      customers.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    if (select) {
+      select.innerHTML = '<option value="">-- Select Customer --</option>' +
+        customers.map(c => `<option value="${c.id}">${escapeHtml(c.name || c.company_name || '')}</option>`).join('');
+    }
   } catch (err) {
-    showToast(`Error loading customers: ${err.message}`, true);
+    console.error('Error loading customers:', err);
   }
 }
 
 async function editCharter(id) {
   const charter = chartersData.find(c => c.id === id);
-  if (!charter) return;
+  if (!charter) {
+    // Try to fetch it
+    try {
+      const result = await apiRequest(`/charters/${id}`);
+      if (result.data) {
+        await editCharterWithData(result.data);
+      }
+    } catch (err) {
+      showToast(`Error loading charter: ${err.message}`, true);
+    }
+    return;
+  }
 
-  editingCharterId = id;
-  document.getElementById('charterModalTitle').textContent = 'Edit Charter';
+  await editCharterWithData(charter);
+}
+
+async function editCharterWithData(charter) {
+  editingCharterId = charter.id;
+  const title = document.getElementById('charterModalTitle');
+  if (title) title.textContent = 'Edit Charter';
 
   await populateCustomerDropdown();
 
-  document.getElementById('charterCustomerId').value = charter.customer_id || '';
-  document.getElementById('charterDescription').value = charter.description || '';
-  document.getElementById('charterStartDate').value = charter.start_date || '';
-  document.getElementById('charterEndDate').value = charter.end_date || '';
-  document.getElementById('charterStatus').value = charter.status || 'enquiry';
-  document.getElementById('charterContactName').value = charter.contact_name || '';
-  document.getElementById('charterContactPhone').value = charter.contact_phone || '';
-  document.getElementById('charterContactEmail').value = charter.contact_email || '';
-  document.getElementById('charterNotes').value = charter.notes || '';
+  setInputValue('charterCustomerId', charter.customer_id);
+  setInputValue('charterName', charter.name || charter.description);
+  setInputValue('charterEventDate', charter.event_date || charter.start_date);
+  setInputValue('charterDescription', charter.description);
 
-  document.getElementById('charterModalOverlay').classList.add('show');
+  const modal = document.getElementById('charterModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
 function closeCharterModal() {
-  document.getElementById('charterModalOverlay').classList.remove('show');
+  const modal = document.getElementById('charterModalOverlay');
+  if (modal) modal.classList.remove('show');
   editingCharterId = null;
 }
 
 async function saveCharter() {
   const data = {
-    customer_id: document.getElementById('charterCustomerId').value || null,
-    description: document.getElementById('charterDescription').value || null,
-    start_date: document.getElementById('charterStartDate').value || null,
-    end_date: document.getElementById('charterEndDate').value || null,
-    status: document.getElementById('charterStatus').value || 'enquiry',
-    contact_name: document.getElementById('charterContactName').value || null,
-    contact_phone: document.getElementById('charterContactPhone').value || null,
-    contact_email: document.getElementById('charterContactEmail').value || null,
-    notes: document.getElementById('charterNotes').value || null
+    customer_id: getInputValue('charterCustomerId') || null,
+    name: getInputValue('charterName') || null,
+    description: getInputValue('charterDescription') || null,
+    event_date: getInputValue('charterEventDate') || null,
+    start_date: getInputValue('charterEventDate') || null,
+    status: 'enquiry'
   };
 
   if (!data.customer_id) {
-    showToast('Customer is required', true);
+    showToast('Please select a customer', true);
     return;
   }
 
@@ -536,17 +639,20 @@ async function saveCharter() {
         method: 'PUT',
         body: data
       });
-      showToast('Charter updated successfully');
+      showToast('Charter updated');
     } else {
       const result = await apiRequest('/charters', {
         method: 'POST',
         body: data
       });
-      showToast('Charter created successfully');
-      // Open detail view of new charter
+      showToast('Charter created');
+
+      // Open the detail view for the new charter
       if (result.data && result.data.id) {
         currentCharterId = result.data.id;
+        closeCharterModal();
         switchCharterTab('detail');
+        return;
       }
     }
 
@@ -560,11 +666,11 @@ async function saveCharter() {
 async function deleteCharter(id, charterNumber) {
   showConfirmModal(
     'Delete Charter',
-    `Are you sure you want to delete charter "${charterNumber}"? This will also delete all associated trips.`,
+    `Delete charter "${charterNumber}"? All trips will also be deleted.`,
     async () => {
       try {
         await apiRequest(`/charters/${id}`, { method: 'DELETE' });
-        showToast('Charter deleted successfully');
+        showToast('Charter deleted');
         loadCharters();
       } catch (err) {
         showToast(`Error: ${err.message}`, true);
@@ -574,189 +680,110 @@ async function deleteCharter(id, charterNumber) {
   );
 }
 
-async function changeCharterStatus(id, newStatus) {
-  try {
-    await apiRequest(`/charters/${id}/status`, {
-      method: 'POST',
-      body: { status: newStatus }
-    });
-    showToast('Charter status updated');
-
-    // Refresh detail view if open
-    if (currentCharterId === id) {
-      await openCharterDetail(id);
-    }
-    loadCharters();
-  } catch (err) {
-    showToast(`Error: ${err.message}`, true);
-  }
-}
-
 // ============================================
 // CHARTER DETAIL VIEW
 // ============================================
 async function openCharterDetail(id) {
   currentCharterId = id;
+  switchCharterTab('detail');
+}
+
+async function loadCharterDetail(id) {
+  const detailView = document.getElementById('charterDetailView');
+  if (!detailView) return;
+
+  detailView.innerHTML = '<div style="padding: 40px; text-align: center;">Loading charter details...</div>';
 
   try {
     const result = await apiRequest(`/charters/${id}`);
     const charter = result.data;
 
     if (!charter) {
-      showToast('Charter not found', true);
+      detailView.innerHTML = '<div style="padding: 40px; text-align: center;">Charter not found</div>';
       return;
     }
 
-    // Store charter data
-    const charterDetailData = charter;
+    // Load trips for this charter
+    const tripsResult = await apiRequest(`/charter-trips?charter_id=${id}`);
+    charterTripsData = tripsResult.data || [];
 
-    // Render charter header
-    renderCharterDetailHeader(charter);
-
-    // Load trips
-    await loadCharterTrips(id);
-
-    // Load notes
-    await loadCharterNotes(id);
-
-    // Switch to detail view
-    switchCharterTab('detail');
-
+    renderCharterDetailView(charter);
   } catch (err) {
-    showToast(`Error loading charter: ${err.message}`, true);
+    detailView.innerHTML = `<div style="padding: 40px; text-align: center; color: var(--accent-red);">Error: ${err.message}</div>`;
   }
 }
 
-function renderCharterDetailHeader(charter) {
-  const statusBadge = CHARTER_STATUS_COLORS[charter.status] || 'badge-info';
-  const totalFormatted = charter.total_amount ? `$${parseFloat(charter.total_amount).toFixed(2)}` : '$0.00';
+function renderCharterDetailView(charter) {
+  const detailView = document.getElementById('charterDetailView');
+  if (!detailView) return;
 
-  const headerHTML = `
-    <div class="charter-detail-header">
-      <div class="charter-detail-title">
-        <h2>${escapeHtml(charter.charter_number)}</h2>
-        <span class="badge ${statusBadge}">${escapeHtml(charter.status)}</span>
-      </div>
-      <div class="charter-detail-info">
-        <div class="info-row">
-          <span class="info-label">Customer:</span>
-          <span class="info-value">${escapeHtml(charter.customer_name || 'Unknown')}</span>
+  const statusBadge = CHARTER_STATUS_COLORS[charter.status] || 'badge-info';
+
+  detailView.innerHTML = `
+    <div class="charter-detail">
+      <div class="charter-detail-header" style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
+        <div>
+          <h2 style="margin: 0 0 8px 0; display: flex; align-items: center; gap: 12px;">
+            <span style="font-family: 'JetBrains Mono', monospace;">${escapeHtml(charter.charter_number || 'NEW')}</span>
+            <span class="badge ${statusBadge}">${escapeHtml(charter.status || 'enquiry')}</span>
+          </h2>
+          <p style="margin: 0; color: var(--text-secondary);">
+            <strong>${escapeHtml(charter.customer_name || '')}</strong>
+            ${charter.name ? ` - ${escapeHtml(charter.name)}` : ''}
+          </p>
+          ${charter.event_date ? `<p style="margin: 4px 0 0 0; color: var(--text-muted);">Event Date: ${charter.event_date}</p>` : ''}
         </div>
-        <div class="info-row">
-          <span class="info-label">Description:</span>
-          <span class="info-value">${escapeHtml(charter.description || '—')}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Dates:</span>
-          <span class="info-value">${charter.start_date || '—'} to ${charter.end_date || '—'}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Contact:</span>
-          <span class="info-value">${escapeHtml(charter.contact_name || '—')} ${charter.contact_phone ? `(${escapeHtml(charter.contact_phone)})` : ''}</span>
-        </div>
-        <div class="info-row">
-          <span class="info-label">Total:</span>
-          <span class="info-value">${totalFormatted}</span>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" onclick="editCharter('${charter.id}')">Edit Charter</button>
+          <button class="btn btn-primary" onclick="showAddTripModal('${charter.id}')">+ Add Trip</button>
+          <button class="btn btn-secondary" onclick="switchCharterTab('bookings')">Back to List</button>
         </div>
       </div>
-      <div class="charter-detail-actions">
-        <button class="btn btn-primary" onclick="editCharter('${charter.id}')">Edit Charter</button>
-        <button class="btn btn-secondary" onclick="showAddTripModal('${charter.id}')">Add Trip</button>
-        <button class="btn btn-secondary" onclick="switchCharterTab('bookings')">Back to List</button>
+
+      <div class="charter-trips-section">
+        <h3 style="margin: 0 0 16px 0;">Trips</h3>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Trip</th>
+              <th>Date</th>
+              <th>Pickup</th>
+              <th>Dropoff</th>
+              <th>Passengers</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="charterDetailTripsBody">
+            ${renderDetailTripsRows()}
+          </tbody>
+        </table>
       </div>
     </div>
   `;
-
-  document.getElementById('charterDetailHeader').innerHTML = headerHTML;
 }
 
-async function loadCharterNotes(charterId) {
-  try {
-    const result = await apiRequest(`/charters/${charterId}/notes`);
-    const notes = result.data || [];
-
-    const notesHTML = notes.length === 0
-      ? '<div class="empty-state">No notes yet</div>'
-      : notes.map(note => `
-          <div class="note-item">
-            <div class="note-header">
-              <span class="note-author">${escapeHtml(note.created_by || 'Unknown')}</span>
-              <span class="note-date">${note.created_at || ''}</span>
-            </div>
-            <div class="note-content">${escapeHtml(note.note)}</div>
-          </div>
-        `).join('');
-
-    document.getElementById('charterNotesList').innerHTML = notesHTML;
-  } catch (err) {
-    document.getElementById('charterNotesList').innerHTML = `<div class="error-state">Error loading notes: ${err.message}</div>`;
-  }
-}
-
-async function addCharterNote() {
-  const noteInput = document.getElementById('charterNoteInput');
-  const note = noteInput.value.trim();
-
-  if (!note) {
-    showToast('Please enter a note', true);
-    return;
-  }
-
-  try {
-    await apiRequest(`/charters/${currentCharterId}/notes`, {
-      method: 'POST',
-      body: { note }
-    });
-
-    noteInput.value = '';
-    showToast('Note added');
-    await loadCharterNotes(currentCharterId);
-  } catch (err) {
-    showToast(`Error: ${err.message}`, true);
-  }
-}
-
-// ============================================
-// TRIPS CRUD
-// ============================================
-async function loadCharterTrips(charterId) {
-  const tbody = document.getElementById('charterTripsTableBody');
-  tbody.innerHTML = '<tr><td colspan="9" class="loading-cell">Loading trips...</td></tr>';
-
-  try {
-    const result = await apiRequest(`/charter-trips?charter_id=${charterId}`);
-    charterTripsData = result.data || [];
-    renderTripsTable();
-  } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="9" class="loading-cell">Error: ${err.message}</td></tr>`;
-  }
-}
-
-function renderTripsTable() {
-  const tbody = document.getElementById('charterTripsTableBody');
-
+function renderDetailTripsRows() {
   if (charterTripsData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" class="loading-cell">No trips added</td></tr>';
-    return;
+    return '<tr><td colspan="7" class="loading-cell">No trips yet. Click "+ Add Trip" to create one.</td></tr>';
   }
 
-  tbody.innerHTML = charterTripsData.map(trip => {
+  return charterTripsData.map(trip => {
     const statusBadge = TRIP_STATUS_COLORS[trip.status] || 'badge-info';
-    const amountFormatted = trip.total_amount ? `$${parseFloat(trip.total_amount).toFixed(2)}` : '—';
 
     return `
       <tr>
+        <td>${escapeHtml(trip.name || trip.trip_name || 'Trip')}</td>
         <td>${trip.trip_date || '—'}</td>
-        <td>${trip.pickup_time || '—'}</td>
-        <td>${escapeHtml(trip.pickup_location || '—')}</td>
-        <td>${trip.dropoff_time || '—'}</td>
-        <td>${escapeHtml(trip.dropoff_location || '—')}</td>
-        <td>${trip.vehicle_number || '—'}</td>
-        <td><span class="badge ${statusBadge}">${escapeHtml(trip.status)}</span></td>
-        <td>${amountFormatted}</td>
+        <td>
+          <div>${escapeHtml(trip.pickup_name || trip.pickup_location || '—')}</div>
+          ${trip.pickup_time ? `<small style="color: var(--text-muted);">${trip.pickup_time}</small>` : ''}
+        </td>
+        <td>${escapeHtml(trip.dropoff_name || trip.dropoff_location || '—')}</td>
+        <td>${trip.passenger_count || '—'}</td>
+        <td><span class="badge ${statusBadge}">${escapeHtml(trip.status || 'draft')}</span></td>
         <td>
           <button class="action-btn" onclick="editTrip('${trip.id}')">Edit</button>
-          <button class="action-btn" onclick="duplicateTrip('${trip.id}')">Duplicate</button>
           <button class="action-btn danger" onclick="deleteTrip('${trip.id}')">Delete</button>
         </td>
       </tr>
@@ -764,137 +791,153 @@ function renderTripsTable() {
   }).join('');
 }
 
-async function showAddTripModal(charterId) {
+// ============================================
+// TRIPS CRUD
+// ============================================
+function showAddTripModal(charterId) {
   editingTripId = null;
-  document.getElementById('tripModalTitle').textContent = 'Add Trip';
-  document.getElementById('tripForm').reset();
+  const title = document.getElementById('tripModalTitle');
+  if (title) title.textContent = 'Add Trip';
 
-  // Pre-fill charter ID (hidden field)
-  document.getElementById('tripCharterId').value = charterId || currentCharterId;
+  const form = document.getElementById('tripForm');
+  if (form) form.reset();
 
-  // Reset to primary tab
-  document.querySelectorAll('#tripModalOverlay .modal-tab').forEach((tab, i) => {
-    tab.classList.toggle('active', i === 0);
-  });
-  document.querySelectorAll('#tripModalOverlay .modal-tab-content').forEach((content, i) => {
-    content.classList.toggle('active', i === 0);
-  });
-
-  // Clear line items
-  tripLineItemsData = [];
-  renderLineItemsTable();
+  // Store charter ID for saving
+  currentCharterId = charterId || currentCharterId;
 
   // Setup location autocomplete
-  setupTripLocationAutocomplete();
+  setupLocationAutocomplete();
 
-  // Load vehicles for dropdown
-  await populateTripVehicleDropdown();
-
-  document.getElementById('tripModalOverlay').classList.add('show');
-}
-
-async function populateTripVehicleDropdown() {
-  try {
-    const result = await apiRequest('/vehicles?status=active');
-    const vehicles = result.data || [];
-
-    const select = document.getElementById('tripVehicleId');
-    select.innerHTML = '<option value="">Not Assigned</option>' +
-      vehicles.map(v => `<option value="${v.id}">${escapeHtml(v.fleet_number)} - ${v.capacity} seats</option>`).join('');
-  } catch (err) {
-    showToast(`Error loading vehicles: ${err.message}`, true);
-  }
+  const modal = document.getElementById('charterTripModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
 async function editTrip(id) {
   const trip = charterTripsData.find(t => t.id === id);
-  if (!trip) return;
+  if (!trip) {
+    try {
+      const result = await apiRequest(`/charter-trips/${id}`);
+      if (result.data) {
+        await editTripWithData(result.data);
+      }
+    } catch (err) {
+      showToast(`Error: ${err.message}`, true);
+    }
+    return;
+  }
 
-  editingTripId = id;
-  document.getElementById('tripModalTitle').textContent = 'Edit Trip';
-
-  document.getElementById('tripCharterId').value = trip.charter_id;
-  document.getElementById('tripDate').value = trip.trip_date || '';
-  document.getElementById('tripPickupTime').value = trip.pickup_time || '';
-  document.getElementById('tripPickupLocation').value = trip.pickup_location || '';
-  document.getElementById('tripPickupLat').value = trip.pickup_lat || '';
-  document.getElementById('tripPickupLng').value = trip.pickup_lng || '';
-  document.getElementById('tripDropoffTime').value = trip.dropoff_time || '';
-  document.getElementById('tripDropoffLocation').value = trip.dropoff_location || '';
-  document.getElementById('tripDropoffLat').value = trip.dropoff_lat || '';
-  document.getElementById('tripDropoffLng').value = trip.dropoff_lng || '';
-  document.getElementById('tripVehicleId').value = trip.vehicle_id || '';
-  document.getElementById('tripDriverId').value = trip.driver_id || '';
-  document.getElementById('tripPassengers').value = trip.passenger_count || '';
-  document.getElementById('tripStatus').value = trip.status || 'draft';
-  document.getElementById('tripNotes').value = trip.notes || '';
-
-  // Reset to primary tab
-  document.querySelectorAll('#tripModalOverlay .modal-tab').forEach((tab, i) => {
-    tab.classList.toggle('active', i === 0);
-  });
-  document.querySelectorAll('#tripModalOverlay .modal-tab-content').forEach((content, i) => {
-    content.classList.toggle('active', i === 0);
-  });
-
-  // Setup autocomplete
-  setupTripLocationAutocomplete();
-
-  // Load vehicles
-  await populateTripVehicleDropdown();
-
-  // Load line items
-  await loadTripLineItems(id);
-
-  document.getElementById('tripModalOverlay').classList.add('show');
+  await editTripWithData(trip);
 }
 
-function switchTripTab(tabName, evt) {
-  // Update tab buttons
-  document.querySelectorAll('#tripModalOverlay .modal-tab').forEach(tab => {
-    tab.classList.remove('active');
-  });
-  if (evt && evt.target) evt.target.classList.add('active');
+async function editTripWithData(trip) {
+  editingTripId = trip.id;
+  currentCharterId = trip.charter_id;
 
-  // Update tab content
-  document.querySelectorAll('#tripModalOverlay .modal-tab-content').forEach(content => {
-    content.classList.remove('active');
-  });
+  const title = document.getElementById('tripModalTitle');
+  if (title) title.textContent = 'Edit Trip';
 
-  if (tabName === 'details') {
-    document.getElementById('tripTabDetails').classList.add('active');
-  } else if (tabName === 'billing') {
-    document.getElementById('tripTabBilling').classList.add('active');
+  setInputValue('tripName', trip.name || trip.trip_name);
+  setInputValue('tripDate', trip.trip_date);
+  setInputValue('tripPickupTime', trip.pickup_time);
+  setInputValue('tripPickupName', trip.pickup_name || trip.pickup_location);
+  setInputValue('tripPickupAddress', trip.pickup_address);
+  setInputValue('tripDropoffName', trip.dropoff_name || trip.dropoff_location);
+  setInputValue('tripDropoffAddress', trip.dropoff_address);
+  setInputValue('tripPassengerCount', trip.passenger_count);
+  setInputValue('tripVehicleCapacity', trip.vehicle_capacity);
+  setInputValue('tripPassengerNotes', trip.passenger_notes);
+  setInputValue('tripInstructions', trip.instructions || trip.notes);
+
+  // Set coordinates
+  if (trip.pickup_lat && trip.pickup_lng) {
+    setInputValue('tripPickupCoords', `${trip.pickup_lat}, ${trip.pickup_lng}`);
   }
+  if (trip.dropoff_lat && trip.dropoff_lng) {
+    setInputValue('tripDropoffCoords', `${trip.dropoff_lat}, ${trip.dropoff_lng}`);
+  }
+
+  // Set checkboxes for vehicle requirements
+  if (trip.vehicle_requirements) {
+    try {
+      const reqs = typeof trip.vehicle_requirements === 'string' ?
+        JSON.parse(trip.vehicle_requirements) : trip.vehicle_requirements;
+      setCheckbox('tripReqWheelchair', reqs.wheelchair);
+      setCheckbox('tripReqAc', reqs.ac);
+      setCheckbox('tripReqToilet', reqs.toilet);
+      setCheckbox('tripReqLuggage', reqs.luggage);
+      setCheckbox('tripReqWifi', reqs.wifi);
+      setCheckbox('tripReqSeatbelts', reqs.seatbelts);
+    } catch (e) {
+      console.error('Error parsing vehicle requirements:', e);
+    }
+  }
+
+  setupLocationAutocomplete();
+
+  const modal = document.getElementById('charterTripModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
 function closeTripModal() {
-  document.getElementById('tripModalOverlay').classList.remove('show');
+  const modal = document.getElementById('charterTripModalOverlay');
+  if (modal) modal.classList.remove('show');
   editingTripId = null;
-  tripLineItemsData = [];
 }
 
 async function saveTrip() {
+  // Parse coordinates
+  const pickupCoords = parseCoords(getInputValue('tripPickupCoords'));
+  const dropoffCoords = parseCoords(getInputValue('tripDropoffCoords'));
+
+  // Build vehicle requirements
+  const vehicleRequirements = {
+    wheelchair: document.getElementById('tripReqWheelchair')?.checked || false,
+    ac: document.getElementById('tripReqAc')?.checked || false,
+    toilet: document.getElementById('tripReqToilet')?.checked || false,
+    luggage: document.getElementById('tripReqLuggage')?.checked || false,
+    wifi: document.getElementById('tripReqWifi')?.checked || false,
+    seatbelts: document.getElementById('tripReqSeatbelts')?.checked || false
+  };
+
   const data = {
-    charter_id: document.getElementById('tripCharterId').value,
-    trip_date: document.getElementById('tripDate').value || null,
-    pickup_time: document.getElementById('tripPickupTime').value || null,
-    pickup_location: document.getElementById('tripPickupLocation').value || null,
-    pickup_lat: parseFloat(document.getElementById('tripPickupLat').value) || null,
-    pickup_lng: parseFloat(document.getElementById('tripPickupLng').value) || null,
-    dropoff_time: document.getElementById('tripDropoffTime').value || null,
-    dropoff_location: document.getElementById('tripDropoffLocation').value || null,
-    dropoff_lat: parseFloat(document.getElementById('tripDropoffLat').value) || null,
-    dropoff_lng: parseFloat(document.getElementById('tripDropoffLng').value) || null,
-    vehicle_id: document.getElementById('tripVehicleId').value || null,
-    driver_id: document.getElementById('tripDriverId').value || null,
-    passenger_count: parseInt(document.getElementById('tripPassengers').value) || null,
-    status: document.getElementById('tripStatus').value || 'draft',
-    notes: document.getElementById('tripNotes').value || null
+    charter_id: currentCharterId,
+    name: getInputValue('tripName') || null,
+    trip_name: getInputValue('tripName') || null,
+    trip_date: getInputValue('tripDate') || null,
+    pickup_time: getInputValue('tripPickupTime') || null,
+    pickup_name: getInputValue('tripPickupName') || null,
+    pickup_location: getInputValue('tripPickupName') || null,
+    pickup_address: getInputValue('tripPickupAddress') || null,
+    pickup_lat: pickupCoords.lat,
+    pickup_lng: pickupCoords.lng,
+    dropoff_name: getInputValue('tripDropoffName') || null,
+    dropoff_location: getInputValue('tripDropoffName') || null,
+    dropoff_address: getInputValue('tripDropoffAddress') || null,
+    dropoff_lat: dropoffCoords.lat,
+    dropoff_lng: dropoffCoords.lng,
+    passenger_count: parseInt(getInputValue('tripPassengerCount')) || 1,
+    vehicle_capacity: parseInt(getInputValue('tripVehicleCapacity')) || null,
+    vehicle_requirements: JSON.stringify(vehicleRequirements),
+    passenger_notes: getInputValue('tripPassengerNotes') || null,
+    instructions: getInputValue('tripInstructions') || null,
+    notes: getInputValue('tripInstructions') || null,
+    status: 'draft'
   };
 
   if (!data.trip_date) {
     showToast('Trip date is required', true);
+    return;
+  }
+  if (!data.pickup_time) {
+    showToast('Pickup time is required', true);
+    return;
+  }
+  if (!data.pickup_name) {
+    showToast('Pickup location is required', true);
+    return;
+  }
+  if (!data.dropoff_name) {
+    showToast('Dropoff location is required', true);
     return;
   }
 
@@ -904,53 +947,20 @@ async function saveTrip() {
         method: 'PUT',
         body: data
       });
-      showToast('Trip updated successfully');
+      showToast('Trip updated');
     } else {
       await apiRequest('/charter-trips', {
         method: 'POST',
         body: data
       });
-      showToast('Trip created successfully');
+      showToast('Trip created');
     }
 
     closeTripModal();
-    await loadCharterTrips(data.charter_id);
-  } catch (err) {
-    showToast(`Error: ${err.message}`, true);
-  }
-}
 
-async function duplicateTrip(id) {
-  try {
-    const result = await apiRequest(`/charter-trips/${id}/duplicate`, {
-      method: 'POST'
-    });
-
-    showToast('Trip duplicated successfully');
-
-    // Reload trips for current charter
-    const trip = charterTripsData.find(t => t.id === id);
-    if (trip) {
-      await loadCharterTrips(trip.charter_id);
-    }
-  } catch (err) {
-    showToast(`Error: ${err.message}`, true);
-  }
-}
-
-async function changeTripStatus(id, newStatus) {
-  try {
-    await apiRequest(`/charter-trips/${id}/status`, {
-      method: 'POST',
-      body: { status: newStatus }
-    });
-
-    showToast('Trip status updated');
-
-    // Reload trips
-    const trip = charterTripsData.find(t => t.id === id);
-    if (trip) {
-      await loadCharterTrips(trip.charter_id);
+    // Reload the charter detail view
+    if (currentCharterId) {
+      await loadCharterDetail(currentCharterId);
     }
   } catch (err) {
     showToast(`Error: ${err.message}`, true);
@@ -963,13 +973,10 @@ async function deleteTrip(id) {
     'Are you sure you want to delete this trip?',
     async () => {
       try {
-        const trip = charterTripsData.find(t => t.id === id);
-
         await apiRequest(`/charter-trips/${id}`, { method: 'DELETE' });
-        showToast('Trip deleted successfully');
-
-        if (trip) {
-          await loadCharterTrips(trip.charter_id);
+        showToast('Trip deleted');
+        if (currentCharterId) {
+          await loadCharterDetail(currentCharterId);
         }
       } catch (err) {
         showToast(`Error: ${err.message}`, true);
@@ -982,36 +989,39 @@ async function deleteTrip(id) {
 // ============================================
 // LOCATION AUTOCOMPLETE
 // ============================================
-function setupTripLocationAutocomplete() {
-  const pickupInput = document.getElementById('tripPickupLocation');
-  const dropoffInput = document.getElementById('tripDropoffLocation');
+function setupLocationAutocomplete() {
+  const pickupInput = document.getElementById('tripPickupName');
+  const dropoffInput = document.getElementById('tripDropoffName');
 
   if (pickupInput) {
-    pickupInput.addEventListener('input', (e) => {
-      searchLocationAutocomplete(e.target.value, 'pickup');
-    });
-
-    pickupInput.addEventListener('blur', () => {
-      setTimeout(() => hideLocationSuggestions('pickup'), 200);
-    });
+    // Remove any existing listeners
+    pickupInput.removeEventListener('input', handlePickupInput);
+    pickupInput.addEventListener('input', handlePickupInput);
   }
 
   if (dropoffInput) {
-    dropoffInput.addEventListener('input', (e) => {
-      searchLocationAutocomplete(e.target.value, 'dropoff');
-    });
-
-    dropoffInput.addEventListener('blur', () => {
-      setTimeout(() => hideLocationSuggestions('dropoff'), 200);
-    });
+    // Remove any existing listeners
+    dropoffInput.removeEventListener('input', handleDropoffInput);
+    dropoffInput.addEventListener('input', handleDropoffInput);
   }
 }
 
-function searchLocationAutocomplete(query, type) {
+function handlePickupInput(e) {
+  searchLocation(e.target.value, 'pickup');
+}
+
+function handleDropoffInput(e) {
+  searchLocation(e.target.value, 'dropoff');
+}
+
+function searchLocation(query, type) {
   clearTimeout(locationAutocompleteTimeout);
 
+  const suggestionsId = type === 'pickup' ? 'tripPickupSuggestions' : 'tripDropoffSuggestions';
+  const suggestions = document.getElementById(suggestionsId);
+
   if (!query || query.length < 3) {
-    hideLocationSuggestions(type);
+    if (suggestions) suggestions.style.display = 'none';
     return;
   }
 
@@ -1023,140 +1033,86 @@ function searchLocationAutocomplete(query, type) {
         headers: { 'User-Agent': 'DispatchApp/1.0' }
       });
 
-      if (!response.ok) throw new Error('Location search failed');
+      if (!response.ok) throw new Error('Search failed');
 
       const results = await response.json();
       showLocationSuggestions(results, type);
-
     } catch (err) {
-      console.error('Location autocomplete error:', err);
-      hideLocationSuggestions(type);
+      console.error('Location search error:', err);
+      if (suggestions) suggestions.style.display = 'none';
     }
   }, 300);
 }
 
 function showLocationSuggestions(results, type) {
-  const containerId = type === 'pickup' ? 'tripPickupSuggestions' : 'tripDropoffSuggestions';
-  const container = document.getElementById(containerId);
+  const suggestionsId = type === 'pickup' ? 'tripPickupSuggestions' : 'tripDropoffSuggestions';
+  const suggestions = document.getElementById(suggestionsId);
 
-  if (!container) return;
+  if (!suggestions) return;
 
   if (results.length === 0) {
-    container.innerHTML = '<div class="location-suggestion-item disabled">No locations found</div>';
-    container.style.display = 'block';
+    suggestions.innerHTML = '<div class="location-suggestion-item" style="color: var(--text-muted);">No results found</div>';
+    suggestions.style.display = 'block';
     return;
   }
 
-  container.innerHTML = results.map(r => `
-    <div class="location-suggestion-item" onclick="selectLocation('${type}', '${escapeHtml(r.display_name)}', ${r.lat}, ${r.lon})">
-      <div class="location-name">${escapeHtml(r.display_name)}</div>
+  suggestions.innerHTML = results.map(r => `
+    <div class="location-suggestion-item" style="padding: 8px; cursor: pointer; border-bottom: 1px solid var(--border);"
+         onclick="selectLocationResult('${type}', '${escapeHtml(r.display_name)}', ${r.lat}, ${r.lon})"
+         onmouseover="this.style.background='var(--bg-secondary)'"
+         onmouseout="this.style.background='transparent'">
+      ${escapeHtml(r.display_name)}
     </div>
   `).join('');
 
-  container.style.display = 'block';
+  suggestions.style.display = 'block';
 }
 
-function hideLocationSuggestions(type) {
-  const containerId = type === 'pickup' ? 'tripPickupSuggestions' : 'tripDropoffSuggestions';
-  const container = document.getElementById(containerId);
-  if (container) container.style.display = 'none';
-}
-
-function selectLocation(type, name, lat, lng) {
+function selectLocationResult(type, name, lat, lng) {
   if (type === 'pickup') {
-    document.getElementById('tripPickupLocation').value = name;
-    document.getElementById('tripPickupLat').value = lat;
-    document.getElementById('tripPickupLng').value = lng;
-    hideLocationSuggestions('pickup');
-  } else if (type === 'dropoff') {
-    document.getElementById('tripDropoffLocation').value = name;
-    document.getElementById('tripDropoffLat').value = lat;
-    document.getElementById('tripDropoffLng').value = lng;
-    hideLocationSuggestions('dropoff');
+    setInputValue('tripPickupName', name);
+    setInputValue('tripPickupCoords', `${lat}, ${lng}`);
+    const suggestions = document.getElementById('tripPickupSuggestions');
+    if (suggestions) suggestions.style.display = 'none';
+  } else {
+    setInputValue('tripDropoffName', name);
+    setInputValue('tripDropoffCoords', `${lat}, ${lng}`);
+    const suggestions = document.getElementById('tripDropoffSuggestions');
+    if (suggestions) suggestions.style.display = 'none';
   }
 }
 
 // ============================================
-// TRIP LINE ITEMS (BILLING)
+// LINE ITEMS (BILLING)
 // ============================================
-async function loadTripLineItems(tripId) {
-  if (!tripId) {
-    tripLineItemsData = [];
-    renderLineItemsTable();
-    return;
-  }
-
-  try {
-    const result = await apiRequest(`/charter-trips/${tripId}/line-items`);
-    tripLineItemsData = result.data || [];
-    renderLineItemsTable();
-  } catch (err) {
-    showToast(`Error loading line items: ${err.message}`, true);
-    tripLineItemsData = [];
-    renderLineItemsTable();
-  }
-}
-
-function renderLineItemsTable() {
-  const tbody = document.getElementById('tripLineItemsTableBody');
-
-  if (!editingTripId) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">Save trip first to add billing items</td></tr>';
-    return;
-  }
-
-  if (tripLineItemsData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="loading-cell">No billing items added</td></tr>';
-    return;
-  }
-
-  let total = 0;
-
-  tbody.innerHTML = tripLineItemsData.map(item => {
-    const amount = parseFloat(item.amount) || 0;
-    total += amount;
-
-    return `
-      <tr style="${item.is_hidden ? 'opacity: 0.5;' : ''}">
-        <td>${escapeHtml(item.description)}</td>
-        <td>${parseFloat(item.quantity).toFixed(2)}</td>
-        <td>$${parseFloat(item.unit_price).toFixed(2)}</td>
-        <td>$${amount.toFixed(2)}</td>
-        <td>${item.is_hidden ? 'Hidden' : 'Visible'}</td>
-        <td>
-          <button class="action-btn" onclick="toggleLineItemVisibility('${item.id}', ${item.is_hidden ? 0 : 1})">${item.is_hidden ? 'Show' : 'Hide'}</button>
-          <button class="action-btn danger" onclick="deleteLineItem('${item.id}')">Delete</button>
-        </td>
-      </tr>
-    `;
-  }).join('');
-
-  // Update total
-  document.getElementById('tripLineItemsTotal').textContent = `Total: $${total.toFixed(2)}`;
-}
-
 function showAddLineItemModal() {
   if (!editingTripId) {
-    showToast('Please save the trip first', true);
+    showToast('Save the trip first', true);
     return;
   }
 
   editingLineItemId = null;
-  document.getElementById('lineItemForm').reset();
-  document.getElementById('lineItemModalOverlay').classList.add('show');
+  const form = document.getElementById('lineItemForm');
+  if (form) form.reset();
+
+  const modal = document.getElementById('lineItemModalOverlay');
+  if (modal) modal.classList.add('show');
 }
 
 function closeLineItemModal() {
-  document.getElementById('lineItemModalOverlay').classList.remove('show');
+  const modal = document.getElementById('lineItemModalOverlay');
+  if (modal) modal.classList.remove('show');
   editingLineItemId = null;
 }
 
 async function saveLineItem() {
   const data = {
-    description: document.getElementById('lineItemDescription').value,
-    quantity: parseFloat(document.getElementById('lineItemQuantity').value) || 1,
-    unit_price: parseFloat(document.getElementById('lineItemUnitPrice').value) || 0,
-    is_hidden: document.getElementById('lineItemIsHidden').checked ? 1 : 0
+    item_type: getInputValue('lineItemType'),
+    description: getInputValue('lineItemDescription'),
+    quantity: parseFloat(getInputValue('lineItemQty')) || 1,
+    unit_price: parseFloat(getInputValue('lineItemPrice')) || 0,
+    is_taxable: document.getElementById('lineItemTaxable')?.checked ? 1 : 0,
+    is_hidden: document.getElementById('lineItemHidden')?.checked ? 1 : 0
   };
 
   if (!data.description) {
@@ -1169,46 +1125,44 @@ async function saveLineItem() {
       method: 'POST',
       body: data
     });
-
-    showToast('Line item added successfully');
+    showToast('Line item added');
     closeLineItemModal();
-    await loadTripLineItems(editingTripId);
+    // Could reload line items here if we had a display for them
   } catch (err) {
     showToast(`Error: ${err.message}`, true);
   }
 }
 
-async function toggleLineItemVisibility(id, isHidden) {
-  try {
-    // This would require a PUT endpoint - for now we'll just show a message
-    showToast('Line item visibility updated');
-
-    // Update locally
-    const item = tripLineItemsData.find(li => li.id === id);
-    if (item) {
-      item.is_hidden = isHidden;
-      renderLineItemsTable();
-    }
-  } catch (err) {
-    showToast(`Error: ${err.message}`, true);
-  }
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+function getInputValue(id) {
+  const el = document.getElementById(id);
+  return el ? el.value : '';
 }
 
-async function deleteLineItem(id) {
-  showConfirmModal(
-    'Delete Line Item',
-    'Are you sure you want to delete this billing item?',
-    async () => {
-      try {
-        await apiRequest(`/charter-trips/${editingTripId}/line-items/${id}`, {
-          method: 'DELETE'
-        });
-        showToast('Line item deleted successfully');
-        await loadTripLineItems(editingTripId);
-      } catch (err) {
-        showToast(`Error: ${err.message}`, true);
-      }
-    },
-    { isDangerous: true, confirmText: 'Delete' }
-  );
+function setInputValue(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value || '';
+}
+
+function setCheckbox(id, checked) {
+  const el = document.getElementById(id);
+  if (el) el.checked = !!checked;
+}
+
+function parseCoords(coordString) {
+  if (!coordString) return { lat: null, lng: null };
+  const parts = coordString.split(',').map(s => s.trim());
+  if (parts.length !== 2) return { lat: null, lng: null };
+  return {
+    lat: parseFloat(parts[0]) || null,
+    lng: parseFloat(parts[1]) || null
+  };
+}
+
+// Initialize when charters screen is shown
+function initChartersModule() {
+  // This will be called when navigating to the charters screen
+  switchCharterTab('customers');
 }
