@@ -217,9 +217,15 @@ function addShiftDutyBlock() {
 
 // Remove a duty block
 function removeShiftDutyBlock(blockIdx) {
-  if (!confirm('Delete this entire duty and all its lines?')) return;
-  shiftDutyBlocks.splice(blockIdx, 1);
-  renderShiftDutyBlocks();
+  showConfirmModal(
+    'Delete Duty Block',
+    'Delete this entire duty and all its lines?',
+    () => {
+      shiftDutyBlocks.splice(blockIdx, 1);
+      renderShiftDutyBlocks();
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 
 // Update duty block name
@@ -537,13 +543,19 @@ async function duplicateShift(id) {
 }
 
 async function deleteShift(id, name) {
-  if (!confirm(`Delete shift template "${name}"?`)) return;
-  try {
-    await apiRequest(`/shifts/${id}`, { method: 'DELETE' });
-    showToast('Shift template deleted');
-    loadShifts();
-  } catch (err) {
-    showToast(err.message || 'Failed to delete', 'error');
-  }
+  showConfirmModal(
+    'Delete Shift Template',
+    `Delete shift template "${name}"?`,
+    async () => {
+      try {
+        await apiRequest(`/shifts/${id}`, { method: 'DELETE' });
+        showToast('Shift template deleted');
+        loadShifts();
+      } catch (err) {
+        showToast(err.message || 'Failed to delete', 'error');
+      }
+    },
+    { confirmText: 'Delete', isDangerous: true }
+  );
 }
 
